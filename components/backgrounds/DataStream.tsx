@@ -3,168 +3,138 @@ import { motion } from 'framer-motion';
 
 /**
  * DataStream — Dashboard & Analytics.
- * Multi-layered: aurora gradient bands, flowing data lines, rising chart-bar columns,
- * pulsing metric dots, and a soft ambient glow.
+ * Bold: large gradient waves, bright floating orbs, prominent rising bars, glowing pulse rings.
  */
 const DataStream: React.FC = () => {
-    const lines = useMemo(() =>
-        Array.from({ length: 8 }, (_, i) => ({
+    const orbs = useMemo(() =>
+        Array.from({ length: 6 }, (_, i) => ({
             id: i,
-            top: `${10 + i * 11}%`,
-            delay: i * 0.5,
-            duration: 6 + i * 1.2,
-            width: `${50 + Math.random() * 40}%`,
-            height: i % 3 === 0 ? 2 : 1,
-        })), []
-    );
-
-    const dots = useMemo(() =>
-        Array.from({ length: 20 }, (_, i) => ({
-            id: i,
-            left: `${3 + Math.random() * 94}%`,
-            size: 2 + Math.random() * 5,
-            delay: Math.random() * 5,
-            duration: 5 + Math.random() * 7,
+            x: 10 + Math.random() * 80,
+            y: 10 + Math.random() * 80,
+            size: 80 + Math.random() * 120,
+            color: ['#4285f4', '#34a853', '#fbbc04', '#ea4335', '#4285f4', '#34a853'][i],
+            delay: i * 1.2,
+            duration: 8 + Math.random() * 6,
         })), []
     );
 
     const bars = useMemo(() =>
-        Array.from({ length: 10 }, (_, i) => ({
+        Array.from({ length: 14 }, (_, i) => ({
             id: i,
-            left: `${8 + i * 9}%`,
-            maxHeight: 30 + Math.random() * 60,
-            delay: i * 0.4,
-            duration: 4 + Math.random() * 3,
+            left: `${5 + i * 6.5}%`,
+            maxHeight: 60 + Math.random() * 200,
+            delay: i * 0.3,
+            duration: 3 + Math.random() * 2,
+            color: i % 4 === 0 ? '#4285f4' : i % 4 === 1 ? '#34a853' : i % 4 === 2 ? '#fbbc04' : '#ea4335',
         })), []
     );
 
     return (
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-            {/* Aurora gradient bands */}
+            {/* Bold diagonal gradient sweep */}
             <motion.div
                 className="absolute inset-0"
                 style={{
-                    background: 'linear-gradient(135deg, rgba(66,133,244,0.06) 0%, rgba(52,168,83,0.04) 30%, rgba(251,188,4,0.03) 60%, rgba(234,67,53,0.04) 100%)',
+                    background: 'linear-gradient(135deg, rgba(66,133,244,0.12) 0%, rgba(52,168,83,0.08) 25%, rgba(251,188,4,0.06) 50%, rgba(234,67,53,0.08) 75%, rgba(66,133,244,0.10) 100%)',
                 }}
-                animate={{ opacity: [0.5, 0.8, 0.5] }}
-                transition={{ duration: 8, repeat: Infinity, ease: 'easeInOut' }}
-            />
-
-            {/* Flowing horizontal data lines */}
-            {lines.map((line) => (
-                <motion.div
-                    key={`line-${line.id}`}
-                    className="absolute"
-                    style={{
-                        top: line.top,
-                        width: line.width,
-                        height: line.height,
-                        borderRadius: 1,
-                        background: line.id % 2 === 0
-                            ? 'linear-gradient(90deg, transparent, var(--md-sys-color-primary), rgba(66,133,244,0.4), transparent)'
-                            : 'linear-gradient(90deg, transparent, rgba(52,168,83,0.6), rgba(52,168,83,0.3), transparent)',
-                        opacity: 0,
-                    }}
-                    animate={{
-                        x: ['-100%', '250%'],
-                        opacity: [0, 0.35, 0.35, 0],
-                    }}
-                    transition={{
-                        duration: line.duration,
-                        delay: line.delay,
-                        repeat: Infinity,
-                        ease: 'linear',
-                    }}
-                />
-            ))}
-
-            {/* Rising metric dots */}
-            {dots.map((dot) => (
-                <motion.div
-                    key={`dot-${dot.id}`}
-                    className="absolute rounded-full"
-                    style={{
-                        left: dot.left,
-                        width: dot.size,
-                        height: dot.size,
-                        backgroundColor: dot.id % 3 === 0 ? 'var(--google-blue)' : dot.id % 3 === 1 ? 'var(--google-green)' : 'var(--google-yellow)',
-                        opacity: 0,
-                    }}
-                    animate={{
-                        y: ['100vh', '-10vh'],
-                        opacity: [0, 0.4, 0.35, 0],
-                    }}
-                    transition={{
-                        duration: dot.duration,
-                        delay: dot.delay,
-                        repeat: Infinity,
-                        ease: 'linear',
-                    }}
-                />
-            ))}
-
-            {/* Ghost chart bars rising from bottom */}
-            {bars.map((bar) => (
-                <motion.div
-                    key={`bar-${bar.id}`}
-                    className="absolute bottom-0"
-                    style={{
-                        left: bar.left,
-                        width: '2.5%',
-                        borderRadius: '4px 4px 0 0',
-                        background: bar.id % 2 === 0
-                            ? 'linear-gradient(to top, rgba(66,133,244,0.12), rgba(66,133,244,0.02))'
-                            : 'linear-gradient(to top, rgba(52,168,83,0.10), rgba(52,168,83,0.01))',
-                    }}
-                    animate={{
-                        height: [0, bar.maxHeight, bar.maxHeight * 0.6, bar.maxHeight * 0.9, 0],
-                        opacity: [0, 0.5, 0.5, 0.4, 0],
-                    }}
-                    transition={{
-                        duration: bar.duration,
-                        delay: bar.delay,
-                        repeat: Infinity,
-                        ease: 'easeInOut',
-                    }}
-                />
-            ))}
-
-            {/* Pulsing central metric glow */}
-            <motion.div
-                className="absolute"
-                style={{
-                    top: '25%',
-                    left: '60%',
-                    width: 300,
-                    height: 300,
-                    borderRadius: '50%',
-                    background: 'radial-gradient(circle, rgba(66,133,244,0.08) 0%, transparent 70%)',
-                    filter: 'blur(40px)',
-                }}
-                animate={{
-                    scale: [1, 1.3, 1],
-                    opacity: [0.4, 0.7, 0.4],
-                }}
+                animate={{ opacity: [0.6, 1, 0.6] }}
                 transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut' }}
             />
 
-            {/* Secondary glow */}
+            {/* Large flowing gradient wave */}
             <motion.div
                 className="absolute"
                 style={{
-                    bottom: '20%',
-                    left: '20%',
-                    width: 250,
-                    height: 250,
+                    top: '30%',
+                    left: '-20%',
+                    width: '140%',
+                    height: '40%',
+                    background: 'linear-gradient(90deg, transparent, rgba(66,133,244,0.15), rgba(52,168,83,0.12), rgba(251,188,4,0.10), transparent)',
+                    filter: 'blur(30px)',
                     borderRadius: '50%',
-                    background: 'radial-gradient(circle, rgba(52,168,83,0.06) 0%, transparent 70%)',
-                    filter: 'blur(40px)',
                 }}
                 animate={{
-                    scale: [1, 1.2, 1],
-                    opacity: [0.3, 0.6, 0.3],
+                    y: [-50, 50, -50],
+                    rotate: [-2, 2, -2],
+                    scaleX: [1, 1.1, 1],
                 }}
-                transition={{ duration: 8, delay: 2, repeat: Infinity, ease: 'easeInOut' }}
+                transition={{ duration: 12, repeat: Infinity, ease: 'easeInOut' }}
+            />
+
+            {/* Floating bokeh orbs */}
+            {orbs.map((orb) => (
+                <motion.div
+                    key={orb.id}
+                    className="absolute rounded-full"
+                    style={{
+                        left: `${orb.x}%`,
+                        top: `${orb.y}%`,
+                        width: orb.size,
+                        height: orb.size,
+                        background: `radial-gradient(circle, ${orb.color}22 0%, ${orb.color}08 50%, transparent 70%)`,
+                        filter: 'blur(20px)',
+                    }}
+                    animate={{
+                        x: [0, 40, -30, 0],
+                        y: [0, -35, 25, 0],
+                        scale: [1, 1.3, 0.9, 1],
+                        opacity: [0.5, 0.9, 0.5],
+                    }}
+                    transition={{ duration: orb.duration, delay: orb.delay, repeat: Infinity, ease: 'easeInOut' }}
+                />
+            ))}
+
+            {/* Rising bar chart columns */}
+            {bars.map((bar) => (
+                <motion.div
+                    key={bar.id}
+                    className="absolute bottom-0"
+                    style={{
+                        left: bar.left,
+                        width: '3%',
+                        borderRadius: '6px 6px 0 0',
+                        background: `linear-gradient(to top, ${bar.color}30, ${bar.color}08)`,
+                    }}
+                    animate={{
+                        height: [0, bar.maxHeight, bar.maxHeight * 0.5, bar.maxHeight * 0.8, 0],
+                        opacity: [0, 0.7, 0.6, 0.5, 0],
+                    }}
+                    transition={{ duration: bar.duration, delay: bar.delay, repeat: Infinity, ease: 'easeInOut' }}
+                />
+            ))}
+
+            {/* Pulsing ring */}
+            <motion.div
+                className="absolute rounded-full"
+                style={{
+                    top: '20%',
+                    right: '15%',
+                    width: 200,
+                    height: 200,
+                    border: '2px solid rgba(66,133,244,0.20)',
+                }}
+                animate={{
+                    scale: [0.5, 1.5, 0.5],
+                    opacity: [0.6, 0, 0.6],
+                }}
+                transition={{ duration: 4, repeat: Infinity, ease: 'easeOut' }}
+            />
+
+            {/* Second pulse ring on the left */}
+            <motion.div
+                className="absolute rounded-full"
+                style={{
+                    bottom: '25%',
+                    left: '10%',
+                    width: 160,
+                    height: 160,
+                    border: '2px solid rgba(52,168,83,0.20)',
+                }}
+                animate={{
+                    scale: [0.5, 1.6, 0.5],
+                    opacity: [0.5, 0, 0.5],
+                }}
+                transition={{ duration: 5, delay: 1.5, repeat: Infinity, ease: 'easeOut' }}
             />
         </div>
     );
