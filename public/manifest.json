@@ -3,27 +3,58 @@
     "short_name": "PRISM",
     "description": "PRISM - A premium competency-based training management system for NITA-compliant assessments",
     "start_url": "/",
+    "scope": "/",
     "display": "standalone",
+    "display_override": [
+        "window-controls-overlay",
+        "standalone",
+        "minimal-ui"
+    ],
     "background_color": "#f8f9fa",
     "theme_color": "#1a73e8",
-    "orientation": "portrait-primary",
+    "orientation": "any",
     "icons": [
         {
             "src": "/logo.png",
             "sizes": "192x192",
             "type": "image/png",
-            "purpose": "any maskable"
+            "purpose": "any"
         },
         {
             "src": "/logo.png",
             "sizes": "512x512",
             "type": "image/png",
-            "purpose": "any maskable"
+            "purpose": "maskable"
+        }
+    ],
+    "shortcuts": [
+        {
+            "name": "Dashboard",
+            "short_name": "Dashboard",
+            "url": "/?view=dashboard",
+            "icons": [
+                {
+                    "src": "/logo.png",
+                    "sizes": "96x96"
+                }
+            ]
+        },
+        {
+            "name": "Students",
+            "short_name": "Students",
+            "url": "/?view=students",
+            "icons": [
+                {
+                    "src": "/logo.png",
+                    "sizes": "96x96"
+                }
+            ]
         }
     ],
     "categories": [
         "education",
         "productivity"
     ],
-    "lang": "en"
+    "lang": "en",
+    "prefer_related_applications": false
 }

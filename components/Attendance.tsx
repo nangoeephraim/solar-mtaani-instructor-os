@@ -4,32 +4,40 @@ import { Calendar, Clock, Users, Check, X, ChevronRight, Zap, Monitor, UserCheck
 import clsx from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from './Toast';
+import { useAuth } from '../contexts/AuthContext';
 
 interface AttendanceProps {
     data: AppData;
     onUpdateStudent: (student: Student, notify?: boolean) => void;
+    onNavigate?: (view: string) => void;
 }
 
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-const Attendance: React.FC<AttendanceProps> = ({ data, onUpdateStudent }) => {
+const Attendance: React.FC<AttendanceProps> = ({ data, onUpdateStudent, onNavigate }) => {
     const [selectedClass, setSelectedClass] = useState<ScheduleSlot | null>(null);
     const [viewMode, setViewMode] = useState<'today' | 'history'>('today');
     const [searchQuery, setSearchQuery] = useState('');
     const [filterStatus, setFilterStatus] = useState<'all' | 'present' | 'absent' | 'unmarked'>('all');
     const { showToast } = useToast();
+    const { user } = useAuth();
 
     const today = new Date();
     const currentDay = today.getDay();
     const currentHour = today.getHours();
 
-    // Today's classes
-    const todaysClasses = useMemo(() =>
-        data.schedule
-            .filter(s => s.dayOfWeek === currentDay)
-            .sort((a, b) => a.startTime.localeCompare(b.startTime)),
-        [data.schedule, currentDay]
-    );
+    // Today's classes — handle overrides and exclude cancelled
+    const todaysClasses = useMemo(() => {
+        const todayStr = today.toISOString().split('T')[0];
+        const recurring = data.schedule.filter(s => s.dayOfWeek === currentDay && !s.overrideDate);
+        const overrides = data.schedule.filter(s => s.overrideDate === todayStr);
+        const replacedIds = new Set(overrides.filter(o => o.replacesSlotId).map(o => o.replacesSlotId));
+        return [
+            ...recurring.filter(r => !replacedIds.has(r.id)),
+            ...overrides
+        ].filter(s => s.status !== 'Cancelled')
+            .sort((a, b) => a.startTime.localeCompare(b.startTime));
+    }, [data.schedule, currentDay]);
 
     // Completed classes (for history)
     const completedClasses = useMemo(() =>
@@ -129,10 +137,10 @@ const Attendance: React.FC<AttendanceProps> = ({ data, onUpdateStudent }) => {
             <motion.div
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
-                className="w-80 flex-shrink-0 bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col overflow-hidden"
+                className="w-80 flex-shrink-0 bg-[var(--md-sys-color-surface)] rounded-2xl border border-[var(--md-sys-color-outline)] shadow-sm flex flex-col overflow-hidden"
             >
                 {/* Header */}
-                <div className="p-5 border-b border-gray-100">
+                <div className="p-5 border-b border-[var(--md-sys-color-outline)]">
                     <div className="flex items-center gap-3 mb-4">
                         <motion.div
                             className="p-2.5 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl text-white shadow-lg shadow-green-500/30"
@@ -142,20 +150,20 @@ const Attendance: React.FC<AttendanceProps> = ({ data, onUpdateStudent }) => {
                             <UserCheck size={22} />
                         </motion.div>
                         <div>
-                            <h2 className="text-xl font-google font-bold text-gray-900">Attendance</h2>
-                            <p className="text-xs text-gray-500 font-medium">
+                            <h2 className="text-xl font-google font-bold text-[var(--md-sys-color-on-surface)]">Attendance</h2>
+                            <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] font-medium">
                                 {today.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
                             </p>
                         </div>
                     </div>
 
                     {/* View Toggle */}
-                    <div className="flex gap-1 bg-gray-100 p-1 rounded-full">
+                    <div className="flex gap-1 bg-[var(--md-sys-color-surface-variant)] p-1 rounded-full border border-[var(--md-sys-color-outline)]">
                         <button
                             onClick={() => { setViewMode('today'); setSelectedClass(null); }}
                             className={clsx(
                                 "flex-1 py-2 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5",
-                                viewMode === 'today' ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"
+                                viewMode === 'today' ? "bg-[var(--md-sys-color-surface)] shadow-sm text-[var(--md-sys-color-on-surface)]" : "text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)]"
                             )}
                         >
                             <Calendar size={14} />
@@ -165,7 +173,7 @@ const Attendance: React.FC<AttendanceProps> = ({ data, onUpdateStudent }) => {
                             onClick={() => { setViewMode('history'); setSelectedClass(null); }}
                             className={clsx(
                                 "flex-1 py-2 rounded-full text-xs font-bold transition-all flex items-center justify-center gap-1.5",
-                                viewMode === 'history' ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"
+                                viewMode === 'history' ? "bg-[var(--md-sys-color-surface)] shadow-sm text-[var(--md-sys-color-on-surface)]" : "text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)]"
                             )}
                         >
                             <History size={14} />
@@ -194,30 +202,30 @@ const Attendance: React.FC<AttendanceProps> = ({ data, onUpdateStudent }) => {
                                             className={clsx(
                                                 "w-full p-4 rounded-xl text-left transition-all border-l-4",
                                                 selectedClass?.id === slot.id
-                                                    ? "bg-blue-50 border-l-blue-600 shadow-sm"
-                                                    : "bg-gray-50 border-l-transparent hover:bg-gray-100",
+                                                    ? "bg-blue-50 dark:bg-blue-900/20 border-l-blue-600 shadow-sm"
+                                                    : "bg-[var(--md-sys-color-surface-variant)] border-l-transparent hover:bg-[var(--md-sys-color-surface)]",
                                                 slot.subject === 'Solar' ? 'hover:border-l-orange-500' : 'hover:border-l-blue-500'
                                             )}
                                         >
                                             <div className="flex items-center justify-between mb-2">
                                                 <div className="flex items-center gap-2">
                                                     {slot.subject === 'Solar' ? <Zap size={14} className="text-orange-500" /> : <Monitor size={14} className="text-blue-500" />}
-                                                    <span className="text-xs font-bold uppercase tracking-wider text-gray-500">{slot.subject}</span>
+                                                    <span className="text-xs font-bold uppercase tracking-wider text-[var(--md-sys-color-secondary)]">{slot.subject}</span>
                                                 </div>
                                                 <div className="flex items-center gap-1">
                                                     {isActive && <span className="text-[9px] font-bold bg-green-500 text-white px-1.5 py-0.5 rounded-full">LIVE</span>}
-                                                    {isPast && slot.status !== 'Completed' && <span className="text-[9px] font-bold bg-gray-300 text-gray-700 px-1.5 py-0.5 rounded-full">PAST</span>}
+                                                    {isPast && slot.status !== 'Completed' && <span className="text-[9px] font-bold bg-[var(--md-sys-color-outline)] text-[var(--md-sys-color-on-surface-variant)] px-1.5 py-0.5 rounded-full">PAST</span>}
                                                     {slot.status === 'Completed' && <CheckCircle size={14} className="text-green-500" />}
                                                 </div>
                                             </div>
-                                            <p className="font-bold text-gray-900">Grade {slot.grade}</p>
-                                            <p className="text-xs text-gray-500 flex items-center gap-1 mt-1">
+                                            <p className="font-bold text-[var(--md-sys-color-on-surface)]">Grade {slot.grade}</p>
+                                            <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] flex items-center gap-1 mt-1">
                                                 <Clock size={10} /> {slot.startTime} • {slot.durationMinutes}min
                                             </p>
                                         </motion.button>
                                     );
                                 }) : (
-                                    <div className="text-center py-12 text-gray-400">
+                                    <div className="text-center py-12 text-[var(--md-sys-color-secondary)]">
                                         <Calendar size={40} className="mx-auto mb-3 opacity-50" />
                                         <p className="font-medium">No classes today</p>
                                         <p className="text-xs mt-1">Check the schedule</p>
@@ -236,24 +244,24 @@ const Attendance: React.FC<AttendanceProps> = ({ data, onUpdateStudent }) => {
                                         className={clsx(
                                             "w-full p-4 rounded-xl text-left transition-all border-l-4",
                                             selectedClass?.id === slot.id
-                                                ? "bg-green-50 border-l-green-600 shadow-sm"
-                                                : "bg-gray-50 border-l-transparent hover:bg-gray-100"
+                                                ? "bg-green-50 dark:bg-green-900/20 border-l-green-600 shadow-sm"
+                                                : "bg-[var(--md-sys-color-surface-variant)] border-l-transparent hover:bg-[var(--md-sys-color-surface)]"
                                         )}
                                     >
                                         <div className="flex items-center justify-between mb-2">
                                             <div className="flex items-center gap-2">
                                                 {slot.subject === 'Solar' ? <Zap size={14} className="text-orange-500" /> : <Monitor size={14} className="text-blue-500" />}
-                                                <span className="text-xs font-bold uppercase tracking-wider text-gray-500">{slot.subject}</span>
+                                                <span className="text-xs font-bold uppercase tracking-wider text-[var(--md-sys-color-secondary)]">{slot.subject}</span>
                                             </div>
                                             <CheckCircle size={14} className="text-green-500" />
                                         </div>
-                                        <p className="font-bold text-gray-900">Grade {slot.grade}</p>
-                                        <p className="text-xs text-gray-500 flex items-center gap-1 mt-1">
+                                        <p className="font-bold text-[var(--md-sys-color-on-surface)]">Grade {slot.grade}</p>
+                                        <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] flex items-center gap-1 mt-1">
                                             {DAYS[slot.dayOfWeek]} • {slot.startTime}
                                         </p>
                                     </motion.button>
                                 )) : (
-                                    <div className="text-center py-12 text-gray-400">
+                                    <div className="text-center py-12 text-[var(--md-sys-color-secondary)]">
                                         <History size={40} className="mx-auto mb-3 opacity-50" />
                                         <p className="font-medium">No completed classes</p>
                                         <p className="text-xs mt-1">Mark classes as complete to see history</p>
@@ -272,7 +280,7 @@ const Attendance: React.FC<AttendanceProps> = ({ data, onUpdateStudent }) => {
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: 20 }}
-                        className="flex-1 bg-white rounded-2xl border border-gray-100 shadow-sm flex flex-col overflow-hidden"
+                        className="flex-1 bg-[var(--md-sys-color-surface)] rounded-2xl border border-[var(--md-sys-color-outline)] shadow-sm flex flex-col overflow-hidden"
                     >
                         {/* Header */}
                         <div className={clsx(
@@ -298,15 +306,15 @@ const Attendance: React.FC<AttendanceProps> = ({ data, onUpdateStudent }) => {
                         </div>
 
                         {/* Stats Bar */}
-                        <div className="grid grid-cols-3 gap-4 p-4 bg-gradient-to-r from-gray-50 to-white border-b border-gray-100">
+                        <div className="grid grid-cols-3 gap-4 p-4 bg-[var(--md-sys-color-surface-variant)] border-b border-[var(--md-sys-color-outline)]">
                             <motion.div
                                 className="text-center"
                                 initial={{ scale: 0 }}
                                 animate={{ scale: 1 }}
                                 transition={{ delay: 0.1, type: "spring" }}
                             >
-                                <p className="text-2xl font-black text-green-600">{attendanceStats.present}</p>
-                                <p className="text-[10px] font-bold text-gray-400 uppercase">Present</p>
+                                <p className="text-2xl font-black text-green-600 dark:text-green-400">{attendanceStats.present}</p>
+                                <p className="text-[10px] font-bold text-[var(--md-sys-color-secondary)] uppercase">Present</p>
                             </motion.div>
                             <motion.div
                                 className="text-center"
@@ -314,8 +322,8 @@ const Attendance: React.FC<AttendanceProps> = ({ data, onUpdateStudent }) => {
                                 animate={{ scale: 1 }}
                                 transition={{ delay: 0.15, type: "spring" }}
                             >
-                                <p className="text-2xl font-black text-red-600">{attendanceStats.absent}</p>
-                                <p className="text-[10px] font-bold text-gray-400 uppercase">Absent</p>
+                                <p className="text-2xl font-black text-red-600 dark:text-red-400">{attendanceStats.absent}</p>
+                                <p className="text-[10px] font-bold text-[var(--md-sys-color-secondary)] uppercase">Absent</p>
                             </motion.div>
                             <motion.div
                                 className="text-center"
@@ -323,34 +331,34 @@ const Attendance: React.FC<AttendanceProps> = ({ data, onUpdateStudent }) => {
                                 animate={{ scale: 1 }}
                                 transition={{ delay: 0.2, type: "spring" }}
                             >
-                                <p className="text-2xl font-black text-gray-400">{attendanceStats.unmarked}</p>
-                                <p className="text-[10px] font-bold text-gray-400 uppercase">Unmarked</p>
+                                <p className="text-2xl font-black text-[var(--md-sys-color-on-surface-variant)]">{attendanceStats.unmarked}</p>
+                                <p className="text-[10px] font-bold text-[var(--md-sys-color-secondary)] uppercase">Unmarked</p>
                             </motion.div>
                         </div>
 
                         {/* Toolbar */}
-                        <div className="p-4 border-b border-gray-100 flex flex-wrap gap-3 items-center">
+                        <div className="p-4 border-b border-[var(--md-sys-color-outline)] flex flex-wrap gap-3 items-center">
                             {/* Search */}
                             <div className="flex-1 relative min-w-[200px]">
-                                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--md-sys-color-on-surface-variant)]" />
                                 <input
                                     type="text"
                                     placeholder="Search students..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                                    className="w-full pl-10 pr-4 py-2.5 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-[var(--md-sys-color-on-surface)] placeholder-[var(--md-sys-color-on-surface-variant)]"
                                 />
                             </div>
 
                             {/* Filter */}
-                            <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+                            <div className="flex gap-1 bg-[var(--md-sys-color-surface-variant)] p-1 rounded-lg">
                                 {(['all', 'present', 'absent', 'unmarked'] as const).map(status => (
                                     <button
                                         key={status}
                                         onClick={() => setFilterStatus(status)}
                                         className={clsx(
                                             "px-3 py-1.5 rounded-md text-xs font-bold transition-all capitalize",
-                                            filterStatus === status ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"
+                                            filterStatus === status ? "bg-[var(--md-sys-color-surface)] shadow-sm text-[var(--md-sys-color-on-surface)]" : "text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)]"
                                         )}
                                     >
                                         {status}
@@ -359,7 +367,7 @@ const Attendance: React.FC<AttendanceProps> = ({ data, onUpdateStudent }) => {
                             </div>
 
                             {/* Batch Actions */}
-                            {viewMode === 'today' && (
+                            {viewMode === 'today' && user?.role !== 'viewer' && (
                                 <div className="flex gap-2">
                                     <button
                                         onClick={() => handleBatchAttendance('present')}
@@ -369,7 +377,7 @@ const Attendance: React.FC<AttendanceProps> = ({ data, onUpdateStudent }) => {
                                     </button>
                                     <button
                                         onClick={() => handleBatchAttendance('absent')}
-                                        className="px-4 py-2 bg-white text-red-600 border border-red-200 rounded-lg text-xs font-bold hover:bg-red-50 transition-colors flex items-center gap-1.5"
+                                        className="px-4 py-2 bg-[var(--md-sys-color-surface)] text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/30 rounded-lg text-xs font-bold hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors flex items-center gap-1.5"
                                     >
                                         <X size={14} /> All Absent
                                     </button>
@@ -389,27 +397,27 @@ const Attendance: React.FC<AttendanceProps> = ({ data, onUpdateStudent }) => {
                                         transition={{ delay: idx * 0.02 }}
                                         className={clsx(
                                             "flex items-center justify-between p-4 rounded-xl border transition-all",
-                                            status === 'present' ? "bg-green-50/50 border-green-200" :
-                                                status === 'absent' ? "bg-red-50/50 border-red-200" :
-                                                    "bg-gray-50 border-gray-100 hover:border-gray-200"
+                                            status === 'present' ? "bg-green-50/50 dark:bg-green-900/10 border-green-200 dark:border-green-900/30" :
+                                                status === 'absent' ? "bg-red-50/50 dark:bg-red-900/10 border-red-200 dark:border-red-900/30" :
+                                                    "bg-[var(--md-sys-color-surface-variant)] border-[var(--md-sys-color-outline)] hover:border-[var(--md-sys-color-outline)]"
                                         )}
                                     >
                                         <div className="flex items-center gap-4">
                                             <div className={clsx(
                                                 "w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg",
-                                                status === 'present' ? "bg-green-100 text-green-700" :
-                                                    status === 'absent' ? "bg-red-100 text-red-700" :
-                                                        "bg-gray-100 text-gray-500"
+                                                status === 'present' ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" :
+                                                    status === 'absent' ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400" :
+                                                        "bg-[var(--md-sys-color-surface)] dark:bg-[var(--md-sys-color-surface)] text-[var(--md-sys-color-on-surface-variant)]"
                                             )}>
                                                 {student.name.charAt(0)}
                                             </div>
                                             <div>
-                                                <p className="font-bold text-gray-900">{student.name}</p>
-                                                <p className="text-xs text-gray-500 font-medium">Lot {student.lot} • {student.attendancePct}% overall</p>
+                                                <p className="font-bold text-[var(--md-sys-color-on-surface)]">{student.name}</p>
+                                                <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] font-medium">Lot {student.lot} • {student.attendancePct}% overall</p>
                                             </div>
                                         </div>
 
-                                        {viewMode === 'today' ? (
+                                        {viewMode === 'today' && user?.role !== 'viewer' ? (
                                             <div className="flex gap-2">
                                                 <motion.button
                                                     whileHover={{ scale: 1.1 }}
@@ -419,7 +427,7 @@ const Attendance: React.FC<AttendanceProps> = ({ data, onUpdateStudent }) => {
                                                         "p-3 rounded-xl transition-all",
                                                         status === 'present'
                                                             ? "bg-green-500 text-white shadow-lg shadow-green-500/30"
-                                                            : "bg-gray-100 text-gray-400 hover:bg-green-100 hover:text-green-600"
+                                                            : "bg-[var(--md-sys-color-surface)] text-[var(--md-sys-color-on-surface-variant)] hover:bg-green-100 hover:text-green-600"
                                                     )}
                                                 >
                                                     <Check size={18} strokeWidth={3} />
@@ -432,7 +440,7 @@ const Attendance: React.FC<AttendanceProps> = ({ data, onUpdateStudent }) => {
                                                         "p-3 rounded-xl transition-all",
                                                         status === 'absent'
                                                             ? "bg-red-500 text-white shadow-lg shadow-red-500/30"
-                                                            : "bg-gray-100 text-gray-400 hover:bg-red-100 hover:text-red-600"
+                                                            : "bg-[var(--md-sys-color-surface)] text-[var(--md-sys-color-on-surface-variant)] hover:bg-red-100 hover:text-red-600"
                                                     )}
                                                 >
                                                     <X size={18} strokeWidth={3} />
@@ -441,9 +449,9 @@ const Attendance: React.FC<AttendanceProps> = ({ data, onUpdateStudent }) => {
                                         ) : (
                                             <div className={clsx(
                                                 "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold",
-                                                status === 'present' ? "bg-green-100 text-green-700" :
-                                                    status === 'absent' ? "bg-red-100 text-red-700" :
-                                                        "bg-gray-100 text-gray-500"
+                                                status === 'present' ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" :
+                                                    status === 'absent' ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400" :
+                                                        "bg-[var(--md-sys-color-surface-variant)] text-[var(--md-sys-color-on-surface-variant)]"
                                             )}>
                                                 {status === 'present' && <><CheckCircle size={12} /> Present</>}
                                                 {status === 'absent' && <><XCircle size={12} /> Absent</>}
@@ -453,7 +461,7 @@ const Attendance: React.FC<AttendanceProps> = ({ data, onUpdateStudent }) => {
                                     </motion.div>
                                 );
                             }) : (
-                                <div className="text-center py-12 text-gray-400">
+                                <div className="text-center py-12 text-[var(--md-sys-color-secondary)]">
                                     <Users size={40} className="mx-auto mb-3 opacity-50" />
                                     <p className="font-medium">No students found</p>
                                     <p className="text-xs mt-1">Try adjusting your search or filter</p>
@@ -465,17 +473,17 @@ const Attendance: React.FC<AttendanceProps> = ({ data, onUpdateStudent }) => {
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        className="flex-1 bg-white rounded-2xl border border-gray-100 shadow-sm flex items-center justify-center"
+                        className="flex-1 bg-[var(--md-sys-color-surface)] rounded-2xl border border-[var(--md-sys-color-outline)] shadow-sm flex items-center justify-center"
                     >
-                        <div className="text-center text-gray-400">
+                        <div className="text-center text-[var(--md-sys-color-on-surface-variant)]">
                             <motion.div
                                 animate={{ scale: [1, 1.05, 1] }}
                                 transition={{ repeat: Infinity, duration: 2 }}
-                                className="w-20 h-20 bg-green-50 rounded-2xl flex items-center justify-center mx-auto mb-4"
+                                className="w-20 h-20 bg-green-50 dark:bg-green-900/20 rounded-2xl flex items-center justify-center mx-auto mb-4"
                             >
                                 <UserCheck size={40} className="text-green-500" />
                             </motion.div>
-                            <p className="font-bold text-gray-700">Select a Class</p>
+                            <p className="font-bold text-[var(--md-sys-color-on-surface)]">Select a Class</p>
                             <p className="text-sm mt-1">Choose from the list to mark or view attendance</p>
                         </div>
                     </motion.div>

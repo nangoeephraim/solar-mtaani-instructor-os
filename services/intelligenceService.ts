@@ -122,5 +122,23 @@ export const analyzeData = (data: AppData): Insight[] => {
         }
     }
 
+    // 5. Schedule Workload — warn if any single day has > 5 classes
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const classesByDay = new Map<number, number>();
+    schedule.forEach(s => {
+        classesByDay.set(s.dayOfWeek, (classesByDay.get(s.dayOfWeek) || 0) + 1);
+    });
+    const heavyDays = Array.from(classesByDay.entries()).filter(([, count]) => count > 5);
+    if (heavyDays.length > 0) {
+        const dayList = heavyDays.map(([day, count]) => `${dayNames[day]} (${count})`).join(', ');
+        insights.push({
+            id: 'workload-heavy',
+            type: 'warning',
+            message: 'Heavy teaching load detected',
+            detail: `${dayList} ${heavyDays.length === 1 ? 'has' : 'have'} more than 5 classes. Consider redistributing to avoid burnout.`,
+            priority: 'medium'
+        });
+    }
+
     return insights.sort((a, b) => (a.priority === 'high' ? -1 : 1));
 };

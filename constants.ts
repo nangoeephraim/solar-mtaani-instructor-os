@@ -55,52 +55,62 @@ export const INITIAL_DATA: AppData = {
     ]
   },
   students: [
-    { 
-      id: 1, 
-      name: "Brian Omondi", 
-      grade: 5, 
-      lot: "2025", 
-      subject: "Solar", 
+    {
+      id: 1,
+      name: "Brian Omondi",
+      grade: 5,
+      lot: "2025",
+      subject: "Solar",
       competencies: { safety: 3, tools: 2, principles: 1, installation: 1, maintenance: 2 },
       attendancePct: 95,
       attendanceHistory: [],
-      notes: ["Shows strong leadership skills in group tasks."]
+      notes: ["Shows strong leadership skills in group tasks."],
+      assessment: { units: {}, termStats: [] }
     },
-    { 
-      id: 2, 
-      name: "Sarah Wanjiku", 
-      grade: 5, 
-      lot: "2025", 
-      subject: "Solar", 
+    {
+      id: 2,
+      name: "Sarah Wanjiku",
+      grade: 5,
+      lot: "2025",
+      subject: "Solar",
       competencies: { safety: 4, tools: 4, principles: 3, installation: 2, maintenance: 3 },
       attendancePct: 98,
       attendanceHistory: [],
-      notes: []
+      notes: [],
+      assessment: { units: {}, termStats: [] }
     },
-    { 
-      id: 3, 
-      name: "Kevin Kamau", 
-      grade: 6, 
-      lot: "2024", 
-      subject: "Solar", 
+    {
+      id: 3,
+      name: "Kevin Kamau",
+      grade: 6,
+      lot: "2024",
+      subject: "Solar",
       competencies: { safety: 2, tools: 2, principles: 1, installation: 1, maintenance: 1 },
       attendancePct: 65, // At risk attendance
       attendanceHistory: [],
-      notes: ["Frequently late. Needs parent consultation."]
+      notes: ["Frequently late. Needs parent consultation."],
+      assessment: { units: {}, termStats: [] }
     },
-     { 
-      id: 4, 
-      name: "Jane Doe", 
-      grade: 5, 
-      lot: "2025", 
-      subject: "ICT", 
+    {
+      id: 4,
+      name: "Jane Doe",
+      grade: 5,
+      lot: "2025",
+      subject: "ICT",
       competencies: { hardware: 3, software: 4, typing: 2, formatting: 3, data: 2 },
       attendancePct: 92,
       attendanceHistory: [],
-      notes: []
+      notes: [],
+      assessment: { units: {}, termStats: [] }
     }
   ],
-  schedule: [] // Will be populated in the service if empty
+  schedule: [], // Will be populated in the service if empty
+  holidays: [],
+  resources: [
+    { id: 'r1', name: 'Classroom A', type: 'room', capacity: 30, status: 'available' },
+    { id: 'r2', name: 'Solar Lab', type: 'room', capacity: 15, status: 'available' },
+    { id: 'r3', name: 'Projector 1', type: 'equipment', status: 'available' }
+  ]
 };
 
 // Default Schedule Template (Recurring)

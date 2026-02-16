@@ -1,4 +1,4 @@
-import { AppData, Student, InstructorSettings, DEFAULT_SETTINGS, ScheduleSlot } from '../types';
+import { AppData, Student, InstructorSettings, DEFAULT_SETTINGS, ScheduleSlot, Resource } from '../types';
 import { INITIAL_DATA, DEFAULT_SCHEDULE_TEMPLATE } from '../constants';
 
 const STORAGE_KEY = 'solar_mtaani_os_v1';
@@ -13,6 +13,30 @@ export const getAppData = (): AppData => {
       if (!parsed.schedule || parsed.schedule.length === 0) {
         parsed.schedule = DEFAULT_SCHEDULE_TEMPLATE;
       }
+      // Holiday migration check
+      if (!parsed.holidays) {
+        parsed.holidays = [];
+      }
+      // Resources migration check
+      if (!parsed.resources) {
+        parsed.resources = [
+          { id: 'res-1', name: 'Main Hall', type: 'room' },
+          { id: 'res-2', name: 'Solar Lab', type: 'room' },
+          { id: 'res-3', name: 'Projector', type: 'equipment' }
+        ];
+      }
+
+      // Student migration check (ensure all required arrays/objects exist)
+      if (parsed.students) {
+        parsed.students = parsed.students.map((s: any) => ({
+          ...s,
+          assessment: s.assessment || { units: {}, termStats: [] },
+          attendanceHistory: s.attendanceHistory || [],
+          notes: s.notes || [],
+          competencies: s.competencies || {}
+        }));
+      }
+
       return parsed;
     }
   } catch (e) {
@@ -20,7 +44,17 @@ export const getAppData = (): AppData => {
   }
 
   // Initialize default
-  const defaultData = { ...INITIAL_DATA, schedule: DEFAULT_SCHEDULE_TEMPLATE };
+  const defaultResources: Resource[] = [
+    { id: 'res-1', name: 'Main Hall', type: 'room' },
+    { id: 'res-2', name: 'Solar Lab', type: 'room' },
+    { id: 'res-3', name: 'Projector', type: 'equipment' }
+  ];
+  const defaultData = {
+    ...INITIAL_DATA,
+    schedule: DEFAULT_SCHEDULE_TEMPLATE,
+    holidays: [],
+    resources: defaultResources
+  };
   saveAppData(defaultData);
   return defaultData;
 };
@@ -65,7 +99,8 @@ export const addStudent = (data: AppData, studentData: Omit<Student, 'id'>): App
   const maxId = data.students.reduce((max, s) => Math.max(max, s.id), 0);
   const newStudent: Student = {
     ...studentData,
-    id: maxId + 1
+    id: maxId + 1,
+    assessment: (studentData as any).assessment || { units: {}, termStats: [] }
   };
 
   return {
@@ -105,6 +140,22 @@ export const deleteScheduleSlot = (data: AppData, slotId: string): AppData => {
   };
 };
 
+// Resource CRUD operations
+export const addResource = (data: AppData, resource: Omit<Resource, 'id'>): AppData => {
+  const newId = Math.random().toString(36).substr(2, 9);
+  return {
+    ...data,
+    resources: [...data.resources, { ...resource, id: newId }]
+  };
+};
+
+export const deleteResource = (data: AppData, resourceId: string): AppData => {
+  return {
+    ...data,
+    resources: data.resources.filter(r => r.id !== resourceId)
+  };
+};
+
 // Data export
 export const exportDataAsCSV = (): string => {
   const data = getAppData();
@@ -134,4 +185,26 @@ export const exportDataAsCSV = (): string => {
   });
 
   return [header.join(','), ...rows].join('\n');
+};
+
+// Full data backup (JSON)
+export const exportFullBackup = (): string => {
+  const data = getAppData();
+  const settings = getSettings();
+  return JSON.stringify({ data, settings, exportedAt: new Date().toISOString(), version: '2.0.0' }, null, 2);
+};
+
+// Restore from backup
+export const importFullBackup = (jsonString: string): { success: boolean; error?: string } => {
+  try {
+    const backup = JSON.parse(jsonString);
+    if (!backup.data || !backup.settings) {
+      return { success: false, error: 'Invalid backup format' };
+    }
+    saveAppData(backup.data);
+    saveSettings(backup.settings);
+    return { success: true };
+  } catch (e) {
+    return { success: false, error: 'Failed to parse backup file' };
+  }
 };

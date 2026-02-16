@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { AppData, Student, InstructorSettings, DEFAULT_SETTINGS } from '../types';
 import { getSettings } from '../services/storageService';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, Legend } from 'recharts';
-import { TrendingUp, TrendingDown, Users, Award, AlertTriangle, ChevronRight, BarChart3, PieChart as PieChartIcon, Activity, Zap, Monitor, Star, Target, Clock, ArrowUpRight, Sparkles, Download, Lightbulb, Calendar, RefreshCw, FileText, ChevronDown, PartyPopper, Brain } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, Legend, RadarChart, PolarGrid, PolarAngleAxis, Radar } from 'recharts';
+import { TrendingUp, TrendingDown, Users, Award, AlertTriangle, ChevronRight, BarChart3, PieChart as PieChartIcon, Activity, Zap, Monitor, Star, Target, Clock, ArrowUpRight, Sparkles, Download, Lightbulb, Calendar, RefreshCw, FileText, ChevronDown, PartyPopper, Brain, Printer, GitCompare, X } from 'lucide-react';
 import clsx from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { analyzeData } from '../services/intelligenceService';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
 
 interface AnalyticsProps {
     data: AppData;
@@ -104,7 +106,7 @@ const MetricCard: React.FC<{
             animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ delay, type: "spring", stiffness: 300, damping: 25 }}
             whileHover={{ y: -4, transition: { duration: 0.2 } }}
-            className="bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-xl transition-all overflow-hidden group"
+            className="bg-[var(--md-sys-color-surface)] rounded-2xl border border-[var(--md-sys-color-outline)] shadow-sm hover:shadow-xl transition-all overflow-hidden group"
         >
             <div className="p-5">
                 <div className="flex items-start justify-between mb-3">
@@ -121,7 +123,7 @@ const MetricCard: React.FC<{
                             transition={{ delay: delay + 0.3 }}
                             className={clsx(
                                 "flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold",
-                                trend === 'up' ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                                trend === 'up' ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
                             )}
                         >
                             {trend === 'up' ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
@@ -130,12 +132,12 @@ const MetricCard: React.FC<{
                     )}
                 </div>
 
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">{title}</p>
+                <p className="text-[10px] font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-widest mb-0.5">{title}</p>
                 <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-black text-gray-900 tabular-nums">{animatedValue}</span>
-                    {suffix && <span className="text-sm font-bold text-gray-400">{suffix}</span>}
+                    <span className="text-3xl font-black text-[var(--md-sys-color-on-surface)] tabular-nums">{animatedValue}</span>
+                    {suffix && <span className="text-sm font-bold text-[var(--md-sys-color-on-surface-variant)]">{suffix}</span>}
                 </div>
-                <p className="text-xs text-gray-500 font-medium">{subtitle}</p>
+                <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] font-medium">{subtitle}</p>
 
                 {sparklineData && <MiniSparkline data={sparklineData} color={colorHex[color]} />}
             </div>
@@ -172,7 +174,7 @@ const InsightChip: React.FC<{
             className={clsx("flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-medium", styles[type])}
         >
             {icons[type]}
-            {message}
+            <span className="text-[var(--md-sys-color-on-surface)]">{message}</span>
         </motion.div>
     );
 };
@@ -190,14 +192,14 @@ const ChartCard: React.FC<{
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay, type: "spring", stiffness: 200, damping: 25 }}
-        className={clsx("bg-white rounded-2xl border border-gray-100 shadow-sm p-6 hover:shadow-lg transition-shadow", className)}
+        className={clsx("bg-[var(--md-sys-color-surface)] rounded-2xl border border-[var(--md-sys-color-outline)] shadow-sm p-6 hover:shadow-lg transition-shadow", className)}
     >
         <div className="flex items-center justify-between mb-5">
             <div className="flex items-center gap-3">
-                <div className="p-2 bg-gray-100 rounded-lg text-gray-600">
+                <div className="p-2 bg-[var(--md-sys-color-surface-variant)] rounded-lg text-[var(--md-sys-color-on-surface-variant)]">
                     {icon}
                 </div>
-                <h3 className="font-google font-bold text-gray-800">{title}</h3>
+                <h3 className="font-google font-bold text-[var(--md-sys-color-on-surface)]">{title}</h3>
             </div>
             {action}
         </div>
@@ -206,10 +208,17 @@ const ChartCard: React.FC<{
 );
 
 const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
-    const [selectedMetric, setSelectedMetric] = useState<'performance' | 'attendance' | 'overview'>('overview');
+    const [selectedMetric, setSelectedMetric] = useState<'performance' | 'attendance' | 'overview' | 'comparison'>('overview');
     const [hoveredStudent, setHoveredStudent] = useState<number | null>(null);
     const [timePeriod, setTimePeriod] = useState<'week' | 'month' | 'term'>('month');
     const [showExportMenu, setShowExportMenu] = useState(false);
+    const [dateRange, setDateRange] = useState<{ start: string; end: string }>({
+        start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        end: new Date().toISOString().split('T')[0]
+    });
+    const [comparisonStudents, setComparisonStudents] = useState<number[]>([]);
+    const [showComparisonPicker, setShowComparisonPicker] = useState(false);
+    const analyticsRef = useRef<HTMLDivElement>(null);
 
     // Calculate subject averages
     const solarStudents = data.students.filter(s => s.subject === 'Solar');
@@ -324,19 +333,91 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
         setShowExportMenu(false);
     };
 
+    // PDF Export
+    const exportToPDF = async () => {
+        if (!analyticsRef.current) return;
+        setShowExportMenu(false);
+
+        try {
+            const canvas = await html2canvas(analyticsRef.current, {
+                scale: 2,
+                useCORS: true,
+                logging: false,
+                backgroundColor: '#ffffff'
+            });
+
+            const imgData = canvas.toDataURL('image/png');
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const imgWidth = 210;
+            const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+            // Add header
+            pdf.setFontSize(20);
+            pdf.setTextColor(59, 130, 246);
+            pdf.text('Analytics Report', 14, 20);
+            pdf.setFontSize(10);
+            pdf.setTextColor(100);
+            pdf.text(`Generated: ${new Date().toLocaleDateString()}`, 14, 28);
+            pdf.text(`Period: ${dateRange.start} to ${dateRange.end}`, 14, 34);
+
+            // Add image
+            pdf.addImage(imgData, 'PNG', 0, 45, imgWidth, Math.min(imgHeight, 240));
+
+            pdf.save(`analytics_report_${new Date().toISOString().split('T')[0]}.pdf`);
+        } catch (error) {
+            console.error('PDF export failed:', error);
+        }
+    };
+
+    // Print function
+    const handlePrint = () => {
+        setShowExportMenu(false);
+        window.print();
+    };
+
+    // Toggle student for comparison
+    const toggleComparisonStudent = (studentId: number) => {
+        setComparisonStudents(prev => {
+            if (prev.includes(studentId)) {
+                return prev.filter(id => id !== studentId);
+            }
+            if (prev.length >= 3) {
+                return [...prev.slice(1), studentId];
+            }
+            return [...prev, studentId];
+        });
+    };
+
+    // Get comparison data for radar chart
+    const getComparisonData = () => {
+        const selectedStudents = data.students.filter(s => comparisonStudents.includes(s.id));
+        if (selectedStudents.length === 0) return [];
+
+        const allCompetencies = new Set<string>();
+        selectedStudents.forEach(s => Object.keys(s.competencies).forEach(k => allCompetencies.add(k)));
+
+        return Array.from(allCompetencies).slice(0, 6).map(comp => {
+            const entry: any = { competency: comp.substring(0, 15) + (comp.length > 15 ? '...' : '') };
+            selectedStudents.forEach(s => {
+                entry[s.name] = s.competencies[comp] || 0;
+            });
+            return entry;
+        });
+    };
+
     return (
-        <div className="space-y-6 animate-fade-in pb-10 font-sans">
+        <div className="space-y-6 animate-fade-in pb-10 font-sans" ref={analyticsRef}>
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h2 className="text-2xl font-google font-bold text-gray-900 flex items-center gap-2">
-                        <BarChart3 className="text-blue-600" /> Analytics Dashboard
+                    <h2 className="text-2xl font-google font-bold text-[var(--md-sys-color-on-surface)] flex items-center gap-2">
+                        <BarChart3 className="text-[var(--md-sys-color-primary)]" /> Analytics Dashboard
                     </h2>
-                    <p className="text-gray-500 text-sm font-medium">Real-time performance metrics and insights</p>
+                    <p className="text-[var(--md-sys-color-secondary)] text-sm font-medium">Real-time performance metrics and insights</p>
                 </div>
                 <div className="flex items-center gap-2">
                     {/* Time Period Selector */}
-                    <div className="flex gap-1 bg-gray-100/80 p-1 rounded-full border border-gray-200">
+                    <div className="flex gap-1 bg-[var(--md-sys-color-surface-variant)] p-1 rounded-full border border-[var(--md-sys-color-outline)]">
                         {[
                             { id: 'week', label: 'Week' },
                             { id: 'month', label: 'Month' },
@@ -348,8 +429,8 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                                 className={clsx(
                                     "px-3 py-1.5 rounded-full text-xs font-bold transition-all",
                                     timePeriod === period.id
-                                        ? "bg-white shadow-sm text-gray-900"
-                                        : "text-gray-500 hover:text-gray-700"
+                                        ? "bg-[var(--md-sys-color-surface)] shadow-sm text-[var(--md-sys-color-on-surface)]"
+                                        : "text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)]"
                                 )}
                             >
                                 {period.label}
@@ -361,7 +442,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                     <div className="relative">
                         <button
                             onClick={() => setShowExportMenu(!showExportMenu)}
-                            className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-full text-sm font-bold text-gray-700 hover:bg-gray-50 hover:shadow-sm transition-all"
+                            className="flex items-center gap-2 px-4 py-2 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-full text-sm font-bold text-[var(--md-sys-color-on-surface)] hover:bg-[var(--md-sys-color-surface-variant)] hover:shadow-sm transition-all"
                         >
                             <Download size={14} />
                             Export
@@ -373,14 +454,28 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                                     initial={{ opacity: 0, y: 10 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     exit={{ opacity: 0, y: 10 }}
-                                    className="absolute right-0 mt-2 w-48 bg-white rounded-xl border border-gray-100 shadow-xl z-50 overflow-hidden"
+                                    className="absolute right-0 mt-2 w-48 bg-[var(--md-sys-color-surface)] rounded-xl border border-[var(--md-sys-color-outline)] shadow-xl z-50 overflow-hidden"
                                 >
                                     <button
                                         onClick={exportToCSV}
-                                        className="w-full px-4 py-3 text-left text-sm font-medium text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                                        className="w-full px-4 py-3 text-left text-sm font-medium text-[var(--md-sys-color-on-surface)] hover:bg-[var(--md-sys-color-surface-variant)] flex items-center gap-2"
                                     >
                                         <FileText size={14} />
                                         Export as CSV
+                                    </button>
+                                    <button
+                                        onClick={exportToPDF}
+                                        className="w-full px-4 py-3 text-left text-sm font-medium text-[var(--md-sys-color-on-surface)] hover:bg-[var(--md-sys-color-surface-variant)] flex items-center gap-2 border-t border-[var(--md-sys-color-outline)]"
+                                    >
+                                        <Download size={14} />
+                                        Export as PDF
+                                    </button>
+                                    <button
+                                        onClick={handlePrint}
+                                        className="w-full px-4 py-3 text-left text-sm font-medium text-[var(--md-sys-color-on-surface)] hover:bg-[var(--md-sys-color-surface-variant)] flex items-center gap-2 border-t border-[var(--md-sys-color-outline)]"
+                                    >
+                                        <Printer size={14} />
+                                        Print Report
                                     </button>
                                 </motion.div>
                             )}
@@ -449,31 +544,53 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
             </div>
 
             {/* Tab Navigation */}
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="flex gap-1 bg-gray-100/80 p-1.5 rounded-full border border-gray-200 shadow-inner w-fit"
-            >
-                {[
-                    { id: 'overview', label: 'Overview', icon: Target },
-                    { id: 'performance', label: 'Performance', icon: BarChart3 },
-                    { id: 'attendance', label: 'Attendance', icon: Activity }
-                ].map(tab => (
-                    <button
-                        key={tab.id}
-                        onClick={() => setSelectedMetric(tab.id as any)}
-                        className={clsx(
-                            "px-5 py-2.5 rounded-full text-sm font-bold transition-all flex items-center gap-2",
-                            selectedMetric === tab.id
-                                ? "bg-white shadow-md text-blue-600"
-                                : "text-gray-500 hover:text-gray-700"
-                        )}
-                    >
-                        <tab.icon size={16} />
-                        {tab.label}
-                    </button>
-                ))}
-            </motion.div>
+            <div className="flex flex-wrap items-center gap-4">
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="flex gap-1 bg-[var(--md-sys-color-surface-variant)] p-1.5 rounded-full border border-[var(--md-sys-color-outline)] shadow-inner"
+                >
+                    {[
+                        { id: 'overview', label: 'Overview', icon: Target },
+                        { id: 'performance', label: 'Performance', icon: BarChart3 },
+                        { id: 'attendance', label: 'Attendance', icon: Activity },
+                        { id: 'comparison', label: 'Compare', icon: GitCompare }
+                    ].map(tab => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setSelectedMetric(tab.id as any)}
+                            className={clsx(
+                                "px-4 py-2 rounded-full text-sm font-bold transition-all flex items-center gap-2",
+                                selectedMetric === tab.id
+                                    ? "bg-[var(--md-sys-color-surface)] shadow-md text-[var(--md-sys-color-primary)]"
+                                    : "text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)]"
+                            )}
+                        >
+                            <tab.icon size={16} />
+                            <span className="hidden sm:inline">{tab.label}</span>
+                        </button>
+                    ))}
+                </motion.div>
+
+                {/* Date Range Filter */}
+                <div className="flex items-center gap-2 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-xl px-3 py-2">
+                    <Calendar size={14} className="text-[var(--md-sys-color-secondary)]" />
+                    <input
+                        type="date"
+                        value={dateRange.start}
+                        onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+                        className="bg-transparent text-sm text-[var(--md-sys-color-on-surface)] border-none outline-none w-32"
+                    />
+                    <span className="text-[var(--md-sys-color-secondary)]">—</span>
+                    <input
+                        type="date"
+                        value={dateRange.end}
+                        onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+                        className="bg-transparent text-sm text-[var(--md-sys-color-on-surface)] border-none outline-none w-32"
+                    />
+                </div>
+            </div>
+
 
             {/* Main Charts Section */}
             <AnimatePresence mode="wait">
@@ -494,18 +611,18 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                                         initial={{ opacity: 0, scale: 0.9 }}
                                         animate={{ opacity: 1, scale: 1 }}
                                         transition={{ delay: 0.2 + idx * 0.1 }}
-                                        className="p-4 rounded-xl border border-gray-100 bg-gray-50/50 hover:bg-white hover:shadow-md transition-all cursor-pointer"
+                                        className="p-4 rounded-xl border border-[var(--md-sys-color-outline)] bg-[var(--md-sys-color-surface-variant)] hover:bg-[var(--md-sys-color-surface)] hover:shadow-md transition-all cursor-pointer"
                                     >
                                         <div className="flex items-center gap-3 mb-3">
                                             <div className="w-10 h-10 rounded-lg flex items-center justify-center text-xl" style={{ backgroundColor: subject.color + '20' }}>
                                                 {subject.icon}
                                             </div>
                                             <div>
-                                                <p className="font-bold text-gray-900 text-sm">{subject.name}</p>
-                                                <p className="text-xs text-gray-500">{subject.students} students</p>
+                                                <p className="font-bold text-[var(--md-sys-color-on-surface)] text-sm">{subject.name}</p>
+                                                <p className="text-xs text-[var(--md-sys-color-on-surface-variant)]">{subject.students} students</p>
                                             </div>
                                         </div>
-                                        <div className="relative h-3 bg-gray-200 rounded-full overflow-hidden">
+                                        <div className="relative h-3 bg-[var(--md-sys-color-surface)] rounded-full overflow-hidden">
                                             <motion.div
                                                 initial={{ width: 0 }}
                                                 animate={{ width: `${(subject.score / 4) * 100}%` }}
@@ -522,18 +639,20 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                             <div className="h-48">
                                 <ResponsiveContainer width="100%" height="100%">
                                     <BarChart data={gradeData} barGap={8}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                                        <XAxis dataKey="shortGrade" tick={{ fill: '#6b7280', fontSize: 12, fontWeight: 600 }} axisLine={false} tickLine={false} />
-                                        <YAxis domain={[0, 4]} tick={{ fill: '#6b7280', fontSize: 12 }} axisLine={false} tickLine={false} />
+                                        <CartesianGrid strokeDasharray="3 3" stroke="var(--md-sys-color-outline)" vertical={false} />
+                                        <XAxis dataKey="shortGrade" tick={{ fill: 'var(--md-sys-color-secondary)', fontSize: 12, fontWeight: 600 }} axisLine={false} tickLine={false} />
+                                        <YAxis domain={[0, 4]} tick={{ fill: 'var(--md-sys-color-secondary)', fontSize: 12 }} axisLine={false} tickLine={false} />
                                         <Tooltip
                                             contentStyle={{
-                                                background: 'white',
-                                                border: 'none',
+                                                background: 'var(--md-sys-color-surface)',
+                                                border: '1px solid var(--md-sys-color-outline)',
                                                 borderRadius: '12px',
                                                 boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
-                                                padding: '12px 16px'
+                                                padding: '12px 16px',
+                                                color: 'var(--md-sys-color-on-surface)'
                                             }}
                                             cursor={{ fill: 'rgba(59, 130, 246, 0.05)' }}
+                                            itemStyle={{ color: 'var(--md-sys-color-on-surface)' }}
                                         />
                                         <Bar dataKey="avgScore" fill="url(#blueGradient)" radius={[6, 6, 0, 0]} name="Avg Score" />
                                         <defs>
@@ -622,7 +741,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                                         onMouseLeave={() => setHoveredStudent(null)}
                                         className={clsx(
                                             "flex items-center gap-3 p-3 rounded-xl transition-all cursor-pointer",
-                                            hoveredStudent === student.id ? "bg-blue-50 shadow-sm" : "bg-gray-50 hover:bg-gray-100"
+                                            hoveredStudent === student.id ? "bg-blue-50 dark:bg-blue-900/20 shadow-sm" : "bg-[var(--md-sys-color-surface-variant)] hover:bg-[var(--md-sys-color-surface)]"
                                         )}
                                     >
                                         <div className={clsx(
@@ -630,19 +749,19 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                                             idx === 0 ? "bg-gradient-to-br from-yellow-400 to-orange-500 text-white shadow-md" :
                                                 idx === 1 ? "bg-gradient-to-br from-gray-300 to-gray-400 text-white" :
                                                     idx === 2 ? "bg-gradient-to-br from-orange-400 to-red-500 text-white" :
-                                                        "bg-gray-100 text-gray-600"
+                                                        "bg-[var(--md-sys-color-surface)] text-[var(--md-sys-color-secondary)]"
                                         )}>
                                             {idx + 1}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="font-bold text-gray-900 text-sm truncate">{student.name}</p>
-                                            <p className="text-xs text-gray-500 flex items-center gap-1">
+                                            <p className="font-bold text-[var(--md-sys-color-on-surface)] text-sm truncate">{student.name}</p>
+                                            <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] flex items-center gap-1">
                                                 {student.subject === 'Solar' ? <Zap size={10} /> : <Monitor size={10} />}
                                                 {student.subject} • G{student.grade}
                                             </p>
                                         </div>
                                         <div className="text-right">
-                                            <p className="font-black text-lg text-gray-900">{student.avgScore.toFixed(1)}</p>
+                                            <p className="font-black text-lg text-[var(--md-sys-color-on-surface)]">{student.avgScore.toFixed(1)}</p>
                                         </div>
                                     </motion.div>
                                 ))}
@@ -664,21 +783,21 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                                                 initial={{ opacity: 0, x: 20 }}
                                                 animate={{ opacity: 1, x: 0 }}
                                                 transition={{ delay: 0.1 + idx * 0.05 }}
-                                                className="flex items-center gap-3 p-3 bg-red-50/50 rounded-xl border border-red-100"
+                                                className="flex items-center gap-3 p-3 bg-red-50/50 dark:bg-red-900/20 rounded-xl border border-red-100 dark:border-red-900/30"
                                             >
-                                                <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center text-red-600 font-bold">
+                                                <div className="w-10 h-10 rounded-lg bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-red-600 dark:text-red-400 font-bold">
                                                     {student.name.charAt(0)}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <p className="font-bold text-gray-900 text-sm truncate">{student.name}</p>
+                                                    <p className="font-bold text-[var(--md-sys-color-on-surface)] text-sm truncate">{student.name}</p>
                                                     <div className="flex gap-1.5 mt-1 flex-wrap">
                                                         {isLowScore && (
-                                                            <span className="text-[9px] bg-orange-100 text-orange-700 px-1.5 py-0.5 rounded-full font-bold">
+                                                            <span className="text-[9px] bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 px-1.5 py-0.5 rounded-full font-bold">
                                                                 Score: {avg.toFixed(1)}
                                                             </span>
                                                         )}
                                                         {isLowAttendance && (
-                                                            <span className="text-[9px] bg-red-100 text-red-700 px-1.5 py-0.5 rounded-full font-bold">
+                                                            <span className="text-[9px] bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 px-1.5 py-0.5 rounded-full font-bold">
                                                                 {student.attendancePct}%
                                                             </span>
                                                         )}
@@ -768,11 +887,11 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                                     initial={{ opacity: 0, y: 20 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: 0.2 + idx * 0.05 }}
-                                    className="bg-white rounded-2xl border border-gray-100 p-5 text-center hover:shadow-lg transition-all"
+                                    className="bg-[var(--md-sys-color-surface)] rounded-2xl border border-[var(--md-sys-color-outline)] p-5 text-center hover:shadow-lg transition-all"
                                 >
-                                    <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">{grade.grade}</p>
-                                    <p className="text-3xl font-black text-gray-900">{grade.attendance}%</p>
-                                    <div className="mt-3 h-2 bg-gray-100 rounded-full overflow-hidden">
+                                    <p className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-widest mb-2">{grade.grade}</p>
+                                    <p className="text-3xl font-black text-[var(--md-sys-color-on-surface)]">{grade.attendance}%</p>
+                                    <div className="mt-3 h-2 bg-[var(--md-sys-color-surface-variant)] rounded-full overflow-hidden">
                                         <motion.div
                                             initial={{ width: 0 }}
                                             animate={{ width: `${grade.attendance}%` }}
@@ -784,10 +903,131 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                                             )}
                                         />
                                     </div>
-                                    <p className="text-xs text-gray-500 mt-2">{grade.students} students</p>
+                                    <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] mt-2">{grade.students} students</p>
                                 </motion.div>
                             ))}
                         </div>
+                    </motion.div>
+                )}
+
+                {/* Comparison View */}
+                {selectedMetric === 'comparison' && (
+                    <motion.div
+                        key="comparison"
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        className="space-y-6"
+                    >
+                        {/* Student Selector */}
+                        <ChartCard title="Select Students to Compare" icon={<GitCompare size={18} />} delay={0.1}>
+                            <p className="text-sm text-[var(--md-sys-color-on-surface-variant)] mb-4">Select up to 3 students to compare their competencies side-by-side</p>
+                            <div className="flex flex-wrap gap-2 max-h-48 overflow-y-auto">
+                                {data.students.map(student => (
+                                    <button
+                                        key={student.id}
+                                        onClick={() => toggleComparisonStudent(student.id)}
+                                        className={clsx(
+                                            "px-3 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2",
+                                            comparisonStudents.includes(student.id)
+                                                ? "bg-[var(--md-sys-color-primary)] text-white shadow-md"
+                                                : "bg-[var(--md-sys-color-surface-variant)] text-[var(--md-sys-color-on-surface)] hover:bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)]"
+                                        )}
+                                    >
+                                        {student.name}
+                                        {comparisonStudents.includes(student.id) && <X size={14} />}
+                                    </button>
+                                ))}
+                            </div>
+                        </ChartCard>
+
+                        {/* Radar Chart Comparison */}
+                        {comparisonStudents.length >= 2 && (
+                            <ChartCard title="Competency Comparison" icon={<Target size={18} />} delay={0.2}>
+                                <div className="h-80">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <RadarChart data={getComparisonData()}>
+                                            <PolarGrid stroke="var(--md-sys-color-outline)" />
+                                            <PolarAngleAxis
+                                                dataKey="competency"
+                                                tick={{ fill: 'var(--md-sys-color-on-surface)', fontSize: 11 }}
+                                            />
+                                            {comparisonStudents.map((studentId, idx) => {
+                                                const student = data.students.find(s => s.id === studentId);
+                                                if (!student) return null;
+                                                return (
+                                                    <Radar
+                                                        key={studentId}
+                                                        name={student.name}
+                                                        dataKey={student.name}
+                                                        stroke={GOOGLE_COLORS[idx % GOOGLE_COLORS.length]}
+                                                        fill={GOOGLE_COLORS[idx % GOOGLE_COLORS.length]}
+                                                        fillOpacity={0.2}
+                                                        strokeWidth={2}
+                                                    />
+                                                );
+                                            })}
+                                            <Legend />
+                                            <Tooltip
+                                                contentStyle={{
+                                                    background: 'var(--md-sys-color-surface)',
+                                                    border: '1px solid var(--md-sys-color-outline)',
+                                                    borderRadius: '12px',
+                                                    boxShadow: '0 10px 40px rgba(0,0,0,0.15)'
+                                                }}
+                                            />
+                                        </RadarChart>
+                                    </ResponsiveContainer>
+                                </div>
+
+                                {/* Quick Stats Table */}
+                                <div className="mt-6 overflow-x-auto">
+                                    <table className="w-full text-sm">
+                                        <thead>
+                                            <tr className="border-b border-[var(--md-sys-color-outline)]">
+                                                <th className="text-left py-3 px-2 font-bold text-[var(--md-sys-color-on-surface)]">Metric</th>
+                                                {comparisonStudents.map(id => {
+                                                    const s = data.students.find(st => st.id === id);
+                                                    return <th key={id} className="text-center py-3 px-2 font-bold text-[var(--md-sys-color-on-surface)]">{s?.name}</th>;
+                                                })}
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr className="border-b border-[var(--md-sys-color-outline)]">
+                                                <td className="py-3 px-2 text-[var(--md-sys-color-on-surface-variant)]">Avg Score</td>
+                                                {comparisonStudents.map(id => {
+                                                    const s = data.students.find(st => st.id === id);
+                                                    const avg = s ? (Object.values(s.competencies).reduce((a, b) => a + b, 0) / Object.values(s.competencies).length).toFixed(2) : '—';
+                                                    return <td key={id} className="text-center py-3 px-2 font-bold text-[var(--md-sys-color-on-surface)]">{avg}</td>;
+                                                })}
+                                            </tr>
+                                            <tr className="border-b border-[var(--md-sys-color-outline)]">
+                                                <td className="py-3 px-2 text-[var(--md-sys-color-on-surface-variant)]">Attendance</td>
+                                                {comparisonStudents.map(id => {
+                                                    const s = data.students.find(st => st.id === id);
+                                                    return <td key={id} className="text-center py-3 px-2 font-bold text-[var(--md-sys-color-on-surface)]">{s?.attendancePct || 0}%</td>;
+                                                })}
+                                            </tr>
+                                            <tr>
+                                                <td className="py-3 px-2 text-[var(--md-sys-color-on-surface-variant)]">Subject</td>
+                                                {comparisonStudents.map(id => {
+                                                    const s = data.students.find(st => st.id === id);
+                                                    return <td key={id} className="text-center py-3 px-2 text-[var(--md-sys-color-on-surface)]">{s?.subject}</td>;
+                                                })}
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </ChartCard>
+                        )}
+
+                        {comparisonStudents.length < 2 && (
+                            <div className="flex flex-col items-center justify-center py-16 text-[var(--md-sys-color-on-surface-variant)]">
+                                <GitCompare size={48} className="mb-4 opacity-30" />
+                                <p className="font-bold">Select at least 2 students to compare</p>
+                                <p className="text-sm">Click on student names above to add them</p>
+                            </div>
+                        )}
                     </motion.div>
                 )}
             </AnimatePresence>
