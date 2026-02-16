@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Calendar, Users, ClipboardCheck, Settings, BarChart3, UserCheck, LineChart, UserCircle } from 'lucide-react';
+import { LayoutDashboard, Calendar, Users, ClipboardCheck, Settings, BarChart3, UserCheck, LineChart, Box } from 'lucide-react';
 import clsx from 'clsx';
 import { motion } from 'framer-motion';
 
@@ -17,28 +17,30 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate }) => {
     { id: 'student-analytics', label: 'Student Insights', icon: LineChart },
     { id: 'attendance', label: 'Attendance', icon: UserCheck },
     { id: 'assessment', label: 'NITA Assessment', icon: ClipboardCheck },
+    { id: 'resources', label: 'Resources', icon: Box },
     { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
   return (
-    <div className="w-20 lg:w-72 flex flex-col h-full bg-white border-r border-gray-200 z-20">
+    <div className="hidden lg:flex w-72 flex-col h-full border-r border-[var(--md-sys-color-outline)] z-20 safe-area-top" style={{ backgroundColor: 'color-mix(in srgb, var(--md-sys-color-surface) 85%, transparent)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}>
       {/* Logo Header */}
-      <div className="p-4 flex items-center gap-3 border-b border-gray-100">
+      <div className="p-4 flex items-center gap-3 border-b border-[var(--md-sys-color-outline)]">
         <motion.div
-          className="w-10 h-10 flex-shrink-0 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/20"
+          className="w-10 h-10 flex-shrink-0 bg-gradient-to-br from-[var(--accent-primary)] to-indigo-600 rounded-xl flex items-center justify-center shadow-lg"
           whileHover={{ scale: 1.05, rotate: 5 }}
+          whileTap={{ scale: 0.95 }}
           transition={{ type: "spring", stiffness: 400 }}
         >
           <span className="text-white font-black text-lg">P</span>
         </motion.div>
         <div className="hidden lg:block">
-          <h1 className="font-black text-xl text-gray-900 tracking-tight">PRISM</h1>
-          <p className="text-[10px] font-bold tracking-widest text-gray-400 uppercase">Instructor OS</p>
+          <h1 className="font-black text-xl text-[var(--md-sys-color-on-surface)] tracking-tight">PRISM</h1>
+          <p className="text-[10px] font-bold tracking-widest text-[var(--md-sys-color-secondary)] uppercase">Instructor OS</p>
         </div>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 mt-4 px-3 space-y-1 overflow-y-auto custom-scrollbar">
+      <nav className="flex-1 mt-4 px-3 space-y-1.5 overflow-y-auto custom-scrollbar">
         {navItems.map((item, index) => {
           const isActive = currentView === item.id;
           return (
@@ -48,42 +50,41 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate }) => {
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: index * 0.05 }}
-              whileHover={{ x: 4 }}
+              whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               className={clsx(
-                "w-full flex items-center gap-4 px-4 py-3 rounded-xl transition-all duration-200 group font-medium relative overflow-hidden",
+                "w-full flex items-center gap-4 px-4 py-3.5 rounded-full transition-all duration-300 group font-medium relative overflow-hidden tap-target mx-auto",
                 isActive
-                  ? "bg-blue-50 text-blue-700"
-                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                  ? "bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-on-primary-container)] shadow-sm"
+                  : "text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-surface-variant)] hover:text-[var(--md-sys-color-on-surface)]"
               )}
             >
-              {/* Active Indicator */}
-              {isActive && (
-                <motion.div
-                  layoutId="activeIndicator"
-                  className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-blue-600 rounded-r-full"
-                  transition={{ type: "spring", stiffness: 500, damping: 30 }}
-                />
-              )}
-
-              <motion.div
-                whileHover={{ rotate: isActive ? 0 : 10 }}
-                transition={{ type: "spring", stiffness: 400 }}
-              >
+              <div className="relative z-10 flex items-center gap-4 w-full">
+                {/* Active left-edge indicator */}
+                {isActive && (
+                  <motion.div
+                    layoutId="sidebar-indicator"
+                    className="absolute -left-4 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r-full bg-[var(--md-sys-color-primary)]"
+                    transition={{ type: "spring", stiffness: 500, damping: 30 }}
+                  />
+                )}
                 <item.icon
-                  size={20}
+                  size={24}
                   strokeWidth={isActive ? 2.5 : 2}
                   className={clsx(
-                    "transition-colors",
-                    isActive ? "text-blue-600" : "text-gray-500 group-hover:text-gray-700"
+                    "transition-colors duration-300",
+                    isActive ? "text-[var(--md-sys-color-primary)]" : "text-[var(--md-sys-color-secondary)] group-hover:text-[var(--md-sys-color-on-surface)]"
                   )}
                 />
-              </motion.div>
-              <span className="text-sm hidden lg:block tracking-wide">{item.label}</span>
+                <span className={clsx(
+                  "text-sm font-google tracking-wide transition-colors duration-300",
+                  isActive ? "font-bold" : "font-medium"
+                )}>{item.label}</span>
+              </div>
 
               {/* Hover Glow Effect */}
               {!isActive && (
-                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-gray-100/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" />
+                <div className="absolute inset-0 bg-gradient-to-r from-[var(--md-sys-color-surface-variant)]/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
               )}
             </motion.button>
           );
@@ -91,9 +92,9 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate }) => {
       </nav>
 
       {/* Status Footer */}
-      <div className="p-4 mt-auto">
+      <div className="p-4 mt-auto safe-area-bottom">
         <motion.div
-          className="hidden lg:block bg-gradient-to-br from-gray-50 to-white rounded-xl p-4 border border-gray-100 shadow-sm"
+          className="hidden lg:block bg-gradient-to-br from-[var(--md-sys-color-surface-variant)] to-[var(--md-sys-color-surface)] rounded-xl p-4 border border-[var(--md-sys-color-outline)]"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
@@ -104,10 +105,13 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate }) => {
               animate={{ scale: [1, 1.2, 1], opacity: [1, 0.7, 1] }}
               transition={{ repeat: Infinity, duration: 2 }}
             />
-            <p className="text-xs font-bold text-gray-700 uppercase tracking-wider">System Online</p>
+            <p className="text-xs font-bold text-[var(--md-sys-color-on-surface)] uppercase tracking-wider">System Online</p>
           </div>
-          <p className="text-[10px] text-gray-500 leading-relaxed">
+          <p className="text-[10px] text-[var(--md-sys-color-secondary)] leading-relaxed">
             All data is locally synced.
+          </p>
+          <p className="text-[9px] text-[var(--md-sys-color-secondary)] mt-1 opacity-60">
+            PRISM v1.0.0
           </p>
         </motion.div>
         <div className="lg:hidden flex justify-center py-2">
