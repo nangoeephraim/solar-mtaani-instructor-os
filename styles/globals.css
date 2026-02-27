@@ -1,56 +1,72 @@
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&display=swap');
 
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 /* ======================================================
    PRISM Design System — Material Design 3 Tokens
    ====================================================== */
 
 :root {
   /* ── Light Mode Palette ── */
-  --md-sys-color-primary: #0b57d0;
+  --md-sys-color-primary: #1a73e8;
+  /* Google Blue */
   --md-sys-color-on-primary: #ffffff;
-  --md-sys-color-primary-container: #d3e3fd;
-  --md-sys-color-on-primary-container: #041e49;
-  --md-sys-color-secondary: #5e5e5e;
+  --md-sys-color-primary-container: #e8f0fe;
+  --md-sys-color-on-primary-container: #1967d2;
+  --md-sys-color-secondary: #5f6368;
+  /* Google Gray */
   --md-sys-color-surface: #ffffff;
-  --md-sys-color-surface-variant: #f0f4f8;
-  --md-sys-color-on-surface: #1f1f1f;
-  --md-sys-color-on-surface-variant: #444746;
-  --md-sys-color-outline: #e0e3e7;
-  --md-sys-color-outline-variant: #c4c7c5;
-  --md-sys-color-background: #f8fafd;
+  --md-sys-color-surface-variant: #f8f9fa;
+  /* Lighter surface variant */
+  --md-sys-color-on-surface: #202124;
+  /* Google Dark Gray */
+  --md-sys-color-on-surface-variant: #5f6368;
+  --md-sys-color-outline: #dadce0;
+  /* Google Outline */
+  --md-sys-color-outline-variant: #e8eaed;
+  --md-sys-color-background: #ffffff;
+  /* Clean white background */
 
-  --md-sys-color-error: #ba1a1a;
-  --md-sys-color-success: #146c2e;
-  --md-sys-color-warning: #ea8600;
+  --md-sys-color-error: #d93025;
+  /* Google Red */
+  --md-sys-color-success: #1e8e3e;
+  /* Google Green */
+  --md-sys-color-warning: #f29900;
+  /* Google Yellow */
 
   /* Surface Elevation Tones */
-  --md-sys-color-surface-1: #f0f4f8;
-  --md-sys-color-surface-2: #e8f0fe;
-  --md-sys-color-surface-3: #dbe4fb;
-  --md-sys-color-surface-4: #d3e3fd;
-  --md-sys-color-surface-5: #c2d7ff;
+  --md-sys-color-surface-1: #f8f9fa;
+  --md-sys-color-surface-2: #f1f3f4;
+  --md-sys-color-surface-3: #e8eaed;
+  --md-sys-color-surface-4: #dadce0;
+  --md-sys-color-surface-5: #bdc1c6;
 
   /* Google Brand Colors */
-  --google-blue: #4285f4;
+  --google-blue: #1a73e8;
   --google-red: #ea4335;
   --google-yellow: #fbbc04;
   --google-green: #34a853;
 
   /* Accent */
-  --accent-primary: #0b57d0;
+  --accent-primary: #1a73e8;
+  --md-sys-color-primary-rgb: 26, 115, 232;
 
   /* Premium Effects */
-  --glass-blur: 16px;
-  --glass-border: 1px solid rgba(255, 255, 255, 0.4);
-  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-blur: 24px;
+  --glass-border: 1px solid rgba(255, 255, 255, 0.6);
+  --glass-bg: rgba(255, 255, 255, 0.85);
 
-  --shadow-elevation-1: 0 1px 2px rgba(0, 0, 0, 0.08), 0 1px 3px 1px rgba(0, 0, 0, 0.04);
-  --shadow-elevation-2: 0 2px 6px 2px rgba(0, 0, 0, 0.06), 0 1px 2px 0 rgba(0, 0, 0, 0.04);
-  --shadow-elevation-3: 0 4px 8px 3px rgba(0, 0, 0, 0.08), 0 1px 3px 0 rgba(0, 0, 0, 0.06);
+  /* Refined, cleaner shadows */
+  --shadow-elevation-1: 0 1px 2px 0 rgba(60, 64, 67, 0.3), 0 1px 3px 1px rgba(60, 64, 67, 0.15);
+  --shadow-elevation-2: 0 1px 2px 0 rgba(60, 64, 67, 0.3), 0 2px 6px 2px rgba(60, 64, 67, 0.15);
+  --shadow-elevation-3: 0 1px 3px 0 rgba(60, 64, 67, 0.3), 0 4px 8px 3px rgba(60, 64, 67, 0.15);
 
   --radio-pill: 9999px;
-  --radius-card: 20px;
+  --radius-card: 24px;
+  /* Slightly rounder for modern feel */
 
   /* Smooth transition easing */
   --transition-smooth: cubic-bezier(0.4, 0, 0.2, 1);
@@ -70,6 +86,7 @@
   --md-sys-color-outline: #444746;
   --md-sys-color-outline-variant: #444746;
   --md-sys-color-background: #131314;
+  --md-sys-color-primary-rgb: 138, 180, 248;
 
   --md-sys-color-error: #ffb4ab;
   --md-sys-color-success: #6dd58c;
@@ -97,12 +114,22 @@
 html {
   transition: background-color 0.3s var(--transition-smooth),
     color 0.3s var(--transition-smooth);
+  height: 100vh;
+  overflow: hidden;
 }
 
 body {
   font-family: 'Roboto', sans-serif;
   background-color: var(--md-sys-color-background);
   color: var(--md-sys-color-on-surface);
+  height: 100vh;
+  overflow: hidden;
+  margin: 0;
+}
+
+#root {
+  height: 100vh;
+  overflow: hidden;
 }
 
 h1,
@@ -191,8 +218,8 @@ h6,
 }
 
 .btn-primary:hover {
-  background-color: #1765cc;
-  box-shadow: 0 1px 3px 0 rgba(66, 133, 244, 0.4), 0 4px 8px 3px rgba(66, 133, 244, 0.15);
+  background-color: var(--accent-primary-hover, #1765cc);
+  box-shadow: 0 1px 3px 0 rgba(var(--md-sys-color-primary-rgb, 66, 133, 244), 0.4), 0 4px 8px 3px rgba(var(--md-sys-color-primary-rgb, 66, 133, 244), 0.15);
   transform: translateY(-1px);
 }
 
@@ -529,4 +556,96 @@ h6,
     box-shadow: none;
     border: 1px solid #ccc;
   }
+}
+
+/* ======================================================
+   Sidebar Glass Background (#11)
+   ====================================================== */
+
+.sidebar-glass {
+  background-color: color-mix(in srgb, var(--md-sys-color-surface) 85%, transparent);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
+}
+
+/* ======================================================
+   Toggle Switch (#12)
+   ====================================================== */
+
+.toggle-switch-on {
+  background-color: var(--accent-primary);
+}
+
+.toggle-switch-off {
+  background-color: var(--md-sys-color-outline);
+}
+
+/* ======================================================
+   Dark-mode-safe Schedule Slot Colors (#15)
+   ====================================================== */
+
+.slot-coral {
+  background-color: rgba(239, 68, 68, 0.1);
+  border-left-color: #ef4444;
+  color: #dc2626;
+}
+
+[data-theme="dark"] .slot-coral {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #fca5a5;
+}
+
+.slot-mint {
+  background-color: rgba(16, 185, 129, 0.1);
+  border-left-color: #10b981;
+  color: #059669;
+}
+
+[data-theme="dark"] .slot-mint {
+  background-color: rgba(16, 185, 129, 0.15);
+  color: #6ee7b7;
+}
+
+.slot-lavender {
+  background-color: rgba(139, 92, 246, 0.1);
+  border-left-color: #8b5cf6;
+  color: #7c3aed;
+}
+
+[data-theme="dark"] .slot-lavender {
+  background-color: rgba(139, 92, 246, 0.15);
+  color: #c4b5fd;
+}
+
+.slot-sky {
+  background-color: rgba(59, 130, 246, 0.1);
+  border-left-color: #3b82f6;
+  color: #2563eb;
+}
+
+[data-theme="dark"] .slot-sky {
+  background-color: rgba(59, 130, 246, 0.15);
+  color: #93c5fd;
+}
+
+.slot-amber {
+  background-color: rgba(249, 115, 22, 0.1);
+  border-left-color: #f97316;
+  color: #ea580c;
+}
+
+[data-theme="dark"] .slot-amber {
+  background-color: rgba(249, 115, 22, 0.15);
+  color: #fdba74;
+}
+
+.slot-rose {
+  background-color: rgba(236, 72, 153, 0.1);
+  border-left-color: #ec4899;
+  color: #db2777;
+}
+
+[data-theme="dark"] .slot-rose {
+  background-color: rgba(236, 72, 153, 0.15);
+  color: #f9a8d4;
 }
