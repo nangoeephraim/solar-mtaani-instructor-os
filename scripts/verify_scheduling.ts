@@ -9,7 +9,7 @@ const mockSlots: ScheduleSlot[] = [
         startTime: '09:00',
         durationMinutes: 60,
         subject: 'Solar',
-        grade: 5,
+        grade: 'L3',
         status: 'Pending',
         resourceIds: ['room-101']
     },
@@ -19,7 +19,7 @@ const mockSlots: ScheduleSlot[] = [
         startTime: '11:00',
         durationMinutes: 60,
         subject: 'ICT',
-        grade: 5,
+        grade: 'L3',
         status: 'Pending',
         resourceIds: ['lab-1']
     }

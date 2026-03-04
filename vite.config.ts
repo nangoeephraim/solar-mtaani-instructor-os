@@ -9,37 +9,7 @@ export default defineConfig({
     host: '0.0.0.0',
   },
   plugins: [
-    react(),
-    VitePWA({
-      registerType: 'autoUpdate',
-      includeAssets: ['logo.png'],
-      manifest: {
-        name: "PRISM Instructor OS",
-        short_name: "PRISM",
-        description: "PRISM - A premium competency-based training management system",
-        theme_color: "#1a73e8",
-        background_color: "#f8f9fa",
-        display: "standalone",
-        orientation: "any",
-        icons: [
-          {
-            src: "/logo.png",
-            sizes: "192x192",
-            type: "image/png",
-            purpose: "any"
-          },
-          {
-            src: "/logo.png",
-            sizes: "512x512",
-            type: "image/png",
-            purpose: "maskable"
-          }
-        ]
-      },
-      workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}']
-      }
-    })
+    react()
   ],
   resolve: {
     alias: {
@@ -48,14 +18,13 @@ export default defineConfig({
   },
   // Esbuild minification options (for production builds)
   esbuild: {
-    drop: ['console', 'debugger']
+    drop: ['debugger']
   },
   build: {
     minify: 'esbuild',
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ['react', 'react-dom'],
           charts: ['recharts'],
           animation: ['framer-motion'],
           icons: ['lucide-react'],

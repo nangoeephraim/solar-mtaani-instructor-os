@@ -58,9 +58,10 @@ export const INITIAL_DATA: AppData = {
     {
       id: 1,
       name: "Brian Omondi",
-      grade: 5,
+      grade: 'L3',
       lot: "2025",
       subject: "Solar",
+      studentGroup: "Academy",
       competencies: { safety: 3, tools: 2, principles: 1, installation: 1, maintenance: 2 },
       attendancePct: 95,
       attendanceHistory: [],
@@ -70,9 +71,10 @@ export const INITIAL_DATA: AppData = {
     {
       id: 2,
       name: "Sarah Wanjiku",
-      grade: 5,
+      grade: 'L3',
       lot: "2025",
       subject: "Solar",
+      studentGroup: "Academy",
       competencies: { safety: 4, tools: 4, principles: 3, installation: 2, maintenance: 3 },
       attendancePct: 98,
       attendanceHistory: [],
@@ -82,9 +84,10 @@ export const INITIAL_DATA: AppData = {
     {
       id: 3,
       name: "Kevin Kamau",
-      grade: 6,
+      grade: 'Y2',
       lot: "2024",
       subject: "Solar",
+      studentGroup: "Campus",
       competencies: { safety: 2, tools: 2, principles: 1, installation: 1, maintenance: 1 },
       attendancePct: 65, // At risk attendance
       attendanceHistory: [],
@@ -94,9 +97,10 @@ export const INITIAL_DATA: AppData = {
     {
       id: 4,
       name: "Jane Doe",
-      grade: 5,
+      grade: 'G5',
       lot: "2025",
       subject: "ICT",
+      studentGroup: "CBC",
       competencies: { hardware: 3, software: 4, typing: 2, formatting: 3, data: 2 },
       attendancePct: 92,
       attendanceHistory: [],
@@ -110,21 +114,28 @@ export const INITIAL_DATA: AppData = {
     { id: 'r1', name: 'Classroom A', type: 'room', capacity: 30, status: 'available' },
     { id: 'r2', name: 'Solar Lab', type: 'room', capacity: 15, status: 'available' },
     { id: 'r3', name: 'Projector 1', type: 'equipment', status: 'available' }
-  ]
+  ],
+  library: [],
+  communications: {
+    channels: [],
+    messages: {}
+  },
+  payments: [],
+  feeStructures: []
 };
 
 // Default Schedule Template (Recurring)
 export const DEFAULT_SCHEDULE_TEMPLATE: ScheduleSlot[] = [
   // Monday
-  { id: 'mon-0900', dayOfWeek: 1, startTime: "09:00", durationMinutes: 60, grade: 5, subject: "Solar", status: 'Pending' },
-  { id: 'mon-1100', dayOfWeek: 1, startTime: "11:00", durationMinutes: 60, grade: 6, subject: "ICT", status: 'Pending' },
+  { id: 'mon-0900', dayOfWeek: 1, startTime: "09:00", durationMinutes: 60, grade: 'L3', subject: "Solar", status: 'Pending' },
+  { id: 'mon-1100', dayOfWeek: 1, startTime: "11:00", durationMinutes: 60, grade: 'L4', subject: "ICT", status: 'Pending' },
   // Tuesday
-  { id: 'tue-0900', dayOfWeek: 2, startTime: "09:00", durationMinutes: 60, grade: 5, subject: "ICT", status: 'Pending' },
-  { id: 'tue-1400', dayOfWeek: 2, startTime: "14:00", durationMinutes: 90, grade: 7, subject: "Solar", status: 'Pending' },
+  { id: 'tue-0900', dayOfWeek: 2, startTime: "09:00", durationMinutes: 60, grade: 'L3', subject: "ICT", status: 'Pending' },
+  { id: 'tue-1400', dayOfWeek: 2, startTime: "14:00", durationMinutes: 90, grade: 'L5', subject: "Solar", status: 'Pending' },
   // Wednesday
-  { id: 'wed-1000', dayOfWeek: 3, startTime: "10:00", durationMinutes: 60, grade: 5, subject: "Solar", status: 'Pending' },
+  { id: 'wed-1000', dayOfWeek: 3, startTime: "10:00", durationMinutes: 60, grade: 'L3', subject: "Solar", status: 'Pending' },
   // Thursday
-  { id: 'thu-0900', dayOfWeek: 4, startTime: "09:00", durationMinutes: 60, grade: 8, subject: "Solar", status: 'Pending' },
+  { id: 'thu-0900', dayOfWeek: 4, startTime: "09:00", durationMinutes: 60, grade: 'L6', subject: "Solar", status: 'Pending' },
   // Friday
-  { id: 'fri-0900', dayOfWeek: 5, startTime: "09:00", durationMinutes: 120, grade: 9, subject: "Solar", status: 'Pending' },
+  { id: 'fri-0900', dayOfWeek: 5, startTime: "09:00", durationMinutes: 120, grade: 'L4', subject: "Solar", status: 'Pending' },
 ];

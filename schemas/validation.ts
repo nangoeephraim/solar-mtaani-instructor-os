@@ -14,10 +14,9 @@ export const studentSchema = z.object({
         .max(100, 'Name is too long')
         .regex(/^[a-zA-Z\s'-]+$/, 'Name can only contain letters, spaces, hyphens, and apostrophes'),
 
-    grade: z.number()
-        .int('Grade must be a whole number')
-        .min(1, 'Grade must be at least 1')
-        .max(12, 'Grade cannot exceed 12'),
+    grade: z.string()
+        .min(1, 'Education level is required')
+        .max(10, 'Invalid education level'),
 
     lot: z.string()
         .regex(/^\d{4}$/, 'Lot must be a 4-digit year (e.g., 2025)'),
@@ -83,10 +82,9 @@ export const scheduleSlotSchema = z.object({
         .min(15, 'Duration must be at least 15 minutes')
         .max(240, 'Duration cannot exceed 4 hours'),
 
-    grade: z.number()
-        .int()
-        .min(1)
-        .max(12),
+    grade: z.string()
+        .min(1, 'Education level is required')
+        .max(10),
 
     subject: z.enum(['Solar', 'ICT']),
 

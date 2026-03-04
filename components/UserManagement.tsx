@@ -1,26 +1,110 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Users, UserPlus, Trash2, Key, Shield, Clock, Plus, Copy, Check, X, ShieldCheck, User } from 'lucide-react';
+import { supabase } from '../services/supabase';
+import { Users, Shield, ShieldCheck, ShieldOff, User, X, Activity, ArrowUpCircle, ArrowDownCircle, Ban, CheckCircle, Loader2, RefreshCw, Search } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
 import { useToast } from './Toast';
 
+interface UserProfile {
+    id: string;
+    email: string;
+    name: string;
+    role: string;
+    is_active: boolean;
+    last_login_at: string | null;
+    created_at: string;
+}
+
 export default function UserManagement({ onClose }: { onClose: () => void }) {
-    const { users, user: currentUser, generateInvite, deleteUser, inviteCodes, revokeInvite, securityLogs } = useAuth();
-    const [view, setView] = useState<'users' | 'invites' | 'logs'>('users');
-    const [generatedCode, setGeneratedCode] = useState<string | null>(null);
+    const { user: currentUser } = useAuth();
+    const [view, setView] = useState<'users' | 'logs'>('users');
     const { showToast } = useToast();
+    const [users, setUsers] = useState<UserProfile[]>([]);
+    const [isLoadingUsers, setIsLoadingUsers] = useState(true);
+    const [actionLoading, setActionLoading] = useState<string | null>(null); // userId being acted on
+    const [searchQuery, setSearchQuery] = useState('');
 
     if (currentUser?.role !== 'admin') return null;
 
-    const handleGenerateInvite = (role: 'admin' | 'instructor' | 'viewer') => {
-        const code = generateInvite(role);
-        setGeneratedCode(code);
+    // Fetch all users via RPC
+    const fetchUsers = useCallback(async () => {
+        setIsLoadingUsers(true);
+        try {
+            const { data, error } = await supabase.rpc('get_all_users');
+            if (error) {
+                console.error('[UserMgmt] Failed to fetch users:', error);
+                showToast('Failed to load users', 'error');
+            } else {
+                setUsers(data || []);
+            }
+        } catch (err) {
+            console.error('[UserMgmt] Unexpected error:', err);
+        } finally {
+            setIsLoadingUsers(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchUsers();
+    }, [fetchUsers]);
+
+    // Change user role
+    const handleChangeRole = async (userId: string, newRole: string) => {
+        setActionLoading(userId);
+        try {
+            const { error } = await supabase.rpc('admin_update_user_role', {
+                target_user_id: userId,
+                new_role: newRole,
+            });
+            if (error) {
+                showToast(`Failed: ${error.message}`, 'error');
+            } else {
+                showToast(`Role updated to ${newRole}`, 'success');
+                await fetchUsers();
+            }
+        } catch (err: any) {
+            showToast(`Error: ${err.message}`, 'error');
+        } finally {
+            setActionLoading(null);
+        }
     };
 
-    const copyToClipboard = (text: string) => {
-        navigator.clipboard.writeText(text);
-        showToast('Code copied to clipboard', 'success');
+    // Block / Unblock user
+    const handleToggleActive = async (userId: string, active: boolean) => {
+        setActionLoading(userId);
+        try {
+            const { error } = await supabase.rpc('admin_set_user_active', {
+                target_user_id: userId,
+                active: active,
+            });
+            if (error) {
+                showToast(`Failed: ${error.message}`, 'error');
+            } else {
+                showToast(active ? 'User unblocked' : 'User blocked', 'success');
+                await fetchUsers();
+            }
+        } catch (err: any) {
+            showToast(`Error: ${err.message}`, 'error');
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const filteredUsers = users.filter(u =>
+        u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        u.email.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+
+    const getRoleBadge = (role: string) => {
+        switch (role) {
+            case 'admin':
+                return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300">🛡️ Admin</span>;
+            case 'instructor':
+                return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">📘 Instructor</span>;
+            default:
+                return <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400">👁️ Viewer</span>;
+        }
     };
 
     return (
@@ -29,7 +113,7 @@ export default function UserManagement({ onClose }: { onClose: () => void }) {
                 initial={{ scale: 0.95, opacity: 0 }}
                 animate={{ scale: 1, opacity: 1 }}
                 exit={{ scale: 0.95, opacity: 0 }}
-                className="bg-[var(--md-sys-color-surface)] w-full max-w-2xl rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[80vh]"
+                className="bg-[var(--md-sys-color-surface)] w-full max-w-3xl rounded-2xl shadow-xl overflow-hidden flex flex-col max-h-[85vh]"
             >
                 {/* Header */}
                 <div className="p-6 border-b border-[var(--md-sys-color-outline)] flex justify-between items-center bg-[var(--md-sys-color-surface-variant)]">
@@ -39,12 +123,14 @@ export default function UserManagement({ onClose }: { onClose: () => void }) {
                         </div>
                         <div>
                             <h2 className="text-xl font-bold text-[var(--md-sys-color-on-surface)]">Security & Users</h2>
-                            <p className="text-sm text-[var(--md-sys-color-secondary)]">Manage access to PRISM</p>
+                            <p className="text-sm text-[var(--md-sys-color-secondary)]">
+                                Manage access, roles, and permissions
+                            </p>
                         </div>
                     </div>
                     <button
                         onClick={onClose}
-                        className="p-2 hover:bg-black/5 rounded-full"
+                        className="p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-full transition-colors tap-target"
                         aria-label="Close"
                     >
                         <X size={20} />
@@ -60,18 +146,8 @@ export default function UserManagement({ onClose }: { onClose: () => void }) {
                             view === 'users' ? "text-violet-600" : "text-[var(--md-sys-color-secondary)] hover:text-[var(--md-sys-color-on-surface)]"
                         )}
                     >
-                        <Users size={16} /> Active Users
+                        <Users size={16} /> Active Users ({users.length})
                         {view === 'users' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-violet-600" />}
-                    </button>
-                    <button
-                        onClick={() => setView('invites')}
-                        className={clsx(
-                            "flex-1 py-3 text-sm font-medium flex items-center justify-center gap-2 transition-colors relative",
-                            view === 'invites' ? "text-violet-600" : "text-[var(--md-sys-color-secondary)] hover:text-[var(--md-sys-color-on-surface)]"
-                        )}
-                    >
-                        <UserPlus size={16} /> Generate Invites
-                        {view === 'invites' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-violet-600" />}
                     </button>
                     <button
                         onClick={() => setView('logs')}
@@ -80,7 +156,7 @@ export default function UserManagement({ onClose }: { onClose: () => void }) {
                             view === 'logs' ? "text-violet-600" : "text-[var(--md-sys-color-secondary)] hover:text-[var(--md-sys-color-on-surface)]"
                         )}
                     >
-                        <Shield size={16} /> Audit Logs
+                        <Activity size={16} /> Audit Logs
                         {view === 'logs' && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-violet-600" />}
                     </button>
                 </div>
@@ -88,179 +164,153 @@ export default function UserManagement({ onClose }: { onClose: () => void }) {
                 {/* Content */}
                 <div className="flex-1 overflow-auto p-6 bg-[var(--md-sys-color-background)]">
                     {view === 'users' && (
-                        <div className="space-y-4">
-                            {users.map(u => (
-                                <div key={u.id} className="flex items-center justify-between p-4 bg-[var(--md-sys-color-surface)] rounded-xl border border-[var(--md-sys-color-outline)]">
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center text-white font-bold text-lg">
-                                            {u.name.charAt(0)}
-                                        </div>
-                                        <div>
-                                            <h3 className="font-bold text-[var(--md-sys-color-on-surface)] flex items-center gap-2">
-                                                {u.name}
-                                                {u.id === currentUser.id && <span className="text-xs bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full">You</span>}
-                                            </h3>
-                                            <div className="flex items-center gap-4 text-xs text-[var(--md-sys-color-secondary)]">
-                                                <span className="capitalize flex items-center gap-1">
-                                                    <Shield size={10} /> {u.role}
-                                                </span>
-                                                <span className="flex items-center gap-1">
-                                                    <Clock size={10} /> Last active: {new Date(u.lastLogin).toLocaleDateString()}
-                                                </span>
-                                                {u.salt && (
-                                                    <span className="flex items-center gap-1 text-green-600 font-medium" title="Secured with SHA-256">
-                                                        <ShieldCheck size={10} /> Secure
-                                                    </span>
-                                                )}
-                                                {!u.salt && (
-                                                    <span className="flex items-center gap-1 text-amber-600 font-medium" title="Legacy Security - Will upgrade on next login">
-                                                        <Shield size={10} /> Legacy
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {u.id !== currentUser.id && (
-                                        <button
-                                            onClick={() => {
-                                                if (confirm('Revoke access for this user?')) deleteUser(u.id);
-                                            }}
-                                            className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                                            title="Revoke Access"
-                                        >
-                                            <Trash2 size={18} />
-                                        </button>
-                                    )}
+                        <div className="space-y-3">
+                            {/* Search + Refresh bar */}
+                            <div className="flex items-center gap-2 mb-4">
+                                <div className="relative flex-1">
+                                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--md-sys-color-secondary)]" />
+                                    <input
+                                        type="text"
+                                        value={searchQuery}
+                                        onChange={e => setSearchQuery(e.target.value)}
+                                        placeholder="Search users..."
+                                        className="w-full pl-9 pr-4 py-2.5 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-xl text-sm text-[var(--md-sys-color-on-surface)] placeholder-[var(--md-sys-color-secondary)] focus:outline-none focus:border-violet-500 transition-colors"
+                                    />
                                 </div>
-                            ))}
-                        </div>
-                    )}
+                                <button
+                                    onClick={fetchUsers}
+                                    disabled={isLoadingUsers}
+                                    className="p-2.5 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-xl hover:bg-[var(--md-sys-color-surface-variant)] transition-colors disabled:opacity-50"
+                                    title="Refresh"
+                                >
+                                    <RefreshCw size={16} className={clsx(isLoadingUsers && "animate-spin")} />
+                                </button>
+                            </div>
 
-                    {view === 'invites' && (
-                        <div className="space-y-6">
-                            {!generatedCode ? (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <button
-                                        onClick={() => handleGenerateInvite('admin')}
-                                        className="p-6 bg-[var(--md-sys-color-surface)] border-2 border-transparent hover:border-violet-500 rounded-xl text-left shadow-sm transition-all group"
-                                    >
-                                        <div className="p-3 bg-violet-100 w-fit rounded-lg text-violet-600 mb-4 group-hover:scale-110 transition-transform">
-                                            <Shield size={24} />
-                                        </div>
-                                        <h3 className="font-bold text-lg mb-1">Invite Administrator</h3>
-                                        <p className="text-sm text-[var(--md-sys-color-secondary)]">Full access to all settings and user management.</p>
-                                    </button>
-
-                                    <button
-                                        onClick={() => handleGenerateInvite('instructor')}
-                                        className="p-6 bg-[var(--md-sys-color-surface)] border-2 border-transparent hover:border-blue-500 rounded-xl text-left shadow-sm transition-all group"
-                                    >
-                                        <div className="p-3 bg-blue-100 w-fit rounded-lg text-blue-600 mb-4 group-hover:scale-110 transition-transform">
-                                            <Users size={24} />
-                                        </div>
-                                        <h3 className="font-bold text-lg mb-1">Invite Instructor</h3>
-                                        <p className="text-sm text-[var(--md-sys-color-secondary)]">Can manage students and schedules, but cannot delete data.</p>
-                                    </button>
+                            {isLoadingUsers ? (
+                                <div className="text-center py-12">
+                                    <Loader2 size={32} className="animate-spin mx-auto text-violet-500 mb-3" />
+                                    <p className="text-sm text-[var(--md-sys-color-secondary)]">Loading users...</p>
+                                </div>
+                            ) : filteredUsers.length === 0 ? (
+                                <div className="text-center py-12 text-[var(--md-sys-color-secondary)]">
+                                    <Users size={48} className="mx-auto mb-4 opacity-20" />
+                                    <p>{searchQuery ? 'No users match your search.' : 'No users found.'}</p>
                                 </div>
                             ) : (
-                                <div className="text-center py-8">
-                                    <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
-                                        <Key size={32} />
-                                    </div>
-                                    <h3 className="text-xl font-bold mb-2">Invite Code Generated</h3>
-                                    <p className="text-[var(--md-sys-color-secondary)] mb-6">Share this code with the new user. It expires in 24 hours.</p>
+                                <AnimatePresence mode="popLayout">
+                                    {filteredUsers.map((u) => {
+                                        const isCurrentUser = u.id === currentUser?.id;
+                                        const isBlocked = !u.is_active;
+                                        const isActing = actionLoading === u.id;
 
-                                    <div className="flex items-center justify-center gap-4 mb-8">
-                                        <code className="text-3xl font-mono font-bold bg-[var(--md-sys-color-surface)] px-6 py-3 rounded-xl border border-[var(--md-sys-color-outline)] tracking-widest select-all">
-                                            {generatedCode}
-                                        </code>
-                                        <button
-                                            onClick={() => copyToClipboard(generatedCode)}
-                                            className="p-3 bg-violet-600 text-white rounded-xl hover:bg-violet-700 transition-colors shadow-lg shadow-violet-500/30"
-                                            aria-label="Copy to clipboard"
-                                            title="Copy to clipboard"
-                                        >
-                                            <Copy size={24} />
-                                        </button>
-                                    </div>
-
-                                    <button
-                                        onClick={() => setGeneratedCode(null)}
-                                        className="text-sm text-[var(--md-sys-color-secondary)] hover:text-violet-600 underline"
-                                    >
-                                        Generate another code
-                                    </button>
-                                </div>
-                            )}
-
-                            <div className="mt-8 pt-6 border-t border-[var(--md-sys-color-outline)]">
-                                <h3 className="font-bold text-[var(--md-sys-color-on-surface)] mb-4">Active Invites</h3>
-                                <div className="space-y-2">
-                                    {inviteCodes.filter(i => i.status === 'active' && new Date(i.expiresAt) > new Date()).length === 0 ? (
-                                        <p className="text-sm text-[var(--md-sys-color-secondary)] italic">No active invites</p>
-                                    ) : (
-                                        inviteCodes.filter(i => i.status === 'active' && new Date(i.expiresAt) > new Date()).map(invite => (
-                                            <div key={invite.code} className="flex items-center justify-between p-3 bg-[var(--md-sys-color-surface)] rounded-xl border border-[var(--md-sys-color-outline)]">
-                                                <div>
-                                                    <div className="font-mono font-bold text-sm tracking-widest bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300 px-2 py-0.5 rounded-md w-fit mb-1">
-                                                        {invite.code}
+                                        return (
+                                            <motion.div
+                                                key={u.id}
+                                                layout
+                                                initial={{ opacity: 0, y: 10 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                exit={{ opacity: 0, scale: 0.95 }}
+                                                className={clsx(
+                                                    "flex items-center justify-between p-4 rounded-xl border transition-all",
+                                                    isBlocked
+                                                        ? "bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800/30"
+                                                        : "bg-[var(--md-sys-color-surface)] border-[var(--md-sys-color-outline)]"
+                                                )}
+                                            >
+                                                <div className="flex items-center gap-4 min-w-0 flex-1">
+                                                    {/* Avatar */}
+                                                    <div className={clsx(
+                                                        "w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg flex-shrink-0",
+                                                        isBlocked ? "bg-red-400" :
+                                                            u.role === 'admin' ? "bg-gradient-to-br from-violet-500 to-fuchsia-500" :
+                                                                u.role === 'instructor' ? "bg-gradient-to-br from-blue-500 to-cyan-500" :
+                                                                    "bg-gradient-to-br from-slate-400 to-slate-500"
+                                                    )}>
+                                                        {u.name.charAt(0).toUpperCase()}
                                                     </div>
-                                                    <p className="text-xs text-[var(--md-sys-color-secondary)]">
-                                                        Role: <span className="capitalize font-medium">{invite.role}</span> • Expires: {new Date(invite.expiresAt).toLocaleTimeString()}
-                                                    </p>
+
+                                                    {/* Info */}
+                                                    <div className="min-w-0">
+                                                        <h3 className="font-bold text-[var(--md-sys-color-on-surface)] flex items-center gap-2 text-sm">
+                                                            <span className="truncate">{u.name}</span>
+                                                            {isCurrentUser && (
+                                                                <span className="text-[9px] bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 px-1.5 py-0.5 rounded-full flex-shrink-0">You</span>
+                                                            )}
+                                                            {isBlocked && (
+                                                                <span className="text-[9px] bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 px-1.5 py-0.5 rounded-full flex-shrink-0">Blocked</span>
+                                                            )}
+                                                        </h3>
+                                                        <p className="text-xs text-[var(--md-sys-color-secondary)] truncate">{u.email}</p>
+                                                        <div className="flex items-center gap-2 mt-1">
+                                                            {getRoleBadge(u.role)}
+                                                            <span className="text-[9px] text-[var(--md-sys-color-secondary)]">
+                                                                Joined {new Date(u.created_at).toLocaleDateString()}
+                                                            </span>
+                                                        </div>
+                                                    </div>
                                                 </div>
-                                                <button
-                                                    onClick={() => revokeInvite(invite.code)}
-                                                    className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors text-xs font-bold"
-                                                >
-                                                    Revoke
-                                                </button>
-                                            </div>
-                                        ))
-                                    )}
-                                </div>
-                            </div>
+
+                                                {/* Actions (not for current admin user) */}
+                                                {!isCurrentUser && (
+                                                    <div className="flex items-center gap-1.5 ml-3 flex-shrink-0">
+                                                        {isActing ? (
+                                                            <Loader2 size={18} className="animate-spin text-violet-500" />
+                                                        ) : (
+                                                            <>
+                                                                {/* Promote / Demote */}
+                                                                {u.role === 'viewer' && (
+                                                                    <button
+                                                                        onClick={() => handleChangeRole(u.id, 'instructor')}
+                                                                        className="p-2.5 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/30 text-blue-600 rounded-lg transition-colors tap-target"
+                                                                        title="Promote to Instructor"
+                                                                    >
+                                                                        <ArrowUpCircle size={16} />
+                                                                    </button>
+                                                                )}
+                                                                {u.role === 'instructor' && (
+                                                                    <button
+                                                                        onClick={() => handleChangeRole(u.id, 'viewer')}
+                                                                        className="p-2.5 bg-amber-50 hover:bg-amber-100 dark:bg-amber-900/20 dark:hover:bg-amber-900/30 text-amber-600 rounded-lg transition-colors tap-target"
+                                                                        title="Demote to Viewer"
+                                                                    >
+                                                                        <ArrowDownCircle size={16} />
+                                                                    </button>
+                                                                )}
+
+                                                                {/* Block / Unblock */}
+                                                                {u.role !== 'admin' && (
+                                                                    <button
+                                                                        onClick={() => handleToggleActive(u.id, !u.is_active)}
+                                                                        className={clsx(
+                                                                            "p-2.5 rounded-lg transition-colors tap-target",
+                                                                            isBlocked
+                                                                                ? "bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-900/20 dark:hover:bg-emerald-900/30 text-emerald-600"
+                                                                                : "bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/30 text-red-600"
+                                                                        )}
+                                                                        title={isBlocked ? "Unblock User" : "Block User"}
+                                                                    >
+                                                                        {isBlocked ? <CheckCircle size={16} /> : <Ban size={16} />}
+                                                                    </button>
+                                                                )}
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </motion.div>
+                                        );
+                                    })}
+                                </AnimatePresence>
+                            )}
                         </div>
                     )}
 
                     {view === 'logs' && (
                         <div className="space-y-4">
-                            {securityLogs.length === 0 ? (
-                                <div className="text-center py-12 text-[var(--md-sys-color-secondary)]">
-                                    <Shield size={48} className="mx-auto mb-4 opacity-20" />
-                                    <p>No audit logs available yet.</p>
-                                </div>
-                            ) : (
-                                securityLogs.map(log => (
-                                    <div key={log.id} className="p-3 bg-[var(--md-sys-color-surface)] rounded-xl border border-[var(--md-sys-color-outline)] flex items-start gap-3">
-                                        <div className={clsx(
-                                            "mt-1 w-2 h-2 rounded-full flex-shrink-0",
-                                            log.severity === 'info' && "bg-blue-500",
-                                            log.severity === 'warning' && "bg-amber-500",
-                                            log.severity === 'danger' && "bg-red-500"
-                                        )} />
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex justify-between items-start">
-                                                <p className="font-bold text-sm text-[var(--md-sys-color-on-surface)]">
-                                                    {log.event.replace('_', ' ')}
-                                                </p>
-                                                <span className="text-xs text-[var(--md-sys-color-secondary)] whitespace-nowrap">
-                                                    {new Date(log.timestamp).toLocaleString()}
-                                                </span>
-                                            </div>
-                                            <p className="text-sm text-[var(--md-sys-color-secondary)] truncate">
-                                                {log.details}
-                                            </p>
-                                            {log.userName && (
-                                                <p className="text-xs text-[var(--md-sys-color-secondary)] mt-1 flex items-center gap-1">
-                                                    <User size={10} /> {log.userName}
-                                                </p>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))
-                            )}
+                            <div className="text-center py-12 text-[var(--md-sys-color-secondary)]">
+                                <Shield size={48} className="mx-auto mb-4 opacity-20" />
+                                <p>Detailed Audit logs are being migrated to Supabase.</p>
+                            </div>
                         </div>
                     )}
                 </div>

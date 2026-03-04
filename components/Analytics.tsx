@@ -1,13 +1,18 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+﻿import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { AppData, Student, InstructorSettings, DEFAULT_SETTINGS } from '../types';
+import { getLevelShortLabel } from '../constants/educationLevels';
 import { getSettings } from '../services/storageService';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, Legend, RadarChart, PolarGrid, PolarAngleAxis, Radar } from 'recharts';
 import { TrendingUp, TrendingDown, Users, Award, AlertTriangle, ChevronRight, BarChart3, PieChart as PieChartIcon, Activity, Zap, Monitor, Star, Target, Clock, ArrowUpRight, Sparkles, Download, Lightbulb, Calendar, RefreshCw, FileText, ChevronDown, PartyPopper, Brain, Printer, GitCompare, X } from 'lucide-react';
 import clsx from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { analyzeData } from '../services/intelligenceService';
+import { fetchAnalyticsSummary } from '../services/storageService';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { ClassAveragesResult, SubjectComparisonResult, AtRiskStudentResult, GradeDistributionResult } from '../types';
+import { supabase } from '../services/supabase';
+import { useToast } from './Toast';
 
 interface AnalyticsProps {
     data: AppData;
@@ -219,11 +224,60 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
     const [comparisonStudents, setComparisonStudents] = useState<number[]>([]);
     const [showComparisonPicker, setShowComparisonPicker] = useState(false);
     const analyticsRef = useRef<HTMLDivElement>(null);
+    const [settings, setSettings] = useState<InstructorSettings>(DEFAULT_SETTINGS);
 
-    // Calculate subject averages
-    const solarStudents = data.students.filter(s => s.subject === 'Solar');
-    const ictStudents = data.students.filter(s => s.subject === 'ICT');
+    // --- Server-Side Analytics State ---
+    const [classAvg, setClassAvg] = useState<ClassAveragesResult>({ overall_avg_score: 0, overall_avg_attendance: 0, total_students: 0 });
+    const [subjectComp, setSubjectComp] = useState<SubjectComparisonResult[]>([]);
+    const [atRiskList, setAtRiskList] = useState<AtRiskStudentResult[]>([]);
+    const [gradeDist, setGradeDist] = useState<GradeDistributionResult[]>([]);
+    const [isLoadingStats, setIsLoadingStats] = useState(true);
+    const [isGeneratingCloud, setIsGeneratingCloud] = useState(false);
+    const { showToast } = useToast();
 
+    useEffect(() => {
+        const loadStats = async () => {
+            setIsLoadingStats(true);
+            const stats = await fetchAnalyticsSummary();
+            setClassAvg(stats.classAverages);
+            setSubjectComp(stats.subjectComparison);
+            setAtRiskList(stats.atRiskStudents);
+            setGradeDist(stats.gradeDistribution);
+            setIsLoadingStats(false);
+        };
+        loadStats();
+    }, []);
+
+    useEffect(() => {
+        const loaded = getSettings();
+        if (!loaded.preferences) {
+            setSettings({ ...loaded, preferences: DEFAULT_SETTINGS.preferences });
+        } else {
+            setSettings(loaded);
+        }
+    }, []);
+
+    // Grade distribution mapping for Recharts
+    const gradeData = gradeDist.map(g => ({
+        grade: `${g.grade}`,
+        shortGrade: `${g.grade}`,
+        students: g.student_count,
+        avgScore: g.avg_score,
+        attendance: g.avg_attendance
+    }));
+
+    // Subject data mapping for Recharts
+    const subjectData = subjectComp.map(s => ({
+        name: s.subject,
+        score: s.avg_score,
+        students: s.student_count,
+        color: s.subject === 'Solar' ? '#f97316' : '#3b82f6',
+        icon: s.subject === 'Solar' ? 'âš¡' : 'ðŸ’»'
+    }));
+
+    // Attendance trend
+
+    // Competency helper (must be before first usage)
     const getAvgCompetency = (students: Student[]) => {
         if (students.length === 0) return 0;
         const total = students.reduce((acc, s) => {
@@ -233,36 +287,21 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
         return parseFloat((total / students.length).toFixed(2));
     };
 
-    const subjectData = [
-        { name: 'Solar PV', score: getAvgCompetency(solarStudents), students: solarStudents.length, color: '#f97316', icon: '⚡' },
-        { name: 'Computer Studies', score: getAvgCompetency(ictStudents), students: ictStudents.length, color: '#3b82f6', icon: '💻' }
-    ];
-
-    // Grade distribution
-    const gradeData = [5, 6, 7, 8, 9].map(grade => ({
-        grade: `Grade ${grade}`,
-        shortGrade: `G${grade}`,
-        students: data.students.filter(s => s.grade === grade).length,
-        avgScore: getAvgCompetency(data.students.filter(s => s.grade === grade)),
-        attendance: Math.round(data.students.filter(s => s.grade === grade).reduce((acc, s) => acc + s.attendancePct, 0) / Math.max(1, data.students.filter(s => s.grade === grade).length))
-    }));
-
-    // Attendance trend
     const attendanceTrend = [
         { week: 'W1', fullWeek: 'Week 1', rate: 92, target: 90 },
         { week: 'W2', fullWeek: 'Week 2', rate: 88, target: 90 },
         { week: 'W3', fullWeek: 'Week 3', rate: 95, target: 90 },
         { week: 'W4', fullWeek: 'Week 4', rate: 91, target: 90 },
-        { week: 'W5', fullWeek: 'Week 5', rate: Math.round(data.students.reduce((acc, s) => acc + s.attendancePct, 0) / data.students.length), target: 90 }
+        { week: 'W5', fullWeek: 'Week 5', rate: data.students.length > 0 ? Math.round(data.students.reduce((acc, s) => acc + s.attendancePct, 0) / data.students.length) : 0, target: 90 }
     ];
 
     // Sparkline data
     const performanceSparkline = [2.8, 3.0, 2.9, 3.1, 3.2, getAvgCompetency(data.students)];
     const attendanceSparkline = attendanceTrend.map(w => w.rate);
-    const studentsSparkline = [8, 10, 12, 14, 16, data.students.length];
-    const atRiskSparkline = [5, 4, 3, 4, 2, data.students.filter(s => getAvgCompetency([s]) < 2.5 || s.attendancePct < 80).length];
+    const studentsSparkline = [8, 10, 12, 14, 16, classAvg.total_students];
+    const atRiskSparkline = [5, 4, 3, 4, 2, atRiskList.length];
 
-    // Top performers
+    // Top performers (Keep client side for now, or move to RPC later)
     const topPerformers = [...data.students]
         .map(student => ({
             ...student,
@@ -272,10 +311,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
         .slice(0, 5);
 
     // At-risk students
-    const atRiskStudents = data.students.filter(s => {
-        const avg = Object.values(s.competencies).reduce((a, b) => a + b, 0) / Object.values(s.competencies).length;
-        return avg < 2.5 || s.attendancePct < 80;
-    });
+    const atRiskStudents = atRiskList;
 
     // Competency distribution
     const competencyDistribution = [
@@ -286,22 +322,11 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
     ];
 
     // Overall stats
-    const overallAvg = getAvgCompetency(data.students);
-    const overallAttendance = Math.round(data.students.reduce((acc, s) => acc + s.attendancePct, 0) / data.students.length);
+    const overallAvg = classAvg.overall_avg_score;
+    const overallAttendance = classAvg.overall_avg_attendance;
 
     // Calculate comparisons
     const prevAttendance = 82; // Mock previous week data
-
-    const [settings, setSettings] = useState<InstructorSettings>(DEFAULT_SETTINGS);
-
-    useEffect(() => {
-        const loaded = getSettings();
-        if (!loaded.preferences) {
-            setSettings({ ...loaded, preferences: DEFAULT_SETTINGS.preferences });
-        } else {
-            setSettings(loaded);
-        }
-    }, []);
 
     // Derived Metrics
     const activeData = useMemo(() => {
@@ -369,10 +394,146 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
         }
     };
 
-    // Print function
     const handlePrint = () => {
         setShowExportMenu(false);
         window.print();
+    };
+
+    // Cloud Report Generation â€” fast data-driven PDF + cloud upload w/ local fallback
+    // Cloud Report Generation — Server-side via Edge Function, client-side fallback
+    const handleCloudReportGeneration = async () => {
+        setIsGeneratingCloud(true);
+        try {
+            // ── Try server-side generation first (Edge Function) ──
+            const { data, error } = await supabase.functions.invoke('generate-report', {
+                body: { reportType: 'cohort_summary', filters: { dateRange, timePeriod } }
+            });
+
+            if (!error && data?.downloadUrl) {
+                showToast('Cloud Report generated on server! Opening...', 'success');
+                setTimeout(() => window.open(data.downloadUrl, '_blank'), 800);
+                return;
+            }
+
+            // ── Fallback: generate client-side PDF ──
+            console.warn('[CloudReport] Edge Function unavailable, falling back to client-side:', error?.message || 'No download URL');
+            const pdf = new jsPDF('p', 'mm', 'a4');
+            const W = pdf.internal.pageSize.getWidth();
+            let y = 14;
+
+            // Header
+            pdf.setFillColor(15, 23, 42);
+            pdf.rect(0, 0, W, 36, 'F');
+            pdf.setFillColor(59, 130, 246);
+            pdf.rect(0, 36, W, 2, 'F');
+            pdf.setTextColor(255, 255, 255);
+            pdf.setFontSize(20);
+            pdf.setFont('helvetica', 'bold');
+            pdf.text('PRISM Analytics Report', 14, 20);
+            pdf.setFontSize(10);
+            pdf.setFont('helvetica', 'normal');
+            pdf.setTextColor(148, 163, 184);
+            pdf.text('Generated: ' + new Date().toLocaleDateString() + '  |  Period: ' + dateRange.start + ' to ' + dateRange.end, 14, 30);
+            y = 46;
+
+            // Key Metrics
+            pdf.setTextColor(30, 30, 30);
+            pdf.setFontSize(12);
+            pdf.setFont('helvetica', 'bold');
+            pdf.text('KEY METRICS', 14, y);
+            y += 6;
+            const metricsArr = [
+                { label: 'Class Average', value: (classAvg.overall_avg_score || 0).toFixed(2) + ' / 4.0' },
+                { label: 'Attendance', value: (classAvg.overall_avg_attendance || 0) + '%' },
+                { label: 'Total Students', value: '' + classAvg.total_students },
+                { label: 'At-Risk', value: '' + atRiskStudents.length },
+            ];
+            const bxW = (W - 28 - 12) / 4;
+            metricsArr.forEach((m, i) => {
+                const bx = 14 + i * (bxW + 4);
+                pdf.setFillColor(249, 250, 251);
+                pdf.roundedRect(bx, y, bxW, 22, 3, 3, 'F');
+                pdf.setFontSize(7); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(107, 114, 128);
+                pdf.text(m.label, bx + 4, y + 8);
+                pdf.setFontSize(14); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(30, 30, 30);
+                pdf.text(m.value, bx + 4, y + 18);
+            });
+            y += 30;
+
+            // Subject Performance
+            if (subjectComp.length > 0) {
+                pdf.setFontSize(12); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(30, 30, 30);
+                pdf.text('SUBJECT PERFORMANCE', 14, y); y += 6;
+                pdf.setFillColor(59, 130, 246); pdf.rect(14, y, W - 28, 8, 'F');
+                pdf.setFontSize(9); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(255, 255, 255);
+                pdf.text('Subject', 18, y + 5.5); pdf.text('Students', 80, y + 5.5); pdf.text('Avg Score', 120, y + 5.5);
+                y += 8;
+                subjectComp.forEach((s, idx) => {
+                    const bg = idx % 2 === 0 ? [255, 255, 255] : [245, 247, 250];
+                    pdf.setFillColor(bg[0], bg[1], bg[2]); pdf.rect(14, y, W - 28, 7, 'F');
+                    pdf.setFontSize(9); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(40, 40, 40);
+                    pdf.text(s.subject, 18, y + 5); pdf.text('' + s.student_count, 80, y + 5); pdf.text(s.avg_score.toFixed(2), 120, y + 5);
+                    y += 7;
+                });
+                y += 4;
+            }
+
+            // Grade Distribution
+            if (gradeDist.length > 0) {
+                pdf.setFontSize(12); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(30, 30, 30);
+                pdf.text('GRADE DISTRIBUTION', 14, y); y += 6;
+                pdf.setFillColor(59, 130, 246); pdf.rect(14, y, W - 28, 8, 'F');
+                pdf.setFontSize(9); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(255, 255, 255);
+                pdf.text('Grade', 18, y + 5.5); pdf.text('Students', 60, y + 5.5); pdf.text('Avg Score', 100, y + 5.5); pdf.text('Attendance', 140, y + 5.5);
+                y += 8;
+                gradeDist.forEach((g, idx) => {
+                    const bg = idx % 2 === 0 ? [255, 255, 255] : [245, 247, 250];
+                    pdf.setFillColor(bg[0], bg[1], bg[2]); pdf.rect(14, y, W - 28, 7, 'F');
+                    pdf.setFontSize(9); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(40, 40, 40);
+                    pdf.text('' + g.grade, 18, y + 5); pdf.text('' + g.student_count, 60, y + 5);
+                    pdf.text(g.avg_score.toFixed(2), 100, y + 5); pdf.text(g.avg_attendance.toFixed(0) + '%', 140, y + 5);
+                    y += 7;
+                });
+                y += 4;
+            }
+
+            // At-Risk
+            if (atRiskStudents.length > 0) {
+                if (y > 230) { pdf.addPage(); y = 14; }
+                pdf.setFontSize(12); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(239, 68, 68);
+                pdf.text('AT-RISK STUDENTS', 14, y); y += 6;
+                pdf.setFillColor(239, 68, 68); pdf.rect(14, y, W - 28, 8, 'F');
+                pdf.setFontSize(9); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(255, 255, 255);
+                pdf.text('Name', 18, y + 5.5); pdf.text('Avg Score', 90, y + 5.5); pdf.text('Attendance', 140, y + 5.5);
+                y += 8;
+                atRiskStudents.forEach((s, idx) => {
+                    if (y > 275) { pdf.addPage(); y = 14; }
+                    const bg = idx % 2 === 0 ? [255, 255, 255] : [254, 242, 242];
+                    pdf.setFillColor(bg[0], bg[1], bg[2]); pdf.rect(14, y, W - 28, 7, 'F');
+                    pdf.setFontSize(9); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(40, 40, 40);
+                    pdf.text(s.name, 18, y + 5); pdf.text(s.avg_score.toFixed(2), 90, y + 5); pdf.text(s.attendance_pct.toFixed(0) + '%', 140, y + 5);
+                    y += 7;
+                });
+            }
+
+            // Footer
+            const pageCount = pdf.getNumberOfPages();
+            for (let p = 1; p <= pageCount; p++) {
+                pdf.setPage(p);
+                pdf.setDrawColor(229, 231, 235); pdf.line(14, 284, W - 14, 284);
+                pdf.setFontSize(7); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(156, 163, 175);
+                pdf.text('PRISM OS  |  Client-Generated Fallback', 14, 289);
+                pdf.text('Page ' + p + ' of ' + pageCount, W - 14, 289, { align: 'right' });
+            }
+
+            pdf.save('PRISM_Analytics_Report_' + new Date().toISOString().split('T')[0] + '.pdf');
+            showToast('Report saved locally (server unavailable)', 'info');
+        } catch (err) {
+            console.error('[CloudReport] Generation failed:', err);
+            showToast('Report generation failed. Please try again.', 'error');
+        } finally {
+            setIsGeneratingCloud(false);
+        }
     };
 
     // Toggle student for comparison
@@ -437,6 +598,22 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                             </button>
                         ))}
                     </div>
+
+                    <div className="hidden sm:block h-6 border-l border-[var(--md-sys-color-outline)] mx-1"></div>
+
+                    {/* Generate Cloud Report Button */}
+                    <button
+                        onClick={handleCloudReportGeneration}
+                        disabled={isGeneratingCloud}
+                        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-full text-sm font-bold shadow-md hover:shadow-lg hover:from-purple-700 hover:to-indigo-700 transition-all disabled:opacity-70"
+                    >
+                        {isGeneratingCloud ? (
+                            <RefreshCw size={14} className="animate-spin" />
+                        ) : (
+                            <Sparkles size={14} className="text-purple-200" />
+                        )}
+                        {isGeneratingCloud ? 'Generating...' : 'Cloud Report'}
+                    </button>
 
                     {/* Export Button */}
                     <div className="relative">
@@ -524,7 +701,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                 />
                 <MetricCard
                     title="Total Students"
-                    value={data.students.length}
+                    value={classAvg.total_students}
                     subtitle="Currently Enrolled"
                     color="purple"
                     icon={<Star size={20} />}
@@ -548,7 +725,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                 <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    className="flex gap-1 bg-[var(--md-sys-color-surface-variant)] p-1.5 rounded-full border border-[var(--md-sys-color-outline)] shadow-inner"
+                    className="flex gap-1 bg-[var(--md-sys-color-surface-variant)] p-1.5 rounded-full border border-[var(--md-sys-color-outline)] shadow-inner overflow-x-auto hide-scrollbar custom-scrollbar w-full sm:w-auto"
                 >
                     {[
                         { id: 'overview', label: 'Overview', icon: Target },
@@ -573,20 +750,20 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                 </motion.div>
 
                 {/* Date Range Filter */}
-                <div className="flex items-center gap-2 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-xl px-3 py-2">
-                    <Calendar size={14} className="text-[var(--md-sys-color-secondary)]" />
+                <div className="flex items-center gap-1 sm:gap-2 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-xl px-2 sm:px-3 py-2 w-full sm:w-auto justify-center mt-2 sm:mt-0">
+                    <Calendar size={14} className="text-[var(--md-sys-color-secondary)] flex-shrink-0" />
                     <input
                         type="date"
                         value={dateRange.start}
                         onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-                        className="bg-transparent text-sm text-[var(--md-sys-color-on-surface)] border-none outline-none w-32"
+                        className="bg-transparent text-xs sm:text-sm text-[var(--md-sys-color-on-surface)] border-none outline-none w-[100px] sm:w-32"
                     />
-                    <span className="text-[var(--md-sys-color-secondary)]">—</span>
+                    <span className="text-[var(--md-sys-color-secondary)] flex-shrink-0">—</span>
                     <input
                         type="date"
                         value={dateRange.end}
                         onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-                        className="bg-transparent text-sm text-[var(--md-sys-color-on-surface)] border-none outline-none w-32"
+                        className="bg-transparent text-xs sm:text-sm text-[var(--md-sys-color-on-surface)] border-none outline-none w-[100px] sm:w-32"
                     />
                 </div>
             </div>
@@ -636,33 +813,35 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                                 ))}
                             </div>
 
-                            <div className="h-48">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={gradeData} barGap={8}>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="var(--md-sys-color-outline)" vertical={false} />
-                                        <XAxis dataKey="shortGrade" tick={{ fill: 'var(--md-sys-color-secondary)', fontSize: 12, fontWeight: 600 }} axisLine={false} tickLine={false} />
-                                        <YAxis domain={[0, 4]} tick={{ fill: 'var(--md-sys-color-secondary)', fontSize: 12 }} axisLine={false} tickLine={false} />
-                                        <Tooltip
-                                            contentStyle={{
-                                                background: 'var(--md-sys-color-surface)',
-                                                border: '1px solid var(--md-sys-color-outline)',
-                                                borderRadius: '12px',
-                                                boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
-                                                padding: '12px 16px',
-                                                color: 'var(--md-sys-color-on-surface)'
-                                            }}
-                                            cursor={{ fill: 'rgba(59, 130, 246, 0.05)' }}
-                                            itemStyle={{ color: 'var(--md-sys-color-on-surface)' }}
-                                        />
-                                        <Bar dataKey="avgScore" fill="url(#blueGradient)" radius={[6, 6, 0, 0]} name="Avg Score" />
-                                        <defs>
-                                            <linearGradient id="blueGradient" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="0%" stopColor="#3b82f6" />
-                                                <stop offset="100%" stopColor="#1d4ed8" />
-                                            </linearGradient>
-                                        </defs>
-                                    </BarChart>
-                                </ResponsiveContainer>
+                            <div className="h-48 overflow-x-auto hide-scrollbar custom-scrollbar w-full">
+                                <div className="min-w-[500px] h-full">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <BarChart data={gradeData} barGap={8}>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="var(--md-sys-color-outline)" vertical={false} />
+                                            <XAxis dataKey="shortGrade" tick={{ fill: 'var(--md-sys-color-secondary)', fontSize: 12, fontWeight: 600 }} axisLine={false} tickLine={false} />
+                                            <YAxis domain={[0, 4]} tick={{ fill: 'var(--md-sys-color-secondary)', fontSize: 12 }} axisLine={false} tickLine={false} />
+                                            <Tooltip
+                                                contentStyle={{
+                                                    background: 'var(--md-sys-color-surface)',
+                                                    border: '1px solid var(--md-sys-color-outline)',
+                                                    borderRadius: '12px',
+                                                    boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
+                                                    padding: '12px 16px',
+                                                    color: 'var(--md-sys-color-on-surface)'
+                                                }}
+                                                cursor={{ fill: 'rgba(59, 130, 246, 0.05)' }}
+                                                itemStyle={{ color: 'var(--md-sys-color-on-surface)' }}
+                                            />
+                                            <Bar dataKey="avgScore" fill="url(#blueGradient)" radius={[6, 6, 0, 0]} name="Avg Score" />
+                                            <defs>
+                                                <linearGradient id="blueGradient" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="0%" stopColor="#3b82f6" />
+                                                    <stop offset="100%" stopColor="#1d4ed8" />
+                                                </linearGradient>
+                                            </defs>
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
                             </div>
                         </ChartCard>
 
@@ -757,7 +936,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                                             <p className="font-bold text-[var(--md-sys-color-on-surface)] text-sm truncate">{student.name}</p>
                                             <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] flex items-center gap-1">
                                                 {student.subject === 'Solar' ? <Zap size={10} /> : <Monitor size={10} />}
-                                                {student.subject} • G{student.grade}
+                                                {student.subject} â€¢ {getLevelShortLabel(student.studentGroup, String(student.grade))}
                                             </p>
                                         </div>
                                         <div className="text-right">
@@ -773,9 +952,9 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                             {atRiskStudents.length > 0 ? (
                                 <div className="space-y-2">
                                     {atRiskStudents.slice(0, 5).map((student, idx) => {
-                                        const avg = (Object.values(student.competencies).reduce((a, b) => a + b, 0) / Object.values(student.competencies).length);
+                                        const avg = student.avg_score;
                                         const isLowScore = avg < 2.5;
-                                        const isLowAttendance = student.attendancePct < 80;
+                                        const isLowAttendance = student.attendance_pct < 80;
 
                                         return (
                                             <motion.div
@@ -798,7 +977,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                                                         )}
                                                         {isLowAttendance && (
                                                             <span className="text-[9px] bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 px-1.5 py-0.5 rounded-full font-bold">
-                                                                {student.attendancePct}%
+                                                                {student.attendance_pct}%
                                                             </span>
                                                         )}
                                                     </div>
@@ -997,7 +1176,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                                                 <td className="py-3 px-2 text-[var(--md-sys-color-on-surface-variant)]">Avg Score</td>
                                                 {comparisonStudents.map(id => {
                                                     const s = data.students.find(st => st.id === id);
-                                                    const avg = s ? (Object.values(s.competencies).reduce((a, b) => a + b, 0) / Object.values(s.competencies).length).toFixed(2) : '—';
+                                                    const avg = s ? (Object.values(s.competencies).reduce((a, b) => a + b, 0) / Object.values(s.competencies).length).toFixed(2) : 'â€”';
                                                     return <td key={id} className="text-center py-3 px-2 font-bold text-[var(--md-sys-color-on-surface)]">{avg}</td>;
                                                 })}
                                             </tr>
@@ -1031,8 +1210,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                     </motion.div>
                 )}
             </AnimatePresence>
-        </div>
+        </div >
     );
 };
-
 export default Analytics;

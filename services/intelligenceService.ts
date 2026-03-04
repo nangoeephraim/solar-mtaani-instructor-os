@@ -14,6 +14,8 @@ export const analyzeData = (data: AppData): Insight[] => {
     const students = data.students;
     const schedule = data.schedule;
 
+    if (students.length === 0) return insights;
+
     // 1. Attendance Analysis
     const avgAttendance = students.reduce((acc, s) => acc + s.attendancePct, 0) / students.length;
 

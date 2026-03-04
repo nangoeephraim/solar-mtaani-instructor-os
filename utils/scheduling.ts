@@ -86,7 +86,7 @@ export const detectConflicts = (
 export const findBestSlot = (
     durationMinutes: number,
     existingSlots: ScheduleSlot[],
-    preferredTimeRange: { start: number; end: number } = { start: 8 * 60, end: 16 * 60 } // 08:00 - 16:00
+    preferredTimeRange: { start: number; end: number } = { start: 6 * 60, end: 22 * 60 } // 06:00 - 22:00
 ): string | null => {
     // Simple heuristic: Try every 30 min from start time
     for (let time = preferredTimeRange.start; time <= preferredTimeRange.end - durationMinutes; time += 30) {

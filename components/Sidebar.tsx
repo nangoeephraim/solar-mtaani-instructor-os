@@ -1,47 +1,79 @@
 import React from 'react';
-import { LayoutDashboard, Calendar, Users, ClipboardCheck, Settings, BarChart3, UserCheck, LineChart, Box } from 'lucide-react';
+import { LayoutDashboard, Calendar, Users, ClipboardCheck, Settings, BarChart3, UserCheck, LineChart, Box, MessageSquare, Wallet, UsersRound } from 'lucide-react';
 import clsx from 'clsx';
 import { motion } from 'framer-motion';
+import { AppData, UserRole } from '../types';
+import { getUnreadCount } from '../services/storageService';
+import { useAuth } from '../contexts/AuthContext';
 
 interface SidebarProps {
   currentView: string;
   onNavigate: (view: string) => void;
+  data?: AppData;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate }) => {
-  const navItems = [
-    { id: 'dashboard', label: 'Command Center', icon: LayoutDashboard },
-    { id: 'analytics', label: 'Overview Analytics', icon: BarChart3 },
-    { id: 'schedule', label: 'Timetable', icon: Calendar },
-    { id: 'students-manage', label: 'Students', icon: Users },
-    { id: 'student-analytics', label: 'Student Insights', icon: LineChart },
-    { id: 'attendance', label: 'Attendance', icon: UserCheck },
-    { id: 'assessment', label: 'NITA Assessment', icon: ClipboardCheck },
-    { id: 'resources', label: 'Resources', icon: Box },
-    { id: 'settings', label: 'Settings', icon: Settings },
+// Role hierarchy: admin > instructor > viewer
+const ROLE_LEVEL: Record<string, number> = { admin: 3, instructor: 2, viewer: 1 };
+
+const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, data }) => {
+  const { user } = useAuth();
+  const unreadCount = data && user ? (data.communications?.channels || []).reduce((sum, ch) => sum + getUnreadCount(data, ch.id, user.id || 'sys-user'), 0) : 0;
+  const userLevel = ROLE_LEVEL[user?.role || 'viewer'] || 1;
+
+  const navItems: { id: string; label: string; icon: any; minRole: UserRole }[] = [
+    { id: 'dashboard', label: 'Command Center', icon: LayoutDashboard, minRole: 'viewer' },
+    { id: 'analytics', label: 'Overview Analytics', icon: BarChart3, minRole: 'admin' },
+    { id: 'schedule', label: 'Timetable', icon: Calendar, minRole: 'viewer' },
+    { id: 'students-manage', label: 'Students', icon: Users, minRole: 'viewer' },
+    { id: 'student-analytics', label: 'Student Insights', icon: LineChart, minRole: 'instructor' },
+    { id: 'attendance', label: 'Attendance', icon: UserCheck, minRole: 'viewer' },
+    { id: 'assessment', label: 'NITA Assessment', icon: ClipboardCheck, minRole: 'instructor' },
+    { id: 'resources', label: 'Resources', icon: Box, minRole: 'viewer' },
+    { id: 'fees', label: 'Fee Management', icon: Wallet, minRole: 'admin' },
+    { id: 'instructors', label: 'Instructors', icon: UsersRound, minRole: 'admin' },
+    { id: 'communications', label: 'Communications', icon: MessageSquare, minRole: 'viewer' },
+    { id: 'settings', label: 'Settings', icon: Settings, minRole: 'viewer' },
   ];
 
+  // Filter nav items by role
+  const visibleItems = navItems.filter(item => userLevel >= (ROLE_LEVEL[item.minRole] || 1));
+
   return (
-    <div className="hidden lg:flex w-72 flex-col h-full border-r border-[var(--md-sys-color-outline)] z-20 safe-area-top" style={{ backgroundColor: 'color-mix(in srgb, var(--md-sys-color-surface) 85%, transparent)', backdropFilter: 'blur(16px)', WebkitBackdropFilter: 'blur(16px)' }}>
+    <div className="hidden lg:flex w-[260px] flex-col h-[calc(100vh-2rem)] my-4 ml-4 rounded-3xl z-20 sidebar-glass shadow-lg border border-[var(--md-sys-color-outline-variant)] bg-[var(--glass-bg)] backdrop-blur-3xl overflow-hidden">
       {/* Logo Header */}
       <div className="p-4 flex items-center gap-3 border-b border-[var(--md-sys-color-outline)]">
         <motion.div
-          className="w-10 h-10 flex-shrink-0 bg-gradient-to-br from-[var(--accent-primary)] to-indigo-600 rounded-xl flex items-center justify-center shadow-lg"
+          className="w-16 h-12 flex-shrink-0 flex items-center justify-center p-1"
           whileHover={{ scale: 1.05, rotate: 5 }}
           whileTap={{ scale: 0.95 }}
           transition={{ type: "spring", stiffness: 400 }}
         >
-          <span className="text-white font-black text-lg">P</span>
+          <img src="/logo.png" alt="PRISM Logo" className="w-full h-full object-contain drop-shadow-sm" />
         </motion.div>
-        <div className="hidden lg:block">
-          <h1 className="font-black text-xl text-[var(--md-sys-color-on-surface)] tracking-tight">PRISM</h1>
-          <p className="text-[10px] font-bold tracking-widest text-[var(--md-sys-color-secondary)] uppercase">Instructor OS</p>
+        <div className="hidden lg:block ml-1">
+          <p className="text-[9px] font-bold tracking-[0.15em] text-[var(--md-sys-color-primary)] uppercase">Illuminating Learning</p>
         </div>
       </div>
 
+      {/* Role badge */}
+      {user && (
+        <div className="px-4 pt-3 pb-1">
+          <div className={clsx(
+            "text-[9px] font-black tracking-[0.15em] uppercase text-center py-1 rounded-full",
+            user.role === 'admin'
+              ? "bg-violet-500/10 text-violet-700 dark:bg-violet-400/20 dark:text-violet-300"
+              : user.role === 'instructor'
+                ? "bg-blue-500/10 text-blue-700 dark:bg-blue-400/20 dark:text-blue-300"
+                : "bg-slate-500/10 text-slate-700 dark:bg-slate-400/20 dark:text-slate-300"
+          )}>
+            {user.role === 'admin' ? '🛡️ Administrator' : user.role === 'instructor' ? '📘 Instructor' : '👁️ Viewer'}
+          </div>
+        </div>
+      )}
+
       {/* Navigation */}
-      <nav className="flex-1 mt-4 px-3 space-y-1.5 overflow-y-auto custom-scrollbar">
-        {navItems.map((item, index) => {
+      <nav className="flex-1 mt-2 px-3 space-y-1.5 overflow-y-auto custom-scrollbar">
+        {visibleItems.map((item, index) => {
           const isActive = currentView === item.id;
           return (
             <motion.button
@@ -53,9 +85,9 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate }) => {
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               className={clsx(
-                "w-full flex items-center gap-4 px-4 py-3.5 rounded-full transition-all duration-300 group font-medium relative overflow-hidden tap-target mx-auto",
+                "w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all duration-300 group font-medium relative overflow-hidden tap-target mx-auto",
                 isActive
-                  ? "bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-on-primary-container)] shadow-sm"
+                  ? "bg-[var(--md-sys-color-primary)] text-white shadow-md shadow-indigo-500/20"
                   : "text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-surface-variant)] hover:text-[var(--md-sys-color-on-surface)]"
               )}
             >
@@ -64,7 +96,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate }) => {
                 {isActive && (
                   <motion.div
                     layoutId="sidebar-indicator"
-                    className="absolute -left-4 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r-full bg-[var(--md-sys-color-primary)]"
+                    className="absolute -left-4 top-1/2 -translate-y-1/2 w-1.5 h-6 rounded-r-full bg-white opacity-40"
                     transition={{ type: "spring", stiffness: 500, damping: 30 }}
                   />
                 )}
@@ -77,9 +109,12 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate }) => {
                   )}
                 />
                 <span className={clsx(
-                  "text-sm font-google tracking-wide transition-colors duration-300",
+                  "text-sm font-google tracking-wide transition-colors duration-300 flex-1",
                   isActive ? "font-bold" : "font-medium"
                 )}>{item.label}</span>
+                {item.id === 'communications' && unreadCount > 0 && (
+                  <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center animate-pulse">{unreadCount}</span>
+                )}
               </div>
 
               {/* Hover Glow Effect */}
@@ -111,7 +146,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate }) => {
             All data is locally synced.
           </p>
           <p className="text-[9px] text-[var(--md-sys-color-secondary)] mt-1 opacity-60">
-            PRISM v1.0.0
+            PRISM v2.0.0
           </p>
         </motion.div>
         <div className="lg:hidden flex justify-center py-2">

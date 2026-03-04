@@ -16,7 +16,7 @@ const createGoogleEventBody = (slot: ScheduleSlot, dateStr: string) => {
     const endTime = `${String(endHours).padStart(2, '0')}:${String(endMins).padStart(2, '0')}`;
     const endDateTime = `${dateStr}T${endTime}:00`;
 
-    return {
+    const body = {
         summary: `${slot.subject === 'Solar' ? '☀️' : '💻'} ${slot.subject} Class (Grade ${slot.grade})`,
         description: `Grade ${slot.grade} - ${slot.subject}\nStatus: ${slot.status}\n\n[Managed by PRISM]`,
         start: {
@@ -34,6 +34,8 @@ const createGoogleEventBody = (slot: ScheduleSlot, dateStr: string) => {
             }
         }
     };
+
+    return body;
 };
 
 /**
@@ -46,8 +48,11 @@ export const syncScheduleToGoogle = async (
     accessToken: string,
     weekDates: Date[]
 ): Promise<{ successCount: number; failCount: number; updatedSchedule: ScheduleSlot[] }> => {
+
+
     let successCount = 0;
     let failCount = 0;
+    let lastEventLink = '';
     const updatedSchedule = [...schedule];
 
     // 1. Prepare the valid slots to sync (Resolving recurrences to check against)
@@ -67,6 +72,7 @@ export const syncScheduleToGoogle = async (
     const timeMin = startDate.toISOString();
     const timeMax = endDate.toISOString();
 
+
     // 2. Fetch Existing Google Events
     let existingGoogleEvents: any[] = [];
     try {
@@ -84,6 +90,9 @@ export const syncScheduleToGoogle = async (
         if (response.ok) {
             const data = await response.json();
             existingGoogleEvents = data.items || [];
+
+        } else {
+            console.error("Failed to fetch events:", response.status, await response.text());
         }
     } catch (e) {
         console.warn("Failed to fetch existing events, proceeding with blind create (may cause dupes)", e);
@@ -113,6 +122,8 @@ export const syncScheduleToGoogle = async (
             ...overrides
         ].filter(s => s.status !== 'Cancelled');
 
+
+
         for (const slot of activeSlots) {
             const eventBody = createGoogleEventBody(slot, dateStr);
 
@@ -126,6 +137,7 @@ export const syncScheduleToGoogle = async (
 
             try {
                 if (match) {
+
                     // Update (PATCH)
                     const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${match.id}`, {
                         method: 'PATCH',
@@ -136,8 +148,12 @@ export const syncScheduleToGoogle = async (
                         body: JSON.stringify(eventBody)
                     });
                     if (response.ok) successCount++;
-                    else failCount++;
+                    else {
+                        failCount++;
+                        console.error("Failed to update event:", await response.text());
+                    }
                 } else {
+
                     // Create (POST)
                     const response = await fetch('https://www.googleapis.com/calendar/v3/calendars/primary/events', {
                         method: 'POST',
@@ -151,11 +167,11 @@ export const syncScheduleToGoogle = async (
                     if (response.ok) {
                         const newEvent = await response.json();
                         successCount++;
-                        // If it's a one-off override, we can save the ID.
-                        // If it's recurring, saving one ID isn't enough (need 1 per day).
-                        // So we RELY on extendedProperties for matching next time.
+                        // @ts-ignore
+                        lastEventLink = newEvent.htmlLink;
                     } else {
                         failCount++;
+                        console.error("Failed to create event:", await response.text());
                     }
                 }
             } catch (e) {
@@ -165,5 +181,7 @@ export const syncScheduleToGoogle = async (
         }
     }
 
-    return { successCount, failCount, updatedSchedule };
+
+    // @ts-ignore
+    return { successCount, failCount, updatedSchedule, lastEventLink };
 };

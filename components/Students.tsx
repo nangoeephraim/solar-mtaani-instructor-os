@@ -1,14 +1,17 @@
 import React, { useState, useRef } from 'react';
-import { AppData, Student } from '../types';
+import { AppData, Student, StudentGroup } from '../types';
+import { getLevelShortLabel, getLevelsForGroup, getDefaultLevel } from '../constants/educationLevels';
 import {
     Users, Search, Plus, Camera, Mail, Phone, Calendar, MapPin,
     User, ChevronRight, Filter, Grid3X3, List, Edit3, Save, X, Trash2,
-    Zap, Monitor, TrendingUp, BarChart3, GraduationCap, UserPlus
+    Zap, Monitor, TrendingUp, BarChart3, GraduationCap, UserPlus, BookOpen, Building2, School
 } from 'lucide-react';
 import clsx from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from './Toast';
 import { useAuth } from '../contexts/AuthContext';
+import PageHeader from './PageHeader';
+import EditStudentModal from './EditStudentModal';
 
 interface StudentsProps {
     data: AppData;
@@ -29,14 +32,13 @@ const Students: React.FC<StudentsProps> = ({
 }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [subjectFilter, setSubjectFilter] = useState<'All' | 'Solar' | 'ICT'>('All');
+    const [groupFilter, setGroupFilter] = useState<'All' | StudentGroup>('All');
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [selectedStudent, setSelectedStudent] = useState<Student | null>(
         initialSelectedId ? data.students.find(s => s.id === initialSelectedId) || null : null
     );
     const [isEditing, setIsEditing] = useState(false);
-    const [editForm, setEditForm] = useState<Partial<Student>>({});
     const [showAddModal, setShowAddModal] = useState(false);
-    const fileInputRef = useRef<HTMLInputElement>(null);
     const { showToast } = useToast();
     const { user } = useAuth();
 
@@ -45,7 +47,8 @@ const Students: React.FC<StudentsProps> = ({
             s.lot.includes(searchTerm) ||
             s.email?.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesSubject = subjectFilter === 'All' || s.subject === subjectFilter;
-        return matchesSearch && matchesSubject;
+        const matchesGroup = groupFilter === 'All' || s.studentGroup === groupFilter;
+        return matchesSearch && matchesSubject && matchesGroup;
     });
 
     const getStudentAvg = (student: Student) => {
@@ -53,33 +56,14 @@ const Students: React.FC<StudentsProps> = ({
         return vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
     };
 
-    const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file && selectedStudent) {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                const base64 = reader.result as string;
-                setEditForm(prev => ({ ...prev, photo: base64 }));
-            };
-            reader.readAsDataURL(file);
-        }
-    };
-
-    const handleSaveEdit = () => {
-        if (selectedStudent) {
-            const updated = { ...selectedStudent, ...editForm };
-            onUpdateStudent(updated, true);
-            setSelectedStudent(updated);
-            setIsEditing(false);
-            setEditForm({});
-        }
+    const handleSaveEdit = (updatedStudent: Student) => {
+        onUpdateStudent(updatedStudent, true);
+        setSelectedStudent(updatedStudent);
+        setIsEditing(false);
     };
 
     const handleStartEdit = () => {
-        if (selectedStudent) {
-            setEditForm(selectedStudent);
-            setIsEditing(true);
-        }
+        setIsEditing(true);
     };
 
     const handleViewAnalytics = () => {
@@ -91,9 +75,10 @@ const Students: React.FC<StudentsProps> = ({
     // New student form state
     const [newStudent, setNewStudent] = useState<Partial<Student>>({
         name: '',
-        grade: 5,
+        grade: 'L3',
         lot: '',
         subject: 'Solar',
+        studentGroup: 'Academy',
         email: '',
         phone: '',
         guardianName: '',
@@ -120,69 +105,61 @@ const Students: React.FC<StudentsProps> = ({
         });
         setShowAddModal(false);
         setNewStudent({
-            name: '', grade: 5, lot: '', subject: 'Solar', email: '', phone: '', guardianName: '', guardianPhone: '',
+            name: '', grade: 'L3', lot: '', subject: 'Solar', studentGroup: 'Academy', email: '', phone: '', guardianName: '', guardianPhone: '',
             nitaNumber: '', admissionNumber: '', kcseGrade: '', epraLicenseStatus: 'None', assessment: { units: {}, termStats: [] }
         });
     };
 
     return (
-        <div className="h-full flex gap-6 animate-fade-in pb-6">
-            {/* Left Panel - Student Grid/List */}
-            <div className="flex-1 flex flex-col">
-                {/* Header */}
-                <motion.div
-                    className="bg-[var(--md-sys-color-surface)] rounded-2xl border border-[var(--md-sys-color-outline)] shadow-sm p-6 mb-6"
-                    initial={{ opacity: 0, y: -20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                >
-                    <div className="flex items-center justify-between mb-6">
-                        <div className="flex items-center gap-4">
-                            <motion.div
-                                className="p-3 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl shadow-lg shadow-violet-500/30"
-                                whileHover={{ scale: 1.05, rotate: 5 }}
-                                transition={{ type: "spring", stiffness: 400 }}
-                            >
-                                <Users size={28} className="text-white" />
-                            </motion.div>
-                            <div>
-                                <h1 className="text-2xl font-google font-bold text-[var(--md-sys-color-on-surface)]">Students</h1>
-                                <p className="text-[var(--md-sys-color-on-surface-variant)] text-sm">{data.students.length} students enrolled</p>
-                            </div>
-                        </div>
-                        {user?.role !== 'viewer' && (
-                            <motion.button
-                                onClick={() => setShowAddModal(true)}
-                                whileHover={{ scale: 1.02 }}
-                                whileTap={{ scale: 0.98 }}
-                                className="px-5 py-2.5 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-violet-500/30 hover:shadow-xl transition-all flex items-center gap-2"
-                            >
-                                <UserPlus size={18} />
-                                Add Student
-                            </motion.button>
-                        )}
+        <div className="h-full flex flex-col animate-fade-in pb-6 relative">
+            {/* Main Content - Student Grid/List */}
+            <div className="flex-1 flex flex-col h-full">
+                {/* Distinct Roster Header */}
+                <div className="relative mb-6 rounded-3xl bg-gradient-to-br from-blue-50 to-indigo-50/50 dark:from-blue-900/10 dark:to-indigo-900/10 border border-blue-100 dark:border-blue-900/30 overflow-hidden p-6 md:p-8">
+                    {/* Subtle animated pattern */}
+                    <div className="absolute inset-0 opacity-20 dark:opacity-10 mix-blend-overlay pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, currentColor 1px, transparent 0)', backgroundSize: '24px 24px' }}>
+                        <motion.div animate={{ opacity: [0.5, 1, 0.5] }} transition={{ duration: 4, repeat: Infinity, ease: 'linear' }} className="absolute inset-0 bg-gradient-to-r from-transparent via-white/50 dark:via-black/50 to-transparent -translate-x-full" />
+                    </div>
+                    <div className="relative z-10">
+                        <PageHeader
+                            title="Students"
+                            subtitle={`${data.students.length} students enrolled`}
+                            icon={Users}
+                            action={user?.role !== 'viewer' ? (
+                                <button
+                                    onClick={() => setShowAddModal(true)}
+                                    className="px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-blue-500/30 hover:shadow-xl hover:shadow-blue-500/40 hover:-translate-y-0.5 transition-all flex items-center gap-2"
+                                >
+                                    <UserPlus size={18} />
+                                    Add Student
+                                </button>
+                            ) : undefined}
+                        />
+                    </div>
+                </div>
+
+                {/* Filters Bar */}
+                <div className="bg-[var(--md-sys-color-surface)] rounded-2xl border border-[var(--md-sys-color-outline)] shadow-sm p-3 sm:p-4 mb-6 flex flex-col sm:flex-row flex-wrap gap-3 sm:gap-4 items-stretch sm:items-center justify-between">
+                    <div className="relative flex-1 min-w-[200px]">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--md-sys-color-outline)]" size={18} />
+                        <input
+                            type="text"
+                            placeholder="Search by name, lot, or email..."
+                            className="w-full pl-11 pr-4 py-2 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all text-[var(--md-sys-color-on-surface)] placeholder-[var(--md-sys-color-on-surface-variant)]"
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                        />
                     </div>
 
-                    {/* Filters Bar */}
-                    <div className="flex flex-wrap gap-4 items-center">
-                        <div className="relative flex-1 min-w-[200px]">
-                            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--md-sys-color-outline)]" size={18} />
-                            <input
-                                type="text"
-                                placeholder="Search by name, lot, or email..."
-                                className="w-full pl-11 pr-4 py-3 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all text-[var(--md-sys-color-on-surface)] placeholder-[var(--md-sys-color-on-surface-variant)]"
-                                value={searchTerm}
-                                onChange={e => setSearchTerm(e.target.value)}
-                            />
-                        </div>
-
+                    <div className="flex gap-2 sm:gap-3 overflow-x-auto custom-scrollbar pb-1 sm:pb-0">
                         {/* Subject Filter Pills */}
-                        <div className="flex bg-[var(--md-sys-color-surface-variant)] rounded-full p-1 border border-[var(--md-sys-color-outline)]">
+                        <div className="flex bg-[var(--md-sys-color-surface-variant)] rounded-lg p-1 border border-[var(--md-sys-color-outline)]">
                             {(['All', 'Solar', 'ICT'] as const).map(sub => (
                                 <button
                                     key={sub}
                                     onClick={() => setSubjectFilter(sub)}
                                     className={clsx(
-                                        "px-4 py-2 text-xs font-bold rounded-full transition-all flex items-center gap-1.5",
+                                        "px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1.5",
                                         subjectFilter === sub
                                             ? "bg-[var(--md-sys-color-surface)] shadow-sm text-[var(--md-sys-color-on-surface)]"
                                             : "text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)]"
@@ -195,34 +172,60 @@ const Students: React.FC<StudentsProps> = ({
                             ))}
                         </div>
 
-                        {/* View Toggle */}
-                        <div className="flex bg-[var(--md-sys-color-surface-variant)] rounded-xl p-1 border border-[var(--md-sys-color-outline)]">
+                        {/* Group Filter Pills */}
+                        <div className="flex bg-[var(--md-sys-color-surface-variant)] rounded-lg p-1 border border-[var(--md-sys-color-outline)] overflow-x-auto custom-scrollbar flex-shrink-0">
+                            {(['All', 'Campus', 'Academy', 'CBC', 'High School'] as const).map(grp => (
+                                <button
+                                    key={grp}
+                                    onClick={() => setGroupFilter(grp as any)}
+                                    className={clsx(
+                                        "px-2 sm:px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1 whitespace-nowrap flex-shrink-0",
+                                        groupFilter === grp
+                                            ? "bg-[var(--md-sys-color-surface)] shadow-sm text-indigo-600 dark:text-indigo-400"
+                                            : "text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)]"
+                                    )}
+                                >
+                                    {grp === 'Campus' && <Building2 size={12} />}
+                                    {grp === 'Academy' && <School size={12} />}
+                                    {grp === 'CBC' && <BookOpen size={12} />}
+                                    {grp === 'High School' && <GraduationCap size={12} />}
+                                    {grp}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* View Toggle - hidden on small mobile */}
+                        <div className="hidden sm:flex bg-[var(--md-sys-color-surface-variant)] rounded-lg p-1 border border-[var(--md-sys-color-outline)]">
                             <button
                                 onClick={() => setViewMode('grid')}
+                                aria-label="Grid view"
+                                title="Grid view"
                                 className={clsx(
-                                    "p-2 rounded-lg transition-all",
+                                    "p-1.5 rounded-md transition-all",
                                     viewMode === 'grid' ? "bg-[var(--md-sys-color-surface)] shadow-sm text-violet-600" : "text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)]"
                                 )}
                             >
-                                <Grid3X3 size={18} />
+                                <Grid3X3 size={16} />
                             </button>
                             <button
                                 onClick={() => setViewMode('list')}
+                                aria-label="List view"
+                                title="List view"
                                 className={clsx(
-                                    "p-2 rounded-lg transition-all",
+                                    "p-1.5 rounded-md transition-all",
                                     viewMode === 'list' ? "bg-[var(--md-sys-color-surface)] shadow-sm text-violet-600" : "text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)]"
                                 )}
                             >
-                                <List size={18} />
+                                <List size={16} />
                             </button>
                         </div>
                     </div>
-                </motion.div>
+                </div>
 
                 {/* Students Grid/List */}
                 <div className="flex-1 overflow-y-auto custom-scrollbar">
                     {viewMode === 'grid' ? (
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                             <AnimatePresence>
                                 {filteredStudents.map((student, index) => {
                                     const avg = getStudentAvg(student);
@@ -242,8 +245,8 @@ const Students: React.FC<StudentsProps> = ({
                                             className={clsx(
                                                 "bg-[var(--md-sys-color-surface)] rounded-2xl border-2 p-5 text-left transition-all relative overflow-hidden group",
                                                 isSelected
-                                                    ? "border-violet-500 shadow-lg shadow-violet-500/20"
-                                                    : "border-[var(--md-sys-color-outline)] hover:border-violet-200 hover:shadow-md"
+                                                    ? "border-[var(--md-sys-color-primary)] shadow-lg shadow-[var(--md-sys-color-primary-container)]"
+                                                    : "border-[var(--md-sys-color-outline)] hover:border-[var(--md-sys-color-primary)] hover:shadow-md"
                                             )}
                                         >
                                             {/* Risk Indicator */}
@@ -274,9 +277,22 @@ const Students: React.FC<StudentsProps> = ({
                                                 </div>
                                             </div>
 
+                                            {/* Group Badge */}
+                                            <div className="absolute top-3 left-3">
+                                                <span className={clsx(
+                                                    "px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider backdrop-blur-sm border",
+                                                    student.studentGroup === 'Campus' ? "bg-indigo-100/80 text-indigo-700 border-indigo-200 dark:bg-indigo-900/50 dark:text-indigo-300 dark:border-indigo-800" :
+                                                        student.studentGroup === 'Academy' ? "bg-emerald-100/80 text-emerald-700 border-emerald-200 dark:bg-emerald-900/50 dark:text-emerald-300 dark:border-emerald-800" :
+                                                            student.studentGroup === 'CBC' ? "bg-sky-100/80 text-sky-700 border-sky-200 dark:bg-sky-900/50 dark:text-sky-300 dark:border-sky-800" :
+                                                                "bg-rose-100/80 text-rose-700 border-rose-200 dark:bg-rose-900/50 dark:text-rose-300 dark:border-rose-800"
+                                                )}>
+                                                    {student.studentGroup}
+                                                </span>
+                                            </div>
+
                                             {/* Info */}
                                             <h3 className="font-bold text-[var(--md-sys-color-on-surface)] text-center truncate">{student.name}</h3>
-                                            <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] text-center mt-1">Grade {student.grade} • Lot {student.lot}</p>
+                                            <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] text-center mt-1">{getLevelShortLabel(student.studentGroup, String(student.grade))} • Lot {student.lot}</p>
 
                                             {/* Stats */}
                                             <div className="flex justify-center gap-4 mt-4 pt-4 border-t border-[var(--md-sys-color-outline)]">
@@ -332,7 +348,18 @@ const Students: React.FC<StudentsProps> = ({
                                             )}
                                             <div className="flex-1 min-w-0">
                                                 <h3 className="font-bold text-[var(--md-sys-color-on-surface)] truncate">{student.name}</h3>
-                                                <p className="text-xs text-[var(--md-sys-color-on-surface-variant)]">{student.subject} • Grade {student.grade} • Lot {student.lot}</p>
+                                                <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] flex items-center gap-1.5 flex-wrap">
+                                                    <span className={clsx(
+                                                        "px-1.5 py-0.5 rounded text-[9px] font-bold uppercase",
+                                                        student.studentGroup === 'Campus' ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400" :
+                                                            student.studentGroup === 'Academy' ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" :
+                                                                student.studentGroup === 'CBC' ? "bg-sky-50 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400" :
+                                                                    "bg-rose-50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400"
+                                                    )}>
+                                                        {student.studentGroup}
+                                                    </span>
+                                                    • {student.subject} • {getLevelShortLabel(student.studentGroup, String(student.grade))} • Lot {student.lot}
+                                                </p>
                                             </div>
                                             <div className="flex items-center gap-4 text-sm">
                                                 <span className={clsx(
@@ -363,308 +390,263 @@ const Students: React.FC<StudentsProps> = ({
                 </div>
             </div>
 
-            {/* Right Panel - Student Details */}
+            {/* Quick Profile Drawer */}
             <AnimatePresence>
                 {selectedStudent && (
-                    <motion.div
-                        initial={{ opacity: 0, x: 50 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        exit={{ opacity: 0, x: 50 }}
-                        className="w-96 bg-[var(--md-sys-color-surface)] rounded-2xl border border-[var(--md-sys-color-outline)] shadow-sm flex flex-col overflow-hidden"
-                    >
-                        {/* Detail Header - ID Card Style */}
-                        <div className="p-6 bg-gradient-to-br from-slate-100 to-white dark:from-slate-800 dark:to-slate-900 border-b border-[var(--md-sys-color-outline)] relative overflow-hidden group">
-                            {/* Watermark/Pattern - Subtle Tech Texture */}
-                            <div className="absolute inset-0 opacity-[0.03] dark:opacity-[0.05] pointer-events-none bg-[radial-gradient(#6366f1_1px,transparent_1px)] [background-size:16px_16px]"></div>
+                    <>
+                        {/* Backdrop */}
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40"
+                            onClick={() => setSelectedStudent(null)}
+                        />
 
-                            <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none transition-transform group-hover:scale-110 duration-700">
-                                <Zap size={140} />
-                            </div>
+                        {/* Drawer */}
+                        <motion.div
+                            initial={{ x: '100%' }}
+                            animate={{ x: 0 }}
+                            exit={{ x: '100%' }}
+                            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                            className="fixed top-0 right-0 bottom-0 w-full max-w-md bg-[var(--md-sys-color-surface)] shadow-2xl z-50 flex flex-col overflow-hidden border-l border-[var(--md-sys-color-outline)]"
+                        >
+                            {/* Detail Header - ID Card Style */}
+                            <div className="p-6 bg-gradient-to-br from-slate-100 to-white dark:from-slate-800 dark:to-slate-900 border-b border-[var(--md-sys-color-outline)] relative overflow-hidden group">
+                                {/* Watermark/Pattern - Subtle Tech Texture */}
+                                <div className="absolute inset-0 opacity-[0.03] dark:opacity-[0.05] pointer-events-none bg-[radial-gradient(#6366f1_1px,transparent_1px)] [background-size:16px_16px]"></div>
 
-                            <button
-                                onClick={() => setSelectedStudent(null)}
-                                className="absolute top-4 right-4 p-2 hover:bg-black/5 rounded-full transition-colors z-10"
-                            >
-                                <X size={20} className="text-[var(--md-sys-color-secondary)]" />
-                            </button>
-
-                            <div className="flex flex-col items-center relative z-0">
-                                {/* Organization Header */}
-                                <div className="text-center mb-6 w-full border-b border-dashed border-gray-300 dark:border-gray-700 pb-4">
-                                    <h2 className="text-sm font-bold tracking-widest text-[var(--md-sys-color-secondary)] uppercase">PRISM Technical Institute</h2>
-                                    <p className="text-[10px] text-[var(--md-sys-color-outline)] tracking-wider">OFFICIAL STUDENT IDENTIFICATION</p>
+                                <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none transition-transform group-hover:scale-110 duration-700">
+                                    <Zap size={140} />
                                 </div>
 
-                                <div className="flex gap-6 w-full">
-                                    {/* Photo Section */}
-                                    <div className="flex-shrink-0">
-                                        <div className="relative w-32 h-40 bg-gray-200 rounded-lg overflow-hidden border-2 border-white shadow-lg ring-1 ring-black/5 dark:ring-white/10">
-                                            {(isEditing ? editForm.photo : selectedStudent.photo) ? (
-                                                <img
-                                                    src={isEditing ? editForm.photo : selectedStudent.photo}
-                                                    alt={selectedStudent.name}
-                                                    className="w-full h-full object-cover"
-                                                />
-                                            ) : (
-                                                <div className="w-full h-full bg-gradient-to-br from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-600 flex items-center justify-center">
-                                                    <span className="text-4xl font-black text-slate-400 dark:text-slate-500">{selectedStudent.name.charAt(0)}</span>
-                                                </div>
-                                            )}
-                                            {isEditing && (
-                                                <button
-                                                    onClick={() => fileInputRef.current?.click()}
-                                                    className="absolute bottom-2 right-2 p-1.5 bg-white rounded-full shadow-md text-violet-600 hover:bg-violet-50"
-                                                >
-                                                    <Camera size={14} />
-                                                </button>
-                                            )}
-                                        </div>
-                                        <div className="mt-3 text-center">
-                                            <span className={clsx(
-                                                "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border shadow-sm",
-                                                selectedStudent.subject === 'Solar'
-                                                    ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800"
-                                                    : "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-900/30 dark:text-sky-400 dark:border-sky-800"
-                                            )}>
-                                                {selectedStudent.subject}
-                                            </span>
-                                        </div>
+                                <button
+                                    onClick={() => setSelectedStudent(null)}
+                                    aria-label="Close profile"
+                                    title="Close profile"
+                                    className="absolute top-4 right-4 p-2 hover:bg-black/5 rounded-full transition-colors z-10"
+                                >
+                                    <X size={20} className="text-[var(--md-sys-color-secondary)]" />
+                                </button>
+
+                                <div className="flex flex-col items-center relative z-0">
+                                    {/* Organization Header */}
+                                    <div className="text-center mb-6 w-full border-b border-dashed border-gray-300 dark:border-gray-700 pb-4">
+                                        <h2 className="text-sm font-bold tracking-widest text-[var(--md-sys-color-secondary)] uppercase">PRISM Technical Institute</h2>
+                                        <p className="text-[10px] text-[var(--md-sys-color-outline)] tracking-wider">OFFICIAL STUDENT IDENTIFICATION</p>
                                     </div>
 
-                                    {/* Info Section */}
-                                    <div className="flex-1 space-y-3 pt-1">
-                                        <div>
-                                            {isEditing ? (
-                                                <input
-                                                    value={editForm.name || ''}
-                                                    onChange={e => setEditForm(prev => ({ ...prev, name: e.target.value }))}
-                                                    className="text-xl font-bold w-full bg-white/50 border border-gray-300 rounded px-2 py-1"
-                                                />
-                                            ) : (
+                                    <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 w-full">
+                                        {/* Photo Section */}
+                                        <div className="flex-shrink-0">
+                                            <div className="relative w-32 h-40 bg-gray-200 rounded-lg overflow-hidden border-2 border-white shadow-lg ring-1 ring-black/5 dark:ring-white/10">
+                                                {selectedStudent.photo ? (
+                                                    <img
+                                                        src={selectedStudent.photo}
+                                                        alt={selectedStudent.name}
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                ) : (
+                                                    <div className="w-full h-full bg-gradient-to-br from-slate-200 to-slate-300 dark:from-slate-700 dark:to-slate-600 flex items-center justify-center">
+                                                        <span className="text-4xl font-black text-slate-400 dark:text-slate-500">{selectedStudent.name.charAt(0)}</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="mt-3 text-center space-y-2">
+                                                <span className={clsx(
+                                                    "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border shadow-sm",
+                                                    selectedStudent.subject === 'Solar'
+                                                        ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800"
+                                                        : "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-900/30 dark:text-sky-400 dark:border-sky-800"
+                                                )}>
+                                                    {selectedStudent.subject}
+                                                </span>
+
+                                                {/* Group dropdown */}
+                                                <span className={clsx(
+                                                    "block mx-auto w-fit px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-wider border shadow-sm mt-1",
+                                                    selectedStudent.studentGroup === 'Campus' ? "bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-400 dark:border-indigo-800" :
+                                                        selectedStudent.studentGroup === 'Academy' ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 dark:border-emerald-800" :
+                                                            selectedStudent.studentGroup === 'CBC' ? "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-900/30 dark:text-sky-400 dark:border-sky-800" :
+                                                                "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-900/30 dark:text-rose-400 dark:border-rose-800"
+                                                )}>
+                                                    {selectedStudent.studentGroup}
+                                                </span>
+                                            </div>
+                                        </div>
+
+                                        {/* Info Section */}
+                                        <div className="flex-1 space-y-3 pt-1">
+                                            <div>
                                                 <h1 className="text-xl font-black text-[var(--md-sys-color-on-surface)] uppercase leading-tight font-google">
                                                     {selectedStudent.name}
                                                 </h1>
-                                            )}
-                                            <p className="text-xs text-[var(--md-sys-color-secondary)] uppercase tracking-wide mt-1">
-                                                Adm: <span className="text-[var(--md-sys-color-on-surface)] font-bold">{selectedStudent.admissionNumber || 'N/A'}</span>
-                                            </p>
-                                        </div>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <span className="text-xs text-[var(--md-sys-color-secondary)] uppercase tracking-wide">Adm:</span>
+                                                    <span className="text-xs text-[var(--md-sys-color-on-surface)] font-bold">{selectedStudent.admissionNumber || 'N/A'}</span>
+                                                </div>
+                                            </div>
 
-                                        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
-                                            <div>
-                                                <span className="block text-[9px] text-[var(--md-sys-color-outline)] uppercase">NITA Reg No.</span>
-                                                <span className="font-mono font-medium text-[var(--md-sys-color-on-surface)]">{selectedStudent.nitaNumber || 'Pending'}</span>
-                                            </div>
-                                            <div>
-                                                <span className="block text-[9px] text-[var(--md-sys-color-outline)] uppercase">KCSE Grade</span>
-                                                <span className="font-mono font-medium text-[var(--md-sys-color-on-surface)]">{selectedStudent.kcseGrade || '-'}</span>
-                                            </div>
-                                            <div>
-                                                <span className="block text-[9px] text-[var(--md-sys-color-outline)] uppercase">EPRA Status</span>
-                                                <span className={clsx(
-                                                    "font-bold",
-                                                    selectedStudent.epraLicenseStatus === 'None' ? "text-gray-400" : "text-green-600"
-                                                )}>
-                                                    {selectedStudent.epraLicenseStatus || 'None'}
-                                                </span>
-                                            </div>
-                                            <div>
-                                                <span className="block text-[9px] text-[var(--md-sys-color-outline)] uppercase">Cohort</span>
-                                                <span className="font-medium text-[var(--md-sys-color-on-surface)]">{selectedStudent.lot}</span>
+                                            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                                                <div>
+                                                    <span className="block text-[9px] text-[var(--md-sys-color-outline)] uppercase">NITA Reg No.</span>
+                                                    <span className="font-mono font-medium text-[var(--md-sys-color-on-surface)]">{selectedStudent.nitaNumber || 'Pending'}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="block text-[9px] text-[var(--md-sys-color-outline)] uppercase">KCSE Grade</span>
+                                                    <span className="font-mono font-medium text-[var(--md-sys-color-on-surface)]">{selectedStudent.kcseGrade || '-'}</span>
+                                                </div>
+                                                <div>
+                                                    <span className="block text-[9px] text-[var(--md-sys-color-outline)] uppercase">EPRA Status</span>
+                                                    <span className={clsx(
+                                                        "font-bold",
+                                                        selectedStudent.epraLicenseStatus === 'None' ? "text-gray-400" : "text-green-600"
+                                                    )}>
+                                                        {selectedStudent.epraLicenseStatus || 'None'}
+                                                    </span>
+                                                </div>
+                                                <div>
+                                                    <span className="block text-[9px] text-[var(--md-sys-color-outline)] uppercase">Cohort</span>
+                                                    <span className="font-medium text-[var(--md-sys-color-on-surface)]">{selectedStudent.lot}</span>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
 
-                        {/* Details Content */}
-                        <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
-                            {/* Contact Info */}
-                            <div className="space-y-3">
-                                <h4 className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-wider">Contact Information</h4>
+                            {/* Details Content */}
+                            <div className="flex-1 overflow-y-auto p-6 space-y-4 custom-scrollbar">
+                                {/* Contact Info */}
+                                <div className="space-y-3">
+                                    <h4 className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-wider">Contact Information</h4>
 
-                                <div className="space-y-2">
-                                    {/* Email */}
-                                    <div className="flex items-center gap-3 p-3 bg-[var(--md-sys-color-surface-variant)] rounded-xl">
-                                        <Mail size={16} className="text-[var(--md-sys-color-on-surface-variant)]" />
-                                        {isEditing ? (
-                                            <input
-                                                type="email"
-                                                value={editForm.email || ''}
-                                                onChange={e => setEditForm(prev => ({ ...prev, email: e.target.value }))}
-                                                placeholder="Email address"
-                                                className="flex-1 bg-transparent text-sm focus:outline-none text-[var(--md-sys-color-on-surface)] placeholder-[var(--md-sys-color-on-surface-variant)]"
-                                            />
-                                        ) : (
+                                    <div className="space-y-2">
+                                        {/* Email */}
+                                        <div className="flex items-center gap-3 p-3 bg-[var(--md-sys-color-surface-variant)] rounded-xl">
+                                            <Mail size={16} className="text-[var(--md-sys-color-on-surface-variant)]" />
                                             <span className="text-sm text-[var(--md-sys-color-on-surface)]">{selectedStudent.email || 'No email'}</span>
-                                        )}
-                                    </div>
+                                        </div>
 
-                                    {/* Phone */}
-                                    <div className="flex items-center gap-3 p-3 bg-[var(--md-sys-color-surface-variant)] rounded-xl">
-                                        <Phone size={16} className="text-[var(--md-sys-color-on-surface-variant)]" />
-                                        {isEditing ? (
-                                            <input
-                                                type="tel"
-                                                value={editForm.phone || ''}
-                                                onChange={e => setEditForm(prev => ({ ...prev, phone: e.target.value }))}
-                                                placeholder="Phone number"
-                                                className="flex-1 bg-transparent text-sm focus:outline-none text-[var(--md-sys-color-on-surface)] placeholder-[var(--md-sys-color-on-surface-variant)]"
-                                            />
-                                        ) : (
+                                        {/* Phone */}
+                                        <div className="flex items-center gap-3 p-3 bg-[var(--md-sys-color-surface-variant)] rounded-xl">
+                                            <Phone size={16} className="text-[var(--md-sys-color-on-surface-variant)]" />
                                             <span className="text-sm text-[var(--md-sys-color-on-surface)]">{selectedStudent.phone || 'No phone'}</span>
-                                        )}
-                                    </div>
+                                        </div>
 
-                                    {/* Date of Birth */}
-                                    <div className="flex items-center gap-3 p-3 bg-[var(--md-sys-color-surface-variant)] rounded-xl">
-                                        <Calendar size={16} className="text-[var(--md-sys-color-on-surface-variant)]" />
-                                        {isEditing ? (
-                                            <input
-                                                type="date"
-                                                value={editForm.dateOfBirth || ''}
-                                                onChange={e => setEditForm(prev => ({ ...prev, dateOfBirth: e.target.value }))}
-                                                className="flex-1 bg-transparent text-sm focus:outline-none text-[var(--md-sys-color-on-surface)]"
-                                            />
-                                        ) : (
+                                        {/* Date of Birth */}
+                                        <div className="flex items-center gap-3 p-3 bg-[var(--md-sys-color-surface-variant)] rounded-xl">
+                                            <Calendar size={16} className="text-[var(--md-sys-color-on-surface-variant)]" />
                                             <span className="text-sm text-[var(--md-sys-color-on-surface)]">{selectedStudent.dateOfBirth || 'No DOB'}</span>
-                                        )}
-                                    </div>
+                                        </div>
 
-                                    {/* Address */}
-                                    <div className="flex items-center gap-3 p-3 bg-[var(--md-sys-color-surface-variant)] rounded-xl">
-                                        <MapPin size={16} className="text-[var(--md-sys-color-on-surface-variant)]" />
-                                        {isEditing ? (
-                                            <input
-                                                value={editForm.address || ''}
-                                                onChange={e => setEditForm(prev => ({ ...prev, address: e.target.value }))}
-                                                placeholder="Address"
-                                                className="flex-1 bg-transparent text-sm focus:outline-none text-[var(--md-sys-color-on-surface)] placeholder-[var(--md-sys-color-on-surface-variant)]"
-                                            />
-                                        ) : (
+                                        {/* Address */}
+                                        <div className="flex items-center gap-3 p-3 bg-[var(--md-sys-color-surface-variant)] rounded-xl">
+                                            <MapPin size={16} className="text-[var(--md-sys-color-on-surface-variant)]" />
                                             <span className="text-sm text-[var(--md-sys-color-on-surface)]">{selectedStudent.address || 'No address'}</span>
-                                        )}
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
 
-                            {/* Guardian Info */}
-                            <div className="space-y-3">
-                                <h4 className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-wider">Guardian Information</h4>
+                                {/* Guardian Info */}
+                                <div className="space-y-3">
+                                    <h4 className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-wider">Guardian Information</h4>
 
-                                <div className="p-4 bg-[var(--md-sys-color-surface-variant)] rounded-xl border border-[var(--md-sys-color-outline)] space-y-3">
-                                    <div>
-                                        <label className="text-[10px] text-[var(--md-sys-color-secondary)] uppercase font-bold">Name</label>
-                                        {isEditing ? (
-                                            <input
-                                                value={editForm.guardianName || ''}
-                                                onChange={e => setEditForm(prev => ({ ...prev, guardianName: e.target.value }))}
-                                                placeholder="Guardian name"
-                                                className="w-full bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-lg px-3 py-2 text-sm mt-1 focus:ring-2 focus:ring-violet-500 text-[var(--md-sys-color-on-surface)]"
-                                            />
-                                        ) : (
+                                    <div className="p-4 bg-[var(--md-sys-color-surface-variant)] rounded-xl border border-[var(--md-sys-color-outline)] space-y-3">
+                                        <div>
+                                            <label className="text-[10px] text-[var(--md-sys-color-secondary)] uppercase font-bold">Name</label>
                                             <p className="text-sm font-medium text-[var(--md-sys-color-on-surface)]">{selectedStudent.guardianName || 'Not specified'}</p>
-                                        )}
-                                    </div>
-                                    <div>
-                                        <label className="text-[10px] text-[var(--md-sys-color-secondary)] uppercase font-bold">Phone</label>
-                                        {isEditing ? (
-                                            <input
-                                                value={editForm.guardianPhone || ''}
-                                                onChange={e => setEditForm(prev => ({ ...prev, guardianPhone: e.target.value }))}
-                                                placeholder="Guardian phone"
-                                                className="w-full bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-lg px-3 py-2 text-sm mt-1 focus:ring-2 focus:ring-violet-500 text-[var(--md-sys-color-on-surface)]"
-                                            />
-                                        ) : (
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] text-[var(--md-sys-color-secondary)] uppercase font-bold">Phone</label>
                                             <p className="text-sm font-medium text-[var(--md-sys-color-on-surface)]">{selectedStudent.guardianPhone || 'Not specified'}</p>
-                                        )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Quick Stats */}
+                                <div className="space-y-3">
+                                    <h4 className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-wider">Performance Summary</h4>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl border border-green-100 dark:border-green-900/30 text-center">
+                                            <p className={clsx(
+                                                "text-2xl font-bold",
+                                                selectedStudent.attendancePct >= 85 ? "text-green-600 dark:text-green-400" : "text-orange-500 dark:text-orange-400"
+                                            )}>
+                                                {selectedStudent.attendancePct}%
+                                            </p>
+                                            <p className="text-[10px] text-green-700 dark:text-green-400 font-bold uppercase">Attendance</p>
+                                        </div>
+                                        <div className="p-4 bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20 rounded-xl border border-violet-100 dark:border-violet-900/30 text-center">
+                                            <p className="text-2xl font-bold text-violet-600 dark:text-violet-400">{getStudentAvg(selectedStudent).toFixed(1)}</p>
+                                            <p className="text-[10px] text-violet-700 dark:text-violet-400 font-bold uppercase">Avg Score</p>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Quick Stats */}
-                            <div className="space-y-3">
-                                <h4 className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-wider">Performance Summary</h4>
+                            {/* Actions Footer */}
+                            <div className="p-4 border-t border-[var(--md-sys-color-outline)] bg-[var(--md-sys-color-surface)] space-y-3 pb-safe z-10 relative">
                                 <div className="grid grid-cols-2 gap-3">
-                                    <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl border border-green-100 dark:border-green-900/30 text-center">
-                                        <p className={clsx(
-                                            "text-2xl font-bold",
-                                            selectedStudent.attendancePct >= 85 ? "text-green-600 dark:text-green-400" : "text-orange-500 dark:text-orange-400"
-                                        )}>
-                                            {selectedStudent.attendancePct}%
-                                        </p>
-                                        <p className="text-[10px] text-green-700 dark:text-green-400 font-bold uppercase">Attendance</p>
-                                    </div>
-                                    <div className="p-4 bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20 rounded-xl border border-violet-100 dark:border-violet-900/30 text-center">
-                                        <p className="text-2xl font-bold text-violet-600 dark:text-violet-400">{getStudentAvg(selectedStudent).toFixed(1)}</p>
-                                        <p className="text-[10px] text-violet-700 dark:text-violet-400 font-bold uppercase">Avg Score</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Actions Footer */}
-                        <div className="p-4 border-t border-[var(--md-sys-color-outline)] bg-[var(--md-sys-color-surface-variant)] space-y-2">
-                            {isEditing ? (
-                                <div className="flex gap-2">
                                     <button
-                                        onClick={() => { setIsEditing(false); setEditForm({}); }}
-                                        className="flex-1 py-3 bg-[var(--md-sys-color-surface)] text-[var(--md-sys-color-on-surface)] rounded-xl font-bold text-sm hover:bg-[var(--md-sys-color-surface-variant)] transition-colors border border-[var(--md-sys-color-outline)]"
+                                        onClick={() => onNavigate('students', selectedStudent.id)}
+                                        className="w-full py-3 bg-[var(--md-sys-color-surface-variant)] text-[var(--md-sys-color-on-surface)] rounded-xl font-bold text-sm hover:bg-[var(--md-sys-color-surface-container-highest)] transition-colors flex flex-col items-center justify-center gap-1 border border-[var(--md-sys-color-outline)] shadow-sm hover:shadow-md"
                                     >
-                                        Cancel
+                                        <User size={18} />
+                                        Full Profile
                                     </button>
-                                    <button
-                                        onClick={handleSaveEdit}
-                                        className="flex-1 py-3 bg-violet-600 text-white rounded-xl font-bold text-sm hover:bg-violet-700 transition-colors flex items-center justify-center gap-2"
-                                    >
-                                        <Save size={16} />
-                                        Save
-                                    </button>
-                                </div>
-                            ) : (
-                                <>
                                     <button
                                         onClick={handleViewAnalytics}
-                                        className="w-full py-3 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-xl font-bold text-sm hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                                        className="w-full py-3 bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] rounded-xl font-bold text-sm hover:opacity-90 transition-all flex flex-col items-center justify-center gap-1 shadow-md hover:shadow-lg"
                                     >
-                                        <BarChart3 size={16} />
-                                        View Full Analytics
+                                        <BarChart3 size={18} />
+                                        Deep Insights
                                     </button>
+                                </div>
 
-                                    {user?.role !== 'viewer' && (
+                                {user?.role !== 'viewer' && (
+                                    <div className="flex gap-2 pt-3 mt-1 border-t border-[var(--md-sys-color-outline)] border-dashed">
                                         <button
                                             onClick={handleStartEdit}
-                                            className="w-full py-3 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] text-[var(--md-sys-color-on-surface)] rounded-xl font-bold text-sm hover:bg-[var(--md-sys-color-surface-variant)] transition-colors flex items-center justify-center gap-2"
+                                            className="flex-1 py-2 bg-transparent text-[var(--md-sys-color-secondary)] hover:text-[var(--md-sys-color-on-surface)] rounded-lg font-bold text-xs transition-colors flex items-center justify-center gap-2 hover:bg-[var(--md-sys-color-surface-variant)]"
                                         >
-                                            <Edit3 size={16} />
-                                            Edit Profile
+                                            <Edit3 size={14} />
+                                            Quick Edit
                                         </button>
-                                    )}
-
-                                    {user?.role === 'admin' && (
-                                        <button
-                                            onClick={() => {
-                                                if (window.confirm('Are you sure you want to delete this student? This action cannot be undone.')) {
-                                                    onDeleteStudent(selectedStudent.id);
-                                                    setSelectedStudent(null);
-                                                    showToast('Student deleted successfully', 'success');
-                                                }
-                                            }}
-                                            className="w-full py-3 bg-rose-50 border border-rose-200 text-rose-600 rounded-xl font-bold text-sm hover:bg-rose-100 transition-colors flex items-center justify-center gap-2"
-                                        >
-                                            <Trash2 size={16} />
-                                            Delete Student
-                                        </button>
-                                    )}
-                                </>
-                            )}
-                        </div>
-                    </motion.div>
+                                        {user?.role === 'admin' && (
+                                            <button
+                                                onClick={() => {
+                                                    if (window.confirm('Are you sure you want to delete this student? This action cannot be undone.')) {
+                                                        onDeleteStudent(selectedStudent.id);
+                                                        setSelectedStudent(null);
+                                                        showToast('Student deleted successfully', 'success');
+                                                    }
+                                                }}
+                                                className="flex-1 py-2 bg-transparent text-rose-500 hover:text-rose-700 rounded-lg font-bold text-xs transition-colors flex items-center justify-center gap-2 hover:bg-rose-50 dark:hover:bg-rose-900/20"
+                                            >
+                                                <Trash2 size={14} />
+                                                Delete
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </motion.div>
+                    </>
                 )}
             </AnimatePresence>
 
+
+            {/* Edit Student Modal */}
+            <EditStudentModal
+                isOpen={isEditing}
+                onClose={() => setIsEditing(false)}
+                student={selectedStudent}
+                onSave={handleSaveEdit}
+            />
+
             {/* Add Student Modal */}
+
             <AnimatePresence>
                 {showAddModal && (
                     <motion.div
@@ -678,10 +660,10 @@ const Students: React.FC<StudentsProps> = ({
                             initial={{ scale: 0.9, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
                             exit={{ scale: 0.9, opacity: 0 }}
-                            className="bg-[var(--md-sys-color-surface)] rounded-2xl shadow-2xl w-full max-w-md overflow-hidden"
+                            className="bg-[var(--md-sys-color-surface)] rounded-2xl shadow-2xl w-[calc(100%-2rem)] max-w-md max-h-[85vh] flex flex-col overflow-hidden"
                             onClick={e => e.stopPropagation()}
                         >
-                            <div className="p-6 bg-gradient-to-r from-violet-600 to-purple-600">
+                            <div className="p-6 bg-[var(--md-sys-color-primary)] flex-shrink-0">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-3">
                                         <div className="p-2 bg-white/20 rounded-lg">
@@ -689,13 +671,13 @@ const Students: React.FC<StudentsProps> = ({
                                         </div>
                                         <h3 className="text-xl font-bold text-white">Add New Student</h3>
                                     </div>
-                                    <button onClick={() => setShowAddModal(false)} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+                                    <button onClick={() => setShowAddModal(false)} aria-label="Close modal" title="Close modal" className="p-2 hover:bg-white/10 rounded-lg transition-colors">
                                         <X size={20} className="text-white" />
                                     </button>
                                 </div>
                             </div>
 
-                            <div className="p-6 space-y-4">
+                            <div className="p-6 space-y-4 overflow-y-auto">
                                 <div>
                                     <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase">Full Name *</label>
                                     <input
@@ -717,35 +699,55 @@ const Students: React.FC<StudentsProps> = ({
                                         />
                                     </div>
                                     <div>
-                                        <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase">Grade</label>
+                                        <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase">Level</label>
                                         <select
                                             value={newStudent.grade}
-                                            onChange={e => setNewStudent(prev => ({ ...prev, grade: parseInt(e.target.value) }))}
+                                            onChange={e => setNewStudent(prev => ({ ...prev, grade: e.target.value }))}
+                                            aria-label="Education Level"
+                                            title="Education Level"
                                             className="w-full mt-1 px-4 py-3 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl text-sm focus:ring-2 focus:ring-violet-500 text-[var(--md-sys-color-on-surface)]"
                                         >
-                                            {[5, 6, 7, 8].map(g => <option key={g} value={g}>Grade {g}</option>)}
+                                            {getLevelsForGroup(newStudent.studentGroup || 'Academy').map(lvl => <option key={lvl.id} value={lvl.id}>{lvl.label}</option>)}
                                         </select>
                                     </div>
                                 </div>
 
-                                <div>
-                                    <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase">Subject</label>
-                                    <div className="flex gap-3 mt-2">
-                                        {(['Solar', 'ICT'] as const).map(s => (
-                                            <button
-                                                key={s}
-                                                onClick={() => setNewStudent(prev => ({ ...prev, subject: s }))}
-                                                className={clsx(
-                                                    "flex-1 py-3 rounded-xl border-2 text-sm font-bold flex items-center justify-center gap-2 transition-all",
-                                                    newStudent.subject === s
-                                                        ? s === 'Solar' ? "border-orange-500 bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400" : "border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
-                                                        : "border-[var(--md-sys-color-outline)] hover:border-violet-200 text-[var(--md-sys-color-on-surface-variant)]"
-                                                )}
-                                            >
-                                                {s === 'Solar' ? <Zap size={16} /> : <Monitor size={16} />}
-                                                {s}
-                                            </button>
-                                        ))}
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase">Subject</label>
+                                        <div className="flex gap-2 mt-2">
+                                            {(['Solar', 'ICT'] as const).map(s => (
+                                                <button
+                                                    key={s}
+                                                    onClick={() => setNewStudent(prev => ({ ...prev, subject: s }))}
+                                                    className={clsx(
+                                                        "flex-1 py-3 rounded-xl border-2 text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all",
+                                                        newStudent.subject === s
+                                                            ? s === 'Solar' ? "border-orange-500 bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400" : "border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
+                                                            : "border-[var(--md-sys-color-outline)] hover:border-violet-200 text-[var(--md-sys-color-on-surface-variant)]"
+                                                    )}
+                                                >
+                                                    {s === 'Solar' ? <Zap size={14} /> : <Monitor size={14} />}
+                                                    {s}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase">Group *</label>
+                                        <select
+                                            value={newStudent.studentGroup}
+                                            onChange={e => setNewStudent(prev => ({ ...prev, studentGroup: e.target.value as any }))}
+                                            aria-label="Student Group"
+                                            title="Student Group"
+                                            className="w-full mt-2 px-4 py-3 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl text-sm focus:ring-2 focus:ring-violet-500 text-[var(--md-sys-color-on-surface)] h-[68px]"
+                                        >
+                                            <option value="Campus">Campus</option>
+                                            <option value="Academy">Academy</option>
+                                            <option value="CBC">CBC</option>
+                                            <option value="High School">High School</option>
+                                        </select>
                                     </div>
                                 </div>
 
@@ -801,6 +803,8 @@ const Students: React.FC<StudentsProps> = ({
                                             <select
                                                 value={newStudent.epraLicenseStatus || 'None'}
                                                 onChange={e => setNewStudent(prev => ({ ...prev, epraLicenseStatus: e.target.value as any }))}
+                                                aria-label="EPRA License"
+                                                title="EPRA License"
                                                 className="w-full mt-1 px-3 py-2 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-lg text-sm"
                                             >
                                                 <option value="None">None</option>
@@ -825,7 +829,7 @@ const Students: React.FC<StudentsProps> = ({
                             <div className="p-6 bg-[var(--md-sys-color-surface-variant)] border-t border-[var(--md-sys-color-outline)]">
                                 <button
                                     onClick={handleAddNewStudent}
-                                    className="w-full py-3 bg-gradient-to-r from-violet-600 to-purple-600 text-white rounded-xl font-bold text-sm hover:shadow-lg transition-all"
+                                    className="w-full py-3 bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] rounded-xl font-bold text-sm hover:shadow-lg transition-all"
                                 >
                                     Add Student
                                 </button>
@@ -834,7 +838,7 @@ const Students: React.FC<StudentsProps> = ({
                     </motion.div>
                 )}
             </AnimatePresence>
-        </div>
+        </div >
     );
 };
 

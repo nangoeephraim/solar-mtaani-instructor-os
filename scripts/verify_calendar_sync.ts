@@ -49,7 +49,7 @@ const mockSlots: ScheduleSlot[] = [
         startTime: '09:00',
         durationMinutes: 60,
         subject: 'Solar',
-        grade: 5,
+        grade: 'L3',
         status: 'Pending',
     }
 ];

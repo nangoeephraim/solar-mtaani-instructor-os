@@ -1,8 +1,9 @@
 import React, { useState, useCallback } from 'react';
-import { Student, Subject } from '../types';
+import { Student, Subject, StudentGroup } from '../types';
 import { X, UserPlus, AlertCircle, CheckCircle } from 'lucide-react';
 import clsx from 'clsx';
 import { studentSchema, validateWithSchema } from '../schemas/validation';
+import { STUDENT_GROUPS, getLevelsForGroup, getDefaultLevel } from '../constants/educationLevels';
 
 interface AddStudentModalProps {
     isOpen: boolean;
@@ -16,9 +17,10 @@ interface FieldErrors {
 
 const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClose, onAdd }) => {
     const [name, setName] = useState('');
-    const [grade, setGrade] = useState<number>(5);
+    const [grade, setGrade] = useState<string>('L3');
     const [lot, setLot] = useState('2025');
     const [subject, setSubject] = useState<Subject>('Solar');
+    const [studentGroup, setStudentGroup] = useState<StudentGroup>('Academy');
     const [errors, setErrors] = useState<FieldErrors>({});
     const [touched, setTouched] = useState<Set<string>>(new Set());
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -77,6 +79,7 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClose, onAd
             grade,
             lot,
             subject,
+            studentGroup: studentGroup,
             competencies: getDefaultCompetencies(subject),
             attendancePct: 100,
             attendanceHistory: [],
@@ -90,10 +93,10 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClose, onAd
     };
 
     const handleClose = () => {
-        setName('');
-        setGrade(5);
+        setGrade('L3');
         setLot('2025');
         setSubject('Solar');
+        setStudentGroup('Academy');
         setErrors({});
         setTouched(new Set());
         onClose();
@@ -174,19 +177,43 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClose, onAd
                         </div>
                     </div>
 
-                    {/* Grade & Lot */}
+                    {/* Student Group */}
+                    <div>
+                        <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-wider block mb-2">
+                            Student Group
+                        </label>
+                        <div className="flex bg-[var(--md-sys-color-surface-variant)] rounded-xl p-1">
+                            {STUDENT_GROUPS.map(grp => (
+                                <button
+                                    key={grp}
+                                    type="button"
+                                    onClick={() => { setStudentGroup(grp); setGrade(getDefaultLevel(grp)); }}
+                                    className={clsx(
+                                        "flex-1 py-2.5 text-xs font-bold rounded-lg transition-all",
+                                        studentGroup === grp
+                                            ? "bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] shadow"
+                                            : "text-[var(--md-sys-color-secondary)] hover:text-[var(--md-sys-color-on-surface)]"
+                                    )}
+                                >
+                                    {grp}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Level & Lot */}
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-wider block mb-2">
-                                Grade Level
+                                Education Level
                             </label>
                             <select
                                 value={grade}
-                                onChange={(e) => setGrade(Number(e.target.value))}
+                                onChange={(e) => setGrade(e.target.value)}
                                 className="w-full px-4 py-3 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl text-sm font-semibold text-[var(--md-sys-color-on-surface)] focus:outline-none focus:ring-2 focus:ring-[var(--md-sys-color-primary)]"
                             >
-                                {[5, 6, 7, 8, 9].map(g => (
-                                    <option key={g} value={g}>Grade {g}</option>
+                                {getLevelsForGroup(studentGroup).map(lvl => (
+                                    <option key={lvl.id} value={lvl.id}>{lvl.label}</option>
                                 ))}
                             </select>
                         </div>

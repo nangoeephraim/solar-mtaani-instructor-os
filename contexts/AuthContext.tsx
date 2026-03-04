@@ -1,354 +1,498 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { AuthUser, InviteCode, UserRole, SecurityLog, SecurityEventType } from '../types';
-import { hashPin, validatePin, generateSalt } from '../services/security';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { supabase } from '../services/supabase';
+import { RealtimeChannel } from '@supabase/supabase-js';
+import { AuthUser, UserRole } from '../types';
+import {
+    logSecurityEvent,
+    registerSession,
+    endSession,
+    startHeartbeat,
+    stopHeartbeat,
+    startInactivityTimer,
+    stopInactivityTimer,
+    checkLoginRateLimit,
+    recordFailedLogin,
+} from '../services/security';
 
 interface AuthContextType {
     user: AuthUser | null;
-    users: AuthUser[];
     isAuthenticated: boolean;
-    isLocked: boolean;
-    inviteCodes: InviteCode[];
-    securityLogs: SecurityLog[];
-    login: (pin: string) => Promise<boolean>;
-    logout: () => void;
-    lock: () => void;
-    unlock: (pin: string) => Promise<boolean>;
-    setupAdmin: (name: string, pin: string) => Promise<void>;
-    generateInvite: (role: UserRole) => string;
-    revokeInvite: (code: string) => void;
-    useInvite: (code: string, name: string, pin: string) => Promise<boolean>;
-    deleteUser: (userId: string) => void;
+    login: (email: string, pass: string) => Promise<boolean>;
+    logout: () => Promise<void>;
+    setupAdmin: (name: string, email: string, pass: string) => Promise<boolean>;
+    registerInstructor: (name: string, email: string, pass: string) => Promise<boolean>;
+    checkAdminExists: () => Promise<boolean>;
     isLoading: boolean;
     loginError: string | null;
+    sessionExpiresAt: string | null;
+    refreshSession: () => Promise<void>;
+    clearLoginError: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Rate Limiting Constants
-const MAX_ATTEMPTS = 5;
-const LOCKOUT_DURATION = 30 * 1000; // 30 seconds
+// Default session timeout in minutes
+const DEFAULT_SESSION_TIMEOUT = 30;
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<AuthUser | null>(null);
-    const [users, setUsers] = useState<AuthUser[]>([]);
-    const [inviteCodes, setInviteCodes] = useState<InviteCode[]>([]);
-    const [securityLogs, setSecurityLogs] = useState<SecurityLog[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [isLocked, setIsLocked] = useState(false);
-
-    // Rate Limiting State
-    const [failedAttempts, setFailedAttempts] = useState(0);
-    const [lockoutUntil, setLockoutUntil] = useState<number | null>(null);
     const [loginError, setLoginError] = useState<string | null>(null);
+    const [sessionExpiresAt, setSessionExpiresAt] = useState<string | null>(null);
+    const isInitialized = useRef(false);
 
-    // Load data on mount
-    useEffect(() => {
-        const storedUsers = localStorage.getItem('prism_users');
-        const storedInvites = localStorage.getItem('prism_invites');
-        const storedLogs = localStorage.getItem('prism_security_logs');
+    // Helper: build AuthUser from Supabase user — reads role from profiles table (server truth)
+    const buildAuthUser = useCallback(async (supabaseUser: any): Promise<AuthUser> => {
+        const metadata = supabaseUser.user_metadata || {};
 
-        if (storedUsers) setUsers(JSON.parse(storedUsers));
-        if (storedInvites) setInviteCodes(JSON.parse(storedInvites));
-        if (storedLogs) setSecurityLogs(JSON.parse(storedLogs));
+        // Fetch the authoritative role from the profiles table, NOT from client metadata
+        let role: UserRole = 'viewer';
+        let name = metadata.name || supabaseUser.email?.split('@')[0] || 'Unknown User';
+        let isActive = true;
+        let avatarUrl: string | undefined = undefined;
 
-        // Check for active session (simplified)
-        const session = sessionStorage.getItem('prism_session');
-        if (session && storedUsers) {
-            const foundUser = JSON.parse(storedUsers).find((u: AuthUser) => u.id === session);
-            if (foundUser) setUser(foundUser);
+        try {
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('role, name, is_active, avatar_url')
+                .eq('id', supabaseUser.id)
+                .single();
+
+            if (profile) {
+                role = (profile.role as UserRole) || 'viewer';
+                name = profile.name || name;
+                isActive = profile.is_active !== false; // default true if null
+                avatarUrl = profile.avatar_url || undefined;
+            }
+        } catch (err) {
+            console.warn('[Auth] Could not fetch profile, using defaults:', err);
         }
 
-        setIsLoading(false);
+        return {
+            id: supabaseUser.id,
+            email: supabaseUser.email || '',
+            name,
+            role,
+            createdAt: supabaseUser.created_at || new Date().toISOString(),
+            isActive,
+            avatarUrl,
+        };
     }, []);
 
-    // Save data on change
-    useEffect(() => {
-        if (!isLoading) {
-            localStorage.setItem('prism_users', JSON.stringify(users));
-            localStorage.setItem('prism_invites', JSON.stringify(inviteCodes));
-            localStorage.setItem('prism_security_logs', JSON.stringify(securityLogs));
+    // Start security services after login
+    const startSecurityServices = useCallback(async () => {
+        // Register server-side session
+        const sessionId = await registerSession(DEFAULT_SESSION_TIMEOUT);
+        if (sessionId) {
+            const expiry = new Date(Date.now() + DEFAULT_SESSION_TIMEOUT * 60 * 1000);
+            setSessionExpiresAt(expiry.toISOString());
         }
-    }, [users, inviteCodes, securityLogs, isLoading]);
 
-    // Auto-lock timer
+        // Start heartbeat to keep session alive
+        startHeartbeat();
+
+        // Start inactivity timer — auto-logout on prolonged idle
+        startInactivityTimer(DEFAULT_SESSION_TIMEOUT * 60 * 1000, async () => {
+            console.warn('[Security] Session expired due to inactivity');
+            await logSecurityEvent({
+                eventType: 'SESSION_EXPIRED',
+                severity: 'info',
+                details: { reason: 'inactivity_timeout' },
+            });
+            await performLogout();
+        });
+    }, []);
+
+    // Clean up security services on logout
+    const stopSecurityServices = useCallback(() => {
+        stopHeartbeat();
+        stopInactivityTimer();
+        setSessionExpiresAt(null);
+    }, []);
+
+    // Internal logout function (avoids stale closures)
+    const performLogout = useCallback(async () => {
+        try {
+            await logSecurityEvent({ eventType: 'LOGIN_SUCCESS', severity: 'info', details: { action: 'logout' } });
+        } catch {
+            // Don't block logout if logging fails
+        }
+        stopSecurityServices();
+        await endSession();
+        try {
+            await supabase.auth.signOut();
+        } catch (error) {
+            console.error('[Auth] Error signing out:', error);
+        }
+        setUser(null);
+    }, [stopSecurityServices]);
+
+    // Initial session check — relies solely on onAuthStateChange to avoid race conditions.
+    // Supabase fires INITIAL_SESSION synchronously when the listener is registered,
+    // so there is no need for a separate getSession() call.
     useEffect(() => {
-        let timeout: NodeJS.Timeout;
+        if (isInitialized.current) return;
+        isInitialized.current = true;
 
-        const resetTimer = () => {
-            if (isLocked) return;
-            clearTimeout(timeout);
-            if (user) {
-                // Lock after 15 minutes of inactivity
-                timeout = setTimeout(() => setIsLocked(true), 15 * 60 * 1000);
+        // Safety timeout: if onAuthStateChange never fires (SDK issue), stop loading
+        const safetyTimeout = setTimeout(() => {
+            setIsLoading(prev => {
+                if (prev) console.warn('[Auth] Safety timeout: forcing loading=false after 5s');
+                return false;
+            });
+        }, 5000);
+
+        // Listen for auth state changes (initial session, sign-in, sign-out, etc.)
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+            clearTimeout(safetyTimeout);
+
+            if (session?.user) {
+                try {
+                    // Race buildAuthUser against a 4-second deadline so loading always clears
+                    const authUser = await Promise.race([
+                        buildAuthUser(session.user),
+                        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('profile_timeout')), 4000))
+                    ]);
+
+                    // Block inactive users
+                    if (!authUser.isActive) {
+                        console.warn('[Auth] User account is blocked');
+                        setUser(null);
+                        stopSecurityServices();
+                        setIsLoading(false);
+                        await supabase.auth.signOut();
+                        return;
+                    }
+
+                    setUser(authUser);
+                    setIsLoading(false); // Clear loading IMMEDIATELY after setting user
+
+                    // Start security services non-blocking, only on real sign-in events
+                    if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+                        startSecurityServices().catch(err =>
+                            console.warn('[Auth] Security services failed to start:', err)
+                        );
+                    }
+
+                    // On TOKEN_REFRESHED, re-sync role from profiles (eventually consistent)
+                    if (event === 'TOKEN_REFRESHED') {
+                        buildAuthUser(session.user).then(freshUser => {
+                            setUser(freshUser);
+                        }).catch(() => { /* silent — current user is still usable */ });
+                    }
+                } catch (err: any) {
+                    if (err?.message === 'profile_timeout') {
+                        // Profile query timed out — use metadata role (signed by Supabase at signup)
+                        // This preserves admin/instructor roles instead of wrongly defaulting to viewer
+                        console.warn('[Auth] Profile fetch timed out, using metadata role');
+                        const metadata = session.user.user_metadata || {};
+                        const metadataRole = (metadata.role as UserRole) || 'viewer';
+                        setUser({
+                            id: session.user.id,
+                            email: session.user.email || '',
+                            name: metadata.name || session.user.email?.split('@')[0] || 'User',
+                            role: metadataRole,
+                            createdAt: session.user.created_at || new Date().toISOString(),
+                            isActive: true,
+                        });
+                    } else {
+                        console.error('[Auth] Failed to build auth user:', err);
+                        setUser(null);
+                    }
+                    setIsLoading(false);
+                }
+            } else {
+                setUser(null);
+                stopSecurityServices();
+                setIsLoading(false);
             }
-        };
-
-        const events = ['mousedown', 'mousemove', 'keydown', 'scroll', 'touchstart'];
-        events.forEach(event => document.addEventListener(event, resetTimer));
-
-        resetTimer();
+        });
 
         return () => {
-            clearTimeout(timeout);
-            events.forEach(event => document.removeEventListener(event, resetTimer));
+            clearTimeout(safetyTimeout);
+            subscription.unsubscribe();
+            stopSecurityServices();
         };
-    }, [user, isLocked]);
+    }, [buildAuthUser, startSecurityServices, stopSecurityServices]);
 
-    const logEvent = (
-        event: SecurityEventType,
-        severity: 'info' | 'warning' | 'danger',
-        details?: string,
-        userId?: string,
-        userName?: string
-    ) => {
-        const newLog: SecurityLog = {
-            id: crypto.randomUUID(),
-            timestamp: new Date().toISOString(),
-            event,
-            severity,
-            details,
-            userId: userId || user?.id,
-            userName: userName || user?.name
+    // ─── Realtime Profile Subscription ───
+    // Subscribe to changes on the current user's profile row.
+    // This makes role promotions, name changes, and block/unblock instant.
+    useEffect(() => {
+        if (!user?.id) return;
+
+        const channelName = `prism-profile:${user.id}`;
+        const channel: RealtimeChannel = supabase
+            .channel(channelName)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'profiles',
+                    filter: `id=eq.${user.id}`,
+                },
+                (payload) => {
+                    const updated = payload.new as any;
+                    if (!updated) return;
+
+                    console.log('[Auth] Profile change detected via realtime:', updated);
+
+                    // If user was blocked, force logout
+                    if (updated.is_active === false) {
+                        console.warn('[Auth] User has been blocked. Forcing logout.');
+                        performLogout();
+                        return;
+                    }
+
+                    // Update user state with new role/name/avatar
+                    setUser(prev => {
+                        if (!prev) return prev;
+                        return {
+                            ...prev,
+                            role: (updated.role as UserRole) || prev.role,
+                            name: updated.name || prev.name,
+                            avatarUrl: updated.avatar_url ?? prev.avatarUrl,
+                            isActive: updated.is_active !== false,
+                        };
+                    });
+                }
+            )
+            .subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                    console.log('[Auth] Subscribed to profile changes for', user.id);
+                }
+            });
+
+        return () => {
+            supabase.removeChannel(channel).catch(() => { });
         };
-        setSecurityLogs(prev => [newLog, ...prev]);
-        return newLog;
+    }, [user?.id, performLogout]);
+
+    // Check if an admin account exists (calls the Supabase RPC)
+    const checkAdminExists = async (): Promise<boolean> => {
+        try {
+            const { data, error } = await supabase.rpc('check_admin_exists');
+            if (error) {
+                console.warn('[Auth] check_admin_exists RPC failed:', error);
+                return true; // Fail safe: assume admin exists to prevent rogue setup
+            }
+            return data === true;
+        } catch {
+            return true; // Fail safe
+        }
     };
 
-    const login = async (pin: string): Promise<boolean> => {
+    const login = async (email: string, pass: string): Promise<boolean> => {
         setLoginError(null);
-
-        // Check Lockout
-        if (lockoutUntil && Date.now() < lockoutUntil) {
-            const remaining = Math.ceil((lockoutUntil - Date.now()) / 1000);
-            setLoginError(`Too many failed attempts. Try again in ${remaining}s`);
-            return false;
-        }
-
-        // 1. Find potential user by checking if ANY user's pin matches
-        // This is tricky with hashing. We iterate all users.
-        // Optimization: In a real app we'd ID first, but here we only have PIN.
-        // We will try to validate against ALL users.
-
-        let foundUser: AuthUser | undefined;
-        let migrationNeeded = false;
-
-        for (const u of users) {
-            const result = await validatePin(pin, u);
-            if (result.isValid) {
-                foundUser = u;
-                migrationNeeded = result.requiresMigration;
-                break;
-            }
-        }
-
-        if (foundUser) {
-            // Success
-            setUser(foundUser);
-            setIsLocked(false);
-            setFailedAttempts(0);
-            setLockoutUntil(null);
-            sessionStorage.setItem('prism_session', foundUser.id);
-
-            // Log Success
-            logEvent('LOGIN_SUCCESS', 'info', 'User logged in successfully', foundUser.id, foundUser.name);
-
-            // Handle Lazy Migration
-            let updatedUsers = [...users];
-            if (migrationNeeded) {
-                const newSalt = generateSalt();
-                const newHash = await hashPin(pin, newSalt);
-
-                updatedUsers = updatedUsers.map(u =>
-                    u.id === foundUser!.id
-                        ? { ...u, pin: newHash, salt: newSalt, lastLogin: new Date().toISOString() }
-                        : u
-                );
-
-                logEvent('MIGRATION_SUCCESS', 'info', 'User security upgraded to SHA-256', foundUser.id, foundUser.name);
-
-                // Update local user state specifically to ensure consistency
-                setUser({ ...foundUser, pin: newHash, salt: newSalt, lastLogin: new Date().toISOString() });
-            } else {
-                updatedUsers = updatedUsers.map(u =>
-                    u.id === foundUser!.id
-                        ? { ...u, lastLogin: new Date().toISOString() }
-                        : u
-                );
+        try {
+            // Step 1: Check rate limit before attempting login
+            const rateLimit = await checkLoginRateLimit(email);
+            if (!rateLimit.isAllowed) {
+                if (rateLimit.isLocked) {
+                    const minutes = Math.ceil(rateLimit.retryAfterSeconds / 60);
+                    setLoginError(`Account temporarily locked. Try again in ${minutes} minute${minutes > 1 ? 's' : ''}.`);
+                } else {
+                    setLoginError('Too many attempts. Please wait before trying again.');
+                }
+                return false;
             }
 
-            setUsers(updatedUsers);
+            // Step 2: Attempt sign-in
+            const { data, error } = await supabase.auth.signInWithPassword({
+                email,
+                password: pass,
+            });
+
+            if (error) {
+                console.error('[Auth] Login failed:', error);
+
+                // Record the failed attempt server-side
+                await recordFailedLogin(email);
+
+                if (error.message.includes('Invalid login credentials')) {
+                    setLoginError('Invalid email or password.');
+                } else if (error.message.includes('Too many requests') || error.status === 429) {
+                    setLoginError('Too many failed attempts. Try again later.');
+                } else {
+                    setLoginError(`Sign-in failed: ${error.message}`);
+                }
+                return false;
+            }
+
+            // Step 3: Check if user is blocked
+            if (data.user) {
+                const authUser = await buildAuthUser(data.user);
+
+                if (!authUser.isActive) {
+                    setLoginError('Your account has been blocked by the administrator. Contact your admin for access.');
+                    await supabase.auth.signOut();
+                    return false;
+                }
+
+                setUser(authUser);
+            }
+
+            // Step 4: Log successful login & start security services
+            await logSecurityEvent({
+                eventType: 'LOGIN_SUCCESS',
+                severity: 'info',
+                details: { method: 'email_password' },
+            });
+
+            await startSecurityServices();
+
             return true;
-        }
-
-        // Failure
-        const newAttempts = failedAttempts + 1;
-        setFailedAttempts(newAttempts);
-
-        if (newAttempts >= MAX_ATTEMPTS) {
-            setLockoutUntil(Date.now() + LOCKOUT_DURATION);
-            setLoginError(`Too many failed attempts. Locked for 30s.`);
-            logEvent('LOCKOUT_TRIGGERED', 'danger', `Temporary lockout after ${newAttempts} failed attempts`);
-        } else {
-            setLoginError(`Incorrect PIN. ${MAX_ATTEMPTS - newAttempts} attempts remaining.`);
-            logEvent('LOGIN_FAIL', 'warning', `Failed login attempt (${newAttempts}/${MAX_ATTEMPTS})`);
-        }
-
-        return false;
-    };
-
-    const logout = () => {
-        if (user) logEvent('LOGOUT', 'info', 'User logged out');
-        setUser(null);
-        setIsLocked(false);
-        sessionStorage.removeItem('prism_session');
-    };
-
-    const lock = () => setIsLocked(true);
-
-    const unlock = async (pin: string) => {
-        if (!user) return false;
-
-        if (lockoutUntil && Date.now() < lockoutUntil) {
-            const remaining = Math.ceil((lockoutUntil - Date.now()) / 1000);
-            setLoginError(`Locked. Wait ${remaining}s`);
+        } catch (error: any) {
+            console.error('[Auth] Unexpected login error:', error);
+            setLoginError(`Sign-in failed: ${error.message || 'Unknown error'}`);
             return false;
         }
+    };
 
-        const result = await validatePin(pin, user);
+    const logout = async () => {
+        await performLogout();
+    };
 
-        if (result.isValid) {
-            setIsLocked(false);
-            setFailedAttempts(0);
-            setLoginError(null);
-            return true;
+    const refreshSession = async () => {
+        try {
+            const { data, error } = await supabase.auth.refreshSession();
+            if (error) {
+                console.error('[Auth] Session refresh failed:', error);
+                return;
+            }
+            if (data.session?.user) {
+                const authUser = await buildAuthUser(data.session.user);
+                setUser(authUser);
+            }
+        } catch (error) {
+            console.error('[Auth] Unexpected refresh error:', error);
         }
-
-        // Handle unlock failure same as login failure for security
-        const newAttempts = failedAttempts + 1;
-        setFailedAttempts(newAttempts);
-        if (newAttempts >= MAX_ATTEMPTS) {
-            setLockoutUntil(Date.now() + LOCKOUT_DURATION);
-            setLoginError(`Too many attempts. Locked for 30s.`);
-        }
-
-        return false;
     };
 
-    const setupAdmin = async (name: string, pin: string) => {
-        const salt = generateSalt();
-        const hashedPin = await hashPin(pin, salt);
+    const setupAdmin = async (name: string, email: string, pass: string): Promise<boolean> => {
+        setLoginError(null);
+        try {
+            // SECURITY: Check if admin already exists before allowing setup
+            const adminExists = await checkAdminExists();
+            if (adminExists) {
+                setLoginError('An administrator account already exists. Please sign in or register as an instructor.');
+                return false;
+            }
 
-        const newAdmin: AuthUser = {
-            id: `admin_${Date.now()}`,
-            name,
-            role: 'admin',
-            pin: hashedPin,
-            salt,
-            lastLogin: new Date().toISOString()
-        };
+            const { data, error } = await supabase.auth.signUp({
+                email,
+                password: pass,
+                options: {
+                    data: {
+                        name: name,
+                        role: 'admin',
+                    },
+                },
+            });
 
-        setUsers([newAdmin]);
-        setUser(newAdmin);
-        setIsLocked(false);
-        sessionStorage.setItem('prism_session', newAdmin.id);
+            if (error) {
+                console.error('[Auth] Admin setup failed:', error);
+                if (error.message.includes('User already registered') || error.message.includes('email is already connected')) {
+                    setLoginError('That email is already registered.');
+                } else if (error.message.includes('Password should be at least')) {
+                    setLoginError('Password should be at least 6 characters.');
+                } else {
+                    setLoginError(`Setup failed: ${error.message}`);
+                }
+                return false;
+            }
 
-        logEvent('ADMIN_SETUP', 'info', 'Initial admin account created', newAdmin.id, newAdmin.name);
-    };
+            if (data.session) {
+                // Log the admin creation event
+                await logSecurityEvent({
+                    eventType: 'USER_CREATED',
+                    severity: 'info',
+                    details: { role: 'admin', method: 'initial_setup' },
+                });
+                await startSecurityServices();
+                return true;
+            } else if (data.user) {
+                setLoginError('Account created. Please verify your email before logging in.');
+                return false;
+            }
 
-    const generateInvite = (role: UserRole) => {
-        if (user?.role !== 'admin') throw new Error('Unauthorized');
-
-        const code = `PRISM-${Math.random().toString(36).substr(2, 4).toUpperCase()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
-        const newInvite: InviteCode = {
-            code,
-            role,
-            createdBy: user.id,
-            createdAt: new Date().toISOString(),
-            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours
-            status: 'active'
-        };
-
-        setInviteCodes(prev => [...prev, newInvite]);
-        logEvent('INVITE_GENERATED', 'info', `Generated invite for role: ${role}`, user.id, user.name);
-        return code;
-    };
-
-    const useInvite = async (code: string, name: string, pin: string) => {
-        const invite = inviteCodes.find(i => i.code === code && i.status === 'active');
-        if (!invite) {
-            logEvent('LOGIN_FAIL', 'warning', `Attempted use of invalid invite code: ${code}`);
+            return false;
+        } catch (error: any) {
+            console.error('[Auth] Unexpected setupAdmin error:', error);
+            setLoginError(`Setup failed: ${error.message || 'Unknown error'}`);
             return false;
         }
+    };
 
-        if (new Date(invite.expiresAt) < new Date()) {
-            setInviteCodes(prev => prev.map(i => i.code === code ? { ...i, status: 'expired' } : i));
-            logEvent('LOGIN_FAIL', 'warning', `Attempted use of expired invite code: ${code}`);
+    // Register a new instructor (signs up as viewer, admin promotes later)
+    const registerInstructor = async (name: string, email: string, pass: string): Promise<boolean> => {
+        setLoginError(null);
+        try {
+            const { data, error } = await supabase.auth.signUp({
+                email,
+                password: pass,
+                options: {
+                    data: {
+                        name: name,
+                        role: 'viewer', // Start as viewer, admin promotes later
+                    },
+                },
+            });
+
+            if (error) {
+                console.error('[Auth] Registration failed:', error);
+                if (error.message.includes('User already registered') || error.message.includes('email is already connected')) {
+                    setLoginError('That email is already registered. Please sign in instead.');
+                } else if (error.message.includes('Password should be at least')) {
+                    setLoginError('Password should be at least 6 characters.');
+                } else {
+                    setLoginError(`Registration failed: ${error.message}`);
+                }
+                return false;
+            }
+
+            if (data.session) {
+                await logSecurityEvent({
+                    eventType: 'USER_CREATED',
+                    severity: 'info',
+                    details: { role: 'viewer', method: 'self_registration' },
+                });
+                await startSecurityServices();
+                return true;
+            } else if (data.user) {
+                setLoginError('Account created! Please verify your email before logging in.');
+                return false;
+            }
+
+            return false;
+        } catch (error: any) {
+            console.error('[Auth] Unexpected registration error:', error);
+            setLoginError(`Registration failed: ${error.message || 'Unknown error'}`);
             return false;
         }
-
-        const salt = generateSalt();
-        const hashedPin = await hashPin(pin, salt);
-
-        const newUser: AuthUser = {
-            id: `user_${Date.now()}`,
-            name,
-            role: invite.role,
-            pin: hashedPin,
-            salt,
-            lastLogin: new Date().toISOString()
-        };
-
-        setUsers(prev => [...prev, newUser]);
-        setUser(newUser);
-        setIsLocked(false);
-        sessionStorage.setItem('prism_session', newUser.id);
-
-        // Mark invite as used
-        setInviteCodes(prev => prev.map(i => i.code === code ? { ...i, status: 'used', usedBy: newUser.id } : i));
-
-        logEvent('INVITE_USED', 'info', `User joined via invite ${code}`, newUser.id, newUser.name);
-
-        return true;
     };
 
-    const deleteUser = (userId: string) => {
-        if (user?.role !== 'admin') return;
-
-        const targetUser = users.find(u => u.id === userId);
-        setUsers(prev => prev.filter(u => u.id !== userId));
-
-        logEvent('USER_DELETED', 'warning', `Deleted user: ${targetUser?.name || userId}`, user.id, user.name);
+    const clearLoginError = () => {
+        setLoginError(null);
     };
 
-    const revokeInvite = (code: string) => {
-        if (user?.role !== 'admin') return;
-        setInviteCodes(prev => prev.map(i => i.code === code ? { ...i, status: 'revoked' } : i));
-        logEvent('INVITE_REVOKED', 'warning', `Revoked invite: ${code}`, user.id, user.name);
+    const value = {
+        user,
+        isAuthenticated: !!user,
+        login,
+        logout,
+        setupAdmin,
+        registerInstructor,
+        checkAdminExists,
+        isLoading,
+        loginError,
+        sessionExpiresAt,
+        refreshSession,
+        clearLoginError,
     };
 
-    return (
-        <AuthContext.Provider value={{
-            user,
-            users,
-            inviteCodes,
-            securityLogs,
-            isAuthenticated: !!user,
-            isLocked,
-            login,
-            logout,
-            lock,
-            unlock,
-            setupAdmin,
-            generateInvite,
-            revokeInvite,
-            useInvite,
-            deleteUser,
-            isLoading,
-            loginError
-        }}>
-            {children}
-        </AuthContext.Provider>
-    );
+    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export const useAuth = () => {
@@ -358,4 +502,3 @@ export const useAuth = () => {
     }
     return context;
 };
-
