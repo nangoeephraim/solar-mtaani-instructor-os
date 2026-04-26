@@ -777,7 +777,7 @@ export default function Communications({ data, onUpdateAppData }: Communications
                                         {activeMessages.filter(m => !m.isDeleted).map((msg, i, arr) => (
                                             <React.Fragment key={msg.id}>
                                                 {(i === 0 || !isSameDay(msg.timestamp, arr[i - 1].timestamp)) && <DateSeparator date={msg.timestamp} />}
-                                                <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }} className="relative glass-card p-5 group/msg">
+                                                <div className="relative glass-card p-5 group/msg animate-fade-in" style={{ animationFillMode: 'both' }}>
                                                     {renderMsgActions(msg)}
                                                     {renderEmojiPicker(msg.id)}
                                                     {msg.isPinned && <div className="absolute top-3 right-3"><Pin size={12} style={{ color: 'var(--google-yellow)' }} /></div>}
@@ -806,7 +806,7 @@ export default function Communications({ data, onUpdateAppData }: Communications
                                                         <div className="text-sm leading-relaxed" style={{ color: 'var(--md-sys-color-on-surface)' }}>{renderMarkdown(msg.content)}</div>
                                                     )}
                                                     {renderReactions(msg)}
-                                                </motion.div>
+                                                </div>
                                             </React.Fragment>
                                         ))}
                                     </div>

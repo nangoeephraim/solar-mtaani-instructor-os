@@ -65,7 +65,7 @@ const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate }) => {
                             animate={{ y: 0, opacity: 1, scale: 1 }}
                             exit={{ y: '100%', opacity: 0, scale: 0.95 }}
                             transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                            className="fixed bottom-24 left-4 right-4 z-50 lg:hidden bg-[var(--glass-bg)] backdrop-blur-3xl rounded-3xl shadow-2xl border border-[var(--md-sys-color-outline-variant)] overflow-hidden safe-area-bottom hide-on-keyboard"
+                            className="fixed bottom-24 left-4 right-4 z-50 lg:hidden bg-[var(--glass-bg)] backdrop-blur-md rounded-3xl shadow-xl border border-[var(--md-sys-color-outline-variant)] overflow-hidden safe-area-bottom hide-on-keyboard"
                         >
                             <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--md-sys-color-outline)]">
                                 <h3 className="text-sm font-google font-bold text-[var(--md-sys-color-on-surface)]">More</h3>
@@ -105,7 +105,7 @@ const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate }) => {
                 transition={{ type: "spring", stiffness: 400, damping: 30 }}
                 className="fixed bottom-4 left-4 right-4 z-50 lg:hidden safe-area-bottom hide-on-keyboard"
             >
-                <div className="flex items-center justify-around px-2 py-2 bg-[var(--glass-bg)] backdrop-blur-[32px] rounded-full shadow-xl shadow-indigo-500/10 border border-[var(--md-sys-color-outline-variant)]">
+                <div className="flex items-center justify-around px-2 py-2 bg-[var(--glass-bg)] backdrop-blur-md rounded-full shadow-xl shadow-indigo-500/10 border border-[var(--md-sys-color-outline-variant)]">
                     {visiblePrimary.map((item) => {
                         const isActive = currentView === item.id;
                         return (

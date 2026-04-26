@@ -484,6 +484,21 @@ h6,
 
 /* Mobile */
 @media (max-width: 640px) {
+  :root {
+    --glass-blur: 12px;
+    --shadow-elevation-1: 0 2px 4px -1px rgba(0, 0, 0, 0.05);
+    --shadow-elevation-2: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    --shadow-elevation-3: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+  }
+
+  .glass-card:hover {
+    transform: none;
+    box-shadow: var(--shadow-elevation-1);
+  }
+
+  .glass-panel:hover {
+    box-shadow: var(--shadow-elevation-1);
+  }
 
   button,
   a,
