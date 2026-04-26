@@ -1,4 +1,4 @@
-import React, { useState, useEffect, Suspense, lazy, useRef } from 'react';
+import React, { useState, useEffect, Suspense, lazy, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
 import { fetchAppData, addStudent, deleteStudent, addScheduleSlot, deleteScheduleSlot, updateScheduleSlot, addFeePayment, addFeeStructure, deleteFeePayment, deleteFeeStructure } from './services/storageService';
@@ -86,6 +86,18 @@ class ErrorBoundary extends React.Component<
   }
 }
 
+// Role hierarchy for view access control
+const ROLE_LEVEL: Record<string, number> = { admin: 3, instructor: 2, viewer: 1 };
+
+// Restricted views mapped to minimum role level required
+const VIEW_MIN_ROLE: Record<string, number> = {
+  analytics: 3,         // admin only
+  fees: 3,              // admin only
+  instructors: 3,       // admin only
+  'student-analytics': 2, // instructor+
+  assessment: 2,        // instructor+
+};
+
 const AppContent: React.FC = () => {
   const [data, setData] = useState<AppData | null>(null);
   const [currentView, setCurrentView] = useState('dashboard');
@@ -102,18 +114,7 @@ const AppContent: React.FC = () => {
   useEffect(() => { currentViewRef.current = currentView; }, [currentView]);
   useEffect(() => { userRef.current = user; }, [user]);
 
-  // Role hierarchy for view access control
-  const ROLE_LEVEL: Record<string, number> = { admin: 3, instructor: 2, viewer: 1 };
   const userLevel = ROLE_LEVEL[user?.role || 'viewer'] || 1;
-
-  // Restricted views mapped to minimum role level required
-  const VIEW_MIN_ROLE: Record<string, number> = {
-    analytics: 3,         // admin only
-    fees: 3,              // admin only
-    instructors: 3,       // admin only
-    'student-analytics': 2, // instructor+
-    assessment: 2,        // instructor+
-  };
 
   // Redirect guard: if current view is restricted, bounce to dashboard
   useEffect(() => {
@@ -124,7 +125,7 @@ const AppContent: React.FC = () => {
   }, [currentView, userLevel]);
 
   // Navigation handler with optional student ID
-  const handleNavigate = (view: string, studentId?: number) => {
+  const handleNavigate = useCallback((view: string, studentId?: number) => {
     // Check permission before navigating
     const minLevel = VIEW_MIN_ROLE[view] || 1;
     if (userLevel < minLevel) {
@@ -135,7 +136,7 @@ const AppContent: React.FC = () => {
     if (studentId !== undefined) {
       setSelectedStudentId(studentId);
     }
-  };
+  }, [userLevel, showToast]);
 
   // Fetch initial data asynchronously from Supabase
   useEffect(() => {
@@ -537,9 +538,9 @@ const AppContent: React.FC = () => {
   }, [!!data]); // Run once when data changes from falsy to truthy
 
   // Save handler wrapper (No longer saves to localStorage directly)
-  const saveDataToState = (newData: AppData) => {
+  const saveDataToState = useCallback((newData: AppData) => {
     setData(newData);
-  };
+  }, []);
 
   const handleUpdateStudent = async (updatedStudent: Student, notify = false) => {
     if (!data) return;

@@ -161,4 +161,9 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, data }) => {
   );
 };
 
-export default Sidebar;
+export default React.memo(Sidebar, (prevProps, nextProps) => {
+  return prevProps.currentView === nextProps.currentView &&
+         prevProps.onNavigate === nextProps.onNavigate &&
+         prevProps.data?.communications?.channels === nextProps.data?.communications?.channels &&
+         prevProps.data?.communications?.messages === nextProps.data?.communications?.messages;
+});

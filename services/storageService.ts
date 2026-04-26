@@ -282,73 +282,167 @@ export const deleteScheduleSlot = async (slotId: string): Promise<boolean> => {
 
 // --- CHAT & COMMUNICATIONS ---
 
-export const addChatMessage = async (data: AppData, payload: Omit<ChatMessage, 'id' | 'timestamp' | 'editedAt' | 'reactions' | 'isPinned' | 'isDeleted'>): Promise<AppData> => {
-  const { error } = await supabase.from('chat_messages').insert({
+export const addChatMessage = async (data: AppData, payload: Omit<ChatMessage, 'timestamp' | 'editedAt' | 'reactions' | 'isPinned' | 'isDeleted'> & { id?: string }): Promise<AppData> => {
+  const id = payload.id || crypto.randomUUID();
+  const timestamp = new Date().toISOString();
+  
+  // Create an optimistic message
+  const optimisticMsg: ChatMessage = {
+    id,
+    channelId: payload.channelId,
+    senderId: payload.senderId,
+    senderName: payload.senderName,
+    senderRole: payload.senderRole || 'viewer', // Add fallback
+    content: payload.content,
+    replyToId: payload.replyToId,
+    timestamp: timestamp,
+    isPinned: false,
+    isDeleted: false,
+    reactions: {},
+    attachments: payload.attachments || []
+  };
+
+  // Construct optimistic data
+  const newData = {
+    ...data,
+    communications: {
+      ...data.communications,
+      messages: {
+        ...data.communications.messages,
+        [payload.channelId]: [...(data.communications.messages[payload.channelId] || []), optimisticMsg]
+      }
+    }
+  };
+
+  // Perform background DB insert (don't block returning optimistic UI)
+  supabase.from('chat_messages').insert({
+    id,
     channel_id: payload.channelId,
     content: payload.content,
     sender_id: payload.senderId,
-    sender_name: payload.senderName, // We can store this or join it later
+    sender_name: payload.senderName,
     reply_to_id: payload.replyToId,
-    attachments: payload.attachments || [] // ADDED
+    attachments: payload.attachments || []
+  }).then(({ error }) => {
+    if (error) console.error("Error sending message:", error);
   });
-  if (error) console.error("Error sending message:", error);
-  // We return data unmodified because the realtime subscription handles the state update in App.tsx
-  return data;
+
+  return newData;
 };
 
 export const editChatMessage = async (data: AppData, channelId: string, messageId: string, newContent: string): Promise<AppData> => {
-  const { error } = await supabase.from('chat_messages').update({
+  const newData = {
+    ...data,
+    communications: {
+      ...data.communications,
+      messages: {
+        ...data.communications.messages,
+        [channelId]: (data.communications.messages[channelId] || []).map(msg => 
+          msg.id === messageId ? { ...msg, content: newContent, editedAt: new Date().toISOString() } : msg
+        )
+      }
+    }
+  };
+
+  supabase.from('chat_messages').update({
     content: newContent,
     edited_at: new Date().toISOString()
-  }).eq('id', messageId);
-  if (error) console.error("Error editing message:", error);
-  return data;
+  }).eq('id', messageId).then(({ error }) => {
+    if (error) console.error("Error editing message:", error);
+  });
+
+  return newData;
 };
 
 export const softDeleteChatMessage = async (data: AppData, channelId: string, messageId: string): Promise<AppData> => {
-  const { error } = await supabase.from('chat_messages').update({
+  const newData = {
+    ...data,
+    communications: {
+      ...data.communications,
+      messages: {
+        ...data.communications.messages,
+        [channelId]: (data.communications.messages[channelId] || []).map(msg => 
+          msg.id === messageId ? { ...msg, isDeleted: true } : msg
+        )
+      }
+    }
+  };
+
+  supabase.from('chat_messages').update({
     is_deleted: true
-  }).eq('id', messageId);
-  if (error) console.error("Error deleting message:", error);
-  return data;
+  }).eq('id', messageId).then(({ error }) => {
+    if (error) console.error("Error deleting message:", error);
+  });
+
+  return newData;
 };
 
 export const togglePinMessage = async (data: AppData, channelId: string, messageId: string): Promise<AppData> => {
-  // Let's fetch current status first to toggle
-  const { data: msg } = await supabase.from('chat_messages').select('is_pinned').eq('id', messageId).single();
-  if (msg) {
-    const { error } = await supabase.from('chat_messages').update({
-      is_pinned: !msg.is_pinned
-    }).eq('id', messageId);
+  let isPinned = false;
+  const newData = {
+    ...data,
+    communications: {
+      ...data.communications,
+      messages: {
+        ...data.communications.messages,
+        [channelId]: (data.communications.messages[channelId] || []).map(msg => {
+          if (msg.id === messageId) {
+            isPinned = !msg.isPinned;
+            return { ...msg, isPinned };
+          }
+          return msg;
+        })
+      }
+    }
+  };
+
+  supabase.from('chat_messages').update({
+    is_pinned: isPinned
+  }).eq('id', messageId).then(({ error }) => {
     if (error) console.error("Error pinning message:", error);
-  }
-  return data;
+  });
+
+  return newData;
 };
 
 export const toggleReaction = async (data: AppData, channelId: string, messageId: string, emoji: string, userId: string): Promise<AppData> => {
-  // We need to fetch the existing reactions jsonb to toggle the user
-  const { data: msg } = await supabase.from('chat_messages').select('reactions').eq('id', messageId).single();
-  if (msg) {
-    let reactions: Record<string, string[]> = { ...(msg.reactions || {}) };
-    let users = reactions[emoji] || [];
-    if (users.includes(userId)) {
-      users = users.filter((id: string) => id !== userId);
-    } else {
-      users.push(userId);
+  let currentReactions: Record<string, string[]> = {};
+  
+  const newData = {
+    ...data,
+    communications: {
+      ...data.communications,
+      messages: {
+        ...data.communications.messages,
+        [channelId]: (data.communications.messages[channelId] || []).map(msg => {
+          if (msg.id === messageId) {
+            currentReactions = { ...(msg.reactions || {}) };
+            let users = currentReactions[emoji] || [];
+            if (users.includes(userId)) {
+              users = users.filter(id => id !== userId);
+            } else {
+              users = [...users, userId];
+            }
+            if (users.length === 0) {
+              delete currentReactions[emoji];
+            } else {
+              currentReactions[emoji] = users;
+            }
+            return { ...msg, reactions: currentReactions };
+          }
+          return msg;
+        })
+      }
     }
+  };
 
-    if (users.length === 0) {
-      delete reactions[emoji];
-    } else {
-      reactions[emoji] = users;
-    }
-
-    const { error } = await supabase.from('chat_messages').update({
-      reactions: reactions
-    }).eq('id', messageId);
+  supabase.from('chat_messages').update({
+    reactions: currentReactions
+  }).eq('id', messageId).then(({ error }) => {
     if (error) console.error("Error toggling reaction:", error);
-  }
-  return data;
+  });
+
+  return newData;
 };
 
 export const markChannelRead = (data: AppData, channelId: string, userId: string): AppData => {
@@ -404,14 +498,41 @@ export const getUnreadCount = (data: AppData, channelId: string, userId: string)
 };
 
 export const addChatChannel = async (data: AppData, payload: Omit<ChatChannel, 'id'>): Promise<AppData> => {
-  const { error } = await supabase.from('chat_channels').insert({
+  const id = crypto.randomUUID();
+  const newChannel: ChatChannel = {
+    id,
+    name: payload.name,
+    type: payload.type,
+    description: payload.description,
+    createdBy: payload.createdBy,
+    createdAt: new Date().toISOString(),
+    participants: payload.participants || [],
+    lastReadBy: {}
+  };
+
+  const newData = {
+    ...data,
+    communications: {
+      ...data.communications,
+      channels: [...data.communications.channels, newChannel],
+      messages: {
+        ...data.communications.messages,
+        [id]: []
+      }
+    }
+  };
+
+  supabase.from('chat_channels').insert({
+    id,
     name: payload.name,
     description: payload.description,
     type: payload.type,
     created_by: payload.createdBy
+  }).then(({ error }) => {
+    if (error) console.error("Error adding channel:", error);
   });
-  if (error) console.error("Error adding channel:", error);
-  return data;
+
+  return newData;
 };
 
 export const formatChannelFromDB = (ch: any): ChatChannel => ({
@@ -468,9 +589,23 @@ export const createDirectMessage = async (currentUserId: string, targetUserId: s
 };
 
 export const deleteChatChannel = async (data: AppData, channelId: string): Promise<AppData> => {
-  const { error } = await supabase.from('chat_channels').delete().eq('id', channelId);
-  if (error) console.error("Error deleting channel:", error);
-  return data;
+  const newData = {
+    ...data,
+    communications: {
+      ...data.communications,
+      channels: data.communications.channels.filter(c => c.id !== channelId)
+    }
+  };
+  
+  const updatedMessages = { ...newData.communications.messages };
+  delete updatedMessages[channelId];
+  newData.communications.messages = updatedMessages;
+
+  supabase.from('chat_channels').delete().eq('id', channelId).then(({ error }) => {
+    if (error) console.error("Error deleting channel:", error);
+  });
+
+  return newData;
 };
 
 // Note: Real-time subscriptions will handle updating the UI for edits/deletes instead of full fetch.

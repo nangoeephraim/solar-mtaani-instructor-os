@@ -175,4 +175,4 @@ const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate }) => {
     );
 };
 
-export default MobileNav;
+export default React.memo(MobileNav);

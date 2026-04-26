@@ -220,6 +220,11 @@ const MessageGroupRenderer = React.memo(({
     // If it is editing one of our messages, check if editContent changed
     if (hasEditingNow && prevProps.editContent !== nextProps.editContent) return false;
 
+    // Check if showEmojiPicker moved into or out of this group
+    const hasPickerNow = nextProps.showEmojiPicker && nextProps.group.some((m: any) => m.id === nextProps.showEmojiPicker);
+    const hadPicker = prevProps.showEmojiPicker && prevProps.group.some((m: any) => m.id === prevProps.showEmojiPicker);
+    if (hasPickerNow !== hadPicker) return false;
+
     // Check message deep references (React state update gives new references on change)
     for (let i = 0; i < prevProps.group.length; i++) {
         if (prevProps.group[i] !== nextProps.group[i]) return false;
@@ -452,7 +457,9 @@ export default function Communications({ data, onUpdateAppData }: Communications
         const mentionMatches = messageInput.match(/@(\w+)/g);
         const mentionsList = mentionMatches ? mentionMatches.map(m => m.slice(1)) : undefined;
 
-        await addChatMessage(data, {
+        // Optimistic UI update
+        const newData = await addChatMessage(data, {
+            id: crypto.randomUUID(), // Provide a client-side UUID
             channelId: activeChannelId,
             senderId: userId,
             senderName: user.name,
@@ -462,6 +469,8 @@ export default function Communications({ data, onUpdateAppData }: Communications
             mentions: mentionsList,
             attachments: attachmentsToSave
         } as any);
+
+        onUpdateAppData(newData);
 
         // Wait for realtime subscription to pull the message. Just clear input.
         setMessageInput('');
@@ -489,12 +498,21 @@ export default function Communications({ data, onUpdateAppData }: Communications
         if (lastWord.startsWith('@') && lastWord.length > 1) { setShowMentions(true); setMentionFilter(lastWord.slice(1)); }
         else setShowMentions(false);
 
-        // Broadcast typing indicator to other users (debounced 500ms)
+        // Broadcast typing indicator to other users immediately on first keystroke, then debounce the clear
         if (val.trim().length > 0 && activeChannelId && user) {
-            if (typingDebounceRef.current) clearTimeout(typingDebounceRef.current);
-            typingDebounceRef.current = setTimeout(() => {
+            if (!typingDebounceRef.current) {
                 broadcastTyping(activeChannelId, userId, user.name, true);
-            }, 500);
+            } else {
+                clearTimeout(typingDebounceRef.current);
+            }
+            typingDebounceRef.current = setTimeout(() => {
+                broadcastTyping(activeChannelId, userId, user.name, false);
+                typingDebounceRef.current = null;
+            }, 2000);
+        } else if (val.trim().length === 0 && activeChannelId && user && typingDebounceRef.current) {
+            clearTimeout(typingDebounceRef.current);
+            broadcastTyping(activeChannelId, userId, user.name, false);
+            typingDebounceRef.current = null;
         }
     };
 
@@ -508,40 +526,52 @@ export default function Communications({ data, onUpdateAppData }: Communications
 
     const handleEditSave = async (chId: string, msgId: string) => {
         if (!editContent.trim()) return;
-        await editChatMessage(data, chId, msgId, editContent.trim());
+        const newData = await editChatMessage(data, chId, msgId, editContent.trim());
+        onUpdateAppData(newData);
         setEditingMsgId(null);
         setEditContent('');
         showToast('Message updated', 'success');
     };
 
     const handleDelete = async (chId: string, msgId: string) => {
-        await softDeleteChatMessage(data, chId, msgId);
+        const newData = await softDeleteChatMessage(data, chId, msgId);
+        onUpdateAppData(newData);
         showToast('Message deleted', 'info');
     };
 
     const handlePin = async (chId: string, msgId: string) => {
-        await togglePinMessage(data, chId, msgId);
+        const newData = await togglePinMessage(data, chId, msgId);
+        onUpdateAppData(newData);
         showToast('Pin toggled', 'info');
     };
 
     const handleReaction = async (chId: string, msgId: string, emoji: string) => {
-        await toggleReaction(data, chId, msgId, emoji, userId);
+        const newData = await toggleReaction(data, chId, msgId, emoji, userId);
+        onUpdateAppData(newData);
         setShowEmojiPicker(null);
     };
 
     const handleCreateChannel = async () => {
         if (!newChannelName.trim()) return;
-        await addChatChannel(data, {
+        const newData = await addChatChannel(data, {
             name: newChannelName.trim(),
             type: newChannelType,
             description: newChannelDesc.trim() || undefined,
             createdBy: userId,
             createdAt: new Date().toISOString()
         });
+        onUpdateAppData(newData);
+        
+        // Find the newly created channel to set it as active
+        const newChannel = newData.communications.channels.find(c => c.name === newChannelName.trim() && c.type === newChannelType);
+        if (newChannel) {
+            setActiveChannelId(newChannel.id);
+        }
+        
         setShowNewChannel(false);
         setNewChannelName('');
         setNewChannelDesc('');
-        showToast(`Channel "${newChannelName}" created`, 'success');
+        showToast(`Channel "${newChannelName.trim()}" created`, 'success');
     };
 
     const handleDeleteChannel = async (channelId: string) => {
@@ -549,7 +579,8 @@ export default function Communications({ data, onUpdateAppData }: Communications
             showToast("Default channels can't be deleted", 'error');
             return;
         }
-        await deleteChatChannel(data, channelId);
+        const newData = await deleteChatChannel(data, channelId);
+        onUpdateAppData(newData);
         if (activeChannelId === channelId) setActiveChannelId(channels[0]?.id || '');
         showToast('Channel deleted', 'info');
     };

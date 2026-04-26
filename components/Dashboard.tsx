@@ -683,4 +683,10 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onNavigate }) => {
   );
 };
 
-export default Dashboard;
+export default React.memo(Dashboard, (prevProps, nextProps) => {
+  return prevProps.onNavigate === nextProps.onNavigate &&
+         prevProps.data.students === nextProps.data.students &&
+         prevProps.data.schedule === nextProps.data.schedule &&
+         prevProps.data.curriculum === nextProps.data.curriculum &&
+         prevProps.data.communications?.messages?.['chan_announcements'] === nextProps.data.communications?.messages?.['chan_announcements'];
+});
