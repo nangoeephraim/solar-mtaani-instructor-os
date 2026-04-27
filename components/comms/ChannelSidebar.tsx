@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChatMessage } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { getAvatarStyle } from './helpers';
-import { Hash, Megaphone, MessageSquare, Pin, Search, Users, X, ChevronRight, Menu, UserPlus, User } from 'lucide-react';
+import { Hash, Megaphone, MessageSquare, Pin, Search, Users, X, ChevronRight, Menu, UserPlus, User, Video } from 'lucide-react';
 import clsx from 'clsx';
 
 /* ─── Channel Sidebar ─── */
@@ -62,6 +62,19 @@ export function ChannelSidebar({ channels, activeChannelId, onSelectChannel, onC
                                 </button>
                             );
                         })}
+                    </div>
+                </div>
+
+                {/* Video Meetings */}
+                <div>
+                    <h3 className="text-[10px] font-black uppercase tracking-[0.15em] mb-2 px-3" style={{ color: 'var(--md-sys-color-secondary)' }}>Meetings</h3>
+                    <div className="space-y-0.5">
+                        <button onClick={() => onSelectChannel('video_meetings')} className={clsx("w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl transition-all duration-300 text-sm font-medium text-left relative ripple", activeChannelId === 'video_meetings' ? "shadow-md scale-[1.02] z-10" : "hover:bg-[var(--md-sys-color-surface-variant)] hover:scale-[1.01]")} style={activeChannelId === 'video_meetings' ? { background: 'var(--md-sys-color-primary)', color: 'var(--md-sys-color-on-primary)' } : { color: 'var(--md-sys-color-on-surface-variant)' }}>
+                            <div className={clsx("p-1.5 rounded-lg shadow-sm", activeChannelId === 'video_meetings' ? "bg-white/20 text-white" : "bg-[var(--md-sys-color-surface-variant)] text-[var(--md-sys-color-secondary)]")}>
+                                <Video size={15} />
+                            </div>
+                            <span className="truncate flex-1 font-google">Video Meet</span>
+                        </button>
                     </div>
                 </div>
 

@@ -20,6 +20,7 @@ import UserAvatar from './UserAvatar';
 import { fetchAvatarMap, fetchActiveUsers, ProfileData } from '../services/profileService';
 import { createTypingChannel, broadcastTyping, TypingEvent } from '../services/realtimeService';
 import { playSendSound, playReceiveSound } from '../utils/audioUtils';
+import Meetings from './Meetings';
 
 const EMOJI_OPTIONS = ['👍', '❤️', '😂', '🎉', '✅', '👀', '🔥'];
 const ANNOUNCEMENT_TEMPLATES = [
@@ -814,7 +815,11 @@ export default function Communications({ data, onUpdateAppData }: Communications
             <ChannelSidebar channels={channels} activeChannelId={activeChannelId} onSelectChannel={(id) => { setActiveChannelId(id); setShowMobileSidebar(false); }} onCreateChannel={() => setShowNewChannel(true)} onStartDM={() => setShowNewDM(true)} avatarMap={avatarMap} userProfileMap={userProfileMap} onDeleteChannel={handleDeleteChannel} getUnreadCount={(chId) => getUnreadCount(data, chId, userId)} isAdmin={user?.role === 'admin'} user={user} isOpen={showMobileSidebar} onToggle={() => setShowMobileSidebar(p => !p)} />
 
             {/* ═══ MAIN CHAT AREA ═══ */}
-            {activeChannel ? (
+            {activeChannelId === 'video_meetings' ? (
+                <div className="flex-1 flex flex-col relative overflow-hidden" style={{ background: 'var(--md-sys-color-background)' }}>
+                    <Meetings />
+                </div>
+            ) : activeChannel ? (
                 <>
                     <div className="flex-1 flex flex-col relative overflow-hidden" style={{ background: 'var(--md-sys-color-background)' }}>
                         {/* Header */}
