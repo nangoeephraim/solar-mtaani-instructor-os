@@ -66,6 +66,7 @@ const TypingIndicator = ({ typers }: { typers: string[] }) => (
                 initial={{ opacity: 0, y: 10, scale: 0.95 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                layout
                 className="absolute bottom-full left-4 mb-2 z-10"
             >
                 <div className="flex items-center gap-2 px-4 py-2 text-xs font-medium rounded-2xl shadow-md border" style={{ background: 'var(--md-sys-color-surface-variant)', color: 'var(--md-sys-color-on-surface)', borderColor: 'var(--md-sys-color-outline-variant)' }}>
@@ -144,7 +145,7 @@ const MessageGroupRenderer = React.memo(({
                         const isLast = mIdx === group.length - 1;
 
                         return (
-                            <div key={msg.id} className={clsx("relative px-3 py-2 text-[15px] group/msg break-words",
+                            <motion.div key={msg.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={clsx("relative px-3 py-2 text-[15px] group/msg break-words shadow-sm transition-shadow hover:shadow-md",
                                 isMyMsg
                                     ? `bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] ${isFirst ? 'rounded-tr-2xl' : 'rounded-tr-md'} ${isLast ? 'rounded-br-2xl' : 'rounded-br-md'} rounded-l-2xl`
                                     : `rounded-r-2xl text-[var(--md-sys-color-on-surface)] ${isFirst ? 'rounded-tl-2xl' : 'rounded-tl-md'} ${isLast ? 'rounded-bl-2xl' : 'rounded-bl-md'}`
@@ -214,7 +215,7 @@ const MessageGroupRenderer = React.memo(({
                                     </>
                                 )}
                                 {!msg.isDeleted && renderReactions(msg)}
-                            </div>
+                            </motion.div>
                         );
                     })}
                 </div>
@@ -753,7 +754,7 @@ export default function Communications({ data, onUpdateAppData }: Communications
         return (
             <div className="flex flex-wrap gap-1 mt-1.5">
                 {Object.entries(msg.reactions).map(([emoji, users]) => (
-                    <button key={emoji} onClick={() => handleReaction(activeChannelId, msg.id, emoji)} className={clsx("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold transition-all border")} style={users.includes(userId) ? { background: 'var(--md-sys-color-primary-container)', borderColor: 'var(--md-sys-color-primary)', color: 'var(--md-sys-color-on-primary-container)' } : { background: 'var(--md-sys-color-surface-variant)', borderColor: 'var(--md-sys-color-outline-variant)', color: 'var(--md-sys-color-on-surface-variant)' }} title={users.join(', ')}>
+                    <button key={emoji} onClick={() => handleReaction(activeChannelId, msg.id, emoji)} className={clsx("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold transition-all border ripple hover:scale-105 active:scale-95")} style={users.includes(userId) ? { background: 'var(--md-sys-color-primary-container)', borderColor: 'var(--md-sys-color-primary)', color: 'var(--md-sys-color-on-primary-container)' } : { background: 'var(--md-sys-color-surface-variant)', borderColor: 'var(--md-sys-color-outline-variant)', color: 'var(--md-sys-color-on-surface-variant)' }} title={users.join(', ')}>
                         <span>{emoji}</span><span>{users.length}</span>
                     </button>
                 ))}
@@ -791,7 +792,7 @@ export default function Communications({ data, onUpdateAppData }: Communications
 
     const renderEmojiPicker = (msgId: string) => showEmojiPicker !== msgId ? null : (
         <motion.div initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} className="absolute -top-12 right-0 glass-panel px-2 py-1.5 flex gap-1 z-30" style={{ boxShadow: 'var(--shadow-elevation-3)' }}>
-            {EMOJI_OPTIONS.map(emoji => <button key={emoji} onClick={() => handleReaction(activeChannelId, msgId, emoji)} className="w-8 h-8 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] flex items-center justify-center text-lg transition-all hover:scale-110" title={emoji}>{emoji}</button>)}
+            {EMOJI_OPTIONS.map(emoji => <button key={emoji} onClick={() => handleReaction(activeChannelId, msgId, emoji)} className="w-8 h-8 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] flex items-center justify-center text-lg transition-all hover:scale-110 active:scale-90 ripple" title={emoji}>{emoji}</button>)}
         </motion.div>
     );
 
@@ -888,7 +889,7 @@ export default function Communications({ data, onUpdateAppData }: Communications
                                         {activeMessages.filter(m => !m.isDeleted).map((msg, i, arr) => (
                                             <React.Fragment key={msg.id}>
                                                 {(i === 0 || !isSameDay(msg.timestamp, arr[i - 1].timestamp)) && <DateSeparator date={msg.timestamp} />}
-                                                <div className="relative glass-card p-5 group/msg animate-fade-in break-words" style={{ animationFillMode: 'both' }} onMouseEnter={() => setHoveredMsgId(msg.id)} onMouseLeave={() => { setHoveredMsgId(null); setShowEmojiPicker(null); }} onClick={() => { if (window.innerWidth < 768) setHoveredMsgId(hoveredMsgId === msg.id ? null : msg.id); }}>
+                                                <motion.div layout initial={{ opacity: 0, y: 10, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} className="relative glass-card p-5 group/msg animate-fade-in break-words hover:shadow-lg transition-all duration-300" style={{ animationFillMode: 'both' }} onMouseEnter={() => setHoveredMsgId(msg.id)} onMouseLeave={() => { setHoveredMsgId(null); setShowEmojiPicker(null); }} onClick={() => { if (window.innerWidth < 768) setHoveredMsgId(hoveredMsgId === msg.id ? null : msg.id); }}>
                                                     {renderMsgActions(msg)}
                                                     {renderEmojiPicker(msg.id)}
                                                     {msg.isPinned && <div className="absolute top-3 right-3"><Pin size={12} style={{ color: 'var(--google-yellow)' }} /></div>}
@@ -917,7 +918,7 @@ export default function Communications({ data, onUpdateAppData }: Communications
                                                         <div className="text-sm leading-relaxed" style={{ color: 'var(--md-sys-color-on-surface)' }}>{renderMarkdown(msg.content)}</div>
                                                     )}
                                                     {renderReactions(msg)}
-                                                </div>
+                                                </motion.div>
                                             </React.Fragment>
                                         ))}
                                     </div>
@@ -1061,7 +1062,7 @@ export default function Communications({ data, onUpdateAppData }: Communications
                                         )}
                                     </AnimatePresence>
 
-                                    <div className={clsx("flex items-end bg-[var(--md-sys-color-surface-variant)] rounded-[32px] shadow-sm border transition-all duration-300", isInputFocused || isRecording ? "border-[var(--md-sys-color-primary)] shadow-md" : "border-[var(--md-sys-color-outline-variant)]")}>
+                                    <div className={clsx("flex items-end rounded-[32px] transition-all duration-300 backdrop-blur-md", isInputFocused || isRecording ? "border-[var(--md-sys-color-primary)] shadow-lg bg-[var(--md-sys-color-surface-variant)] scale-[1.01]" : "border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface)] hover:bg-[var(--md-sys-color-surface-variant)] shadow-sm")} style={{ border: '1px solid', borderColor: isInputFocused || isRecording ? 'var(--md-sys-color-primary)' : 'var(--md-sys-color-outline-variant)' }}>
                                         <div className="pl-3 pb-3 pt-3 flex items-center h-full">
                                             <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt" onChange={(e) => { if (e.target.files?.[0]) { setPendingAttachment(e.target.files[0]); setTimeout(() => textareaRef.current?.focus(), 100); } }} />
                                             <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2.5 rounded-full hover:bg-[var(--md-sys-color-surface-2)] transition-colors text-[var(--md-sys-color-secondary)] hover:text-[var(--md-sys-color-primary)]" title="Attach file"><Paperclip size={18} /></button>
