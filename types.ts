@@ -205,7 +205,7 @@ export interface Holiday {
 export interface ChatChannel {
   id: string;
   name: string;
-  type: 'announcement' | 'chat' | 'dm';
+  type: 'announcement' | 'chat' | 'dm' | 'video_room';
   description?: string;
   isPrivate?: boolean;
   participants?: string[];
