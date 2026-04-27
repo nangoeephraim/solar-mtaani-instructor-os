@@ -135,12 +135,12 @@ const MessageGroupRenderer = React.memo(({
                         const isLast = mIdx === group.length - 1;
 
                         return (
-                            <div key={msg.id} className={clsx("relative px-3 py-2 text-[15px] group/msg",
+                            <div key={msg.id} className={clsx("relative px-3 py-2 text-[15px] group/msg break-words",
                                 isMyMsg
                                     ? `bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] ${isFirst ? 'rounded-tr-2xl' : 'rounded-tr-md'} ${isLast ? 'rounded-br-2xl' : 'rounded-br-md'} rounded-l-2xl`
                                     : `rounded-r-2xl text-[var(--md-sys-color-on-surface)] ${isFirst ? 'rounded-tl-2xl' : 'rounded-tl-md'} ${isLast ? 'rounded-bl-2xl' : 'rounded-bl-md'}`
                             )} style={!isMyMsg ? { background: 'var(--md-sys-color-surface)' } : {}}
-                                onMouseEnter={() => setHoveredMsgId(msg.id)} onMouseLeave={() => { setHoveredMsgId(null); setShowEmojiPicker(null); }}>
+                                onMouseEnter={() => setHoveredMsgId(msg.id)} onMouseLeave={() => { setHoveredMsgId(null); setShowEmojiPicker(null); }} onClick={() => { if (window.innerWidth < 768) setHoveredMsgId(hoveredMsgId === msg.id ? null : msg.id); }}>
                                 {renderMsgActions(msg)}
                                 {renderEmojiPicker(msg.id)}
                                 {renderReplyPreview(msg)}
@@ -283,11 +283,11 @@ export default function Communications({ data, onUpdateAppData }: Communications
     const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
     const [pendingAttachment, setPendingAttachment] = useState<File | null>(null);
 
-    const activeChannel = channels.find(c => c.id === activeChannelId);
-    const allActiveMessages = messages[activeChannelId] || [];
-    const activeMessages = allActiveMessages.filter(m =>
+    const activeChannel = useMemo(() => channels.find(c => c.id === activeChannelId), [channels, activeChannelId]);
+    const allActiveMessages = useMemo(() => messages[activeChannelId] || [], [messages, activeChannelId]);
+    const activeMessages = useMemo(() => allActiveMessages.filter(m =>
         !searchQuery || m.content.toLowerCase().includes(searchQuery.toLowerCase()) || m.senderName.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    ), [allActiveMessages, searchQuery]);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -476,6 +476,7 @@ export default function Communications({ data, onUpdateAppData }: Communications
         setMessageInput('');
         setReplyToMsg(null);
         setPendingAttachment(null);
+        if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
         // Stop typing indicator for other users
         if (typingDebounceRef.current) {
@@ -491,7 +492,11 @@ export default function Communications({ data, onUpdateAppData }: Communications
     };
 
     const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-        const val = e.target.value;
+        const target = e.target;
+        target.style.height = 'auto';
+        target.style.height = `${Math.min(target.scrollHeight, 128)}px`;
+        
+        const val = target.value;
         setMessageInput(val);
         // Detect @ for mentions
         const lastWord = val.split(/\s/).pop() || '';
@@ -666,8 +671,9 @@ export default function Communications({ data, onUpdateAppData }: Communications
         if (msg.isDeleted) return null;
         const isOwn = msg.senderId === userId, isAdm = user?.role === 'admin';
         const showNudge = !isOwn && activeChannel?.type !== 'dm';
+        const isVisibleMobile = hoveredMsgId === msg.id;
         return (
-            <div className="absolute -top-3 right-2 flex items-center gap-0.5 glass-panel px-1 py-0.5 z-20 opacity-100 md:opacity-0 md:group-hover/msg:opacity-100 transition-opacity" style={{ boxShadow: 'var(--shadow-elevation-2)' }}>
+            <div className={clsx("absolute -top-3 right-2 flex items-center gap-0.5 glass-panel px-1 py-0.5 z-20 transition-opacity", isVisibleMobile ? "opacity-100" : "opacity-0 md:group-hover/msg:opacity-100")} style={{ boxShadow: 'var(--shadow-elevation-2)' }}>
                 <button onClick={() => { setReplyToMsg(msg); textareaRef.current?.focus(); }} className="p-2.5 md:p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors tap-target md:min-h-0 md:min-w-0" style={{ color: 'var(--md-sys-color-secondary)' }} title="Reply"><Reply size={16} className="md:w-3.5 md:h-3.5" /></button>
                 <button onClick={() => setShowEmojiPicker(showEmojiPicker === msg.id ? null : msg.id)} className="p-2.5 md:p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors tap-target md:min-h-0 md:min-w-0" style={{ color: 'var(--md-sys-color-secondary)' }} title="React"><Smile size={16} className="md:w-3.5 md:h-3.5" /></button>
                 {showNudge && <button onClick={() => handleStartDM(msg.senderId)} className="p-2.5 md:p-1.5 rounded-lg hover:bg-[var(--md-sys-color-primary-container)] transition-colors tap-target md:min-h-0 md:min-w-0" style={{ color: 'var(--md-sys-color-primary)' }} title={`DM ${msg.senderName}`}><UserPlus size={16} className="md:w-3.5 md:h-3.5" /></button>}
@@ -697,7 +703,7 @@ export default function Communications({ data, onUpdateAppData }: Communications
     }
 
     return (
-        <div className="flex h-full w-full pb-20 lg:pb-0 glass-panel overflow-hidden animate-fade-in relative">
+        <div className={clsx("flex h-full w-full lg:pb-0 glass-panel overflow-hidden animate-fade-in relative", !isInputFocused ? "pb-20" : "pb-0")}>
             {/* Sidebar */}
             <ChannelSidebar channels={channels} activeChannelId={activeChannelId} onSelectChannel={(id) => { setActiveChannelId(id); setShowMobileSidebar(false); }} onCreateChannel={() => setShowNewChannel(true)} onStartDM={() => setShowNewDM(true)} avatarMap={avatarMap} userProfileMap={userProfileMap} onDeleteChannel={handleDeleteChannel} getUnreadCount={(chId) => getUnreadCount(data, chId, userId)} isAdmin={user?.role === 'admin'} user={user} isOpen={showMobileSidebar} onToggle={() => setShowMobileSidebar(p => !p)} />
 
@@ -777,7 +783,7 @@ export default function Communications({ data, onUpdateAppData }: Communications
                                         {activeMessages.filter(m => !m.isDeleted).map((msg, i, arr) => (
                                             <React.Fragment key={msg.id}>
                                                 {(i === 0 || !isSameDay(msg.timestamp, arr[i - 1].timestamp)) && <DateSeparator date={msg.timestamp} />}
-                                                <div className="relative glass-card p-5 group/msg animate-fade-in" style={{ animationFillMode: 'both' }}>
+                                                <div className="relative glass-card p-5 group/msg animate-fade-in break-words" style={{ animationFillMode: 'both' }} onMouseEnter={() => setHoveredMsgId(msg.id)} onMouseLeave={() => { setHoveredMsgId(null); setShowEmojiPicker(null); }} onClick={() => { if (window.innerWidth < 768) setHoveredMsgId(hoveredMsgId === msg.id ? null : msg.id); }}>
                                                     {renderMsgActions(msg)}
                                                     {renderEmojiPicker(msg.id)}
                                                     {msg.isPinned && <div className="absolute top-3 right-3"><Pin size={12} style={{ color: 'var(--google-yellow)' }} /></div>}
@@ -901,7 +907,7 @@ export default function Communications({ data, onUpdateAppData }: Communications
                                 <AnimatePresence>
                                     {replyToMsg && (
                                         <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden max-w-4xl mx-auto">
-                                            <div className="flex items-center gap-2 mb-2 p-2.5 rounded-2xl text-xs backdrop-blur-md border" style={{ background: 'var(--md-sys-color-primary-container)', color: 'var(--md-sys-color-on-primary-container)', borderColor: 'var(--md-sys-color-outline-variant)' }}>
+                                            <div className="flex items-center gap-2 mb-2 p-2.5 rounded-2xl text-xs border" style={{ background: 'var(--md-sys-color-primary-container)', color: 'var(--md-sys-color-on-primary-container)', borderColor: 'var(--md-sys-color-outline-variant)' }}>
                                                 <Reply size={14} style={{ color: 'var(--md-sys-color-primary)' }} />
                                                 <span>Replying to <span className="font-bold">{replyToMsg.senderName}</span></span>
                                                 <span className="truncate flex-1 opacity-70">"{replyToMsg.content.slice(0, 60)}"</span>
@@ -910,13 +916,13 @@ export default function Communications({ data, onUpdateAppData }: Communications
                                         </motion.div>
                                     )}
                                 </AnimatePresence>
-                                <div className="max-w-4xl mx-auto flex items-center gap-1.5 mb-2 px-1">
-                                    <button onClick={() => insertFormatting('**', '**')} className="p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors" style={{ color: 'var(--md-sys-color-secondary)' }} title="Bold"><Bold size={14} /></button>
-                                    <button onClick={() => insertFormatting('*', '*')} className="p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors" style={{ color: 'var(--md-sys-color-secondary)' }} title="Italic"><Italic size={14} /></button>
-                                    <button onClick={() => insertFormatting('`', '`')} className="p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors" style={{ color: 'var(--md-sys-color-secondary)' }} title="Code snippet"><Code size={14} /></button>
-                                    <button onClick={() => insertFormatting('', '👍')} className="p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors" style={{ color: 'var(--md-sys-color-secondary)' }} title="Thumbs up">👍</button>
-                                    <button onClick={() => insertFormatting('', '😊')} className="p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors" style={{ color: 'var(--md-sys-color-secondary)' }} title="Smile">😊</button>
-                                    <button onClick={() => insertFormatting('', '🔥')} className="p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors" style={{ color: 'var(--md-sys-color-secondary)' }} title="Fire">🔥</button>
+                                <div className="max-w-4xl mx-auto flex flex-nowrap overflow-x-auto custom-scrollbar items-center gap-1.5 mb-2 px-1">
+                                    <button onClick={() => insertFormatting('**', '**')} className="flex-shrink-0 p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors" style={{ color: 'var(--md-sys-color-secondary)' }} title="Bold"><Bold size={14} /></button>
+                                    <button onClick={() => insertFormatting('*', '*')} className="flex-shrink-0 p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors" style={{ color: 'var(--md-sys-color-secondary)' }} title="Italic"><Italic size={14} /></button>
+                                    <button onClick={() => insertFormatting('`', '`')} className="flex-shrink-0 p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors" style={{ color: 'var(--md-sys-color-secondary)' }} title="Code snippet"><Code size={14} /></button>
+                                    <button onClick={() => insertFormatting('', '👍')} className="flex-shrink-0 p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors" style={{ color: 'var(--md-sys-color-secondary)' }} title="Thumbs up">👍</button>
+                                    <button onClick={() => insertFormatting('', '😊')} className="flex-shrink-0 p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors" style={{ color: 'var(--md-sys-color-secondary)' }} title="Smile">😊</button>
+                                    <button onClick={() => insertFormatting('', '🔥')} className="flex-shrink-0 p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors" style={{ color: 'var(--md-sys-color-secondary)' }} title="Fire">🔥</button>
 
                                     <div className="flex-1" />
                                     {activeChannel.type === 'announcement' && (
@@ -938,7 +944,7 @@ export default function Communications({ data, onUpdateAppData }: Communications
                                     <AnimatePresence>
                                         {pendingAttachment && (
                                             <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden mb-2">
-                                                <div className="flex items-center gap-2 p-2.5 rounded-2xl text-xs backdrop-blur-md border" style={{ background: 'var(--md-sys-color-surface-variant)', color: 'var(--md-sys-color-on-surface)', borderColor: 'var(--md-sys-color-outline-variant)' }}>
+                                                <div className="flex items-center gap-2 p-2.5 rounded-2xl text-xs border" style={{ background: 'var(--md-sys-color-surface-variant)', color: 'var(--md-sys-color-on-surface)', borderColor: 'var(--md-sys-color-outline-variant)' }}>
                                                     {pendingAttachment.type.startsWith('image/') ? <ImageIcon size={16} className="text-blue-500" /> : <FileText size={16} className="text-orange-500" />}
                                                     <span className="font-bold truncate flex-1">{pendingAttachment.name}</span>
                                                     <span className="opacity-60">{(pendingAttachment.size / 1024).toFixed(1)} KB</span>
