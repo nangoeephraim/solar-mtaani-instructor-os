@@ -46,7 +46,7 @@ export interface StorageFileInfo {
 
 // File size limits per bucket (in bytes)
 const BUCKET_SIZE_LIMITS: Record<StorageBucket, number> = {
-    library_documents: 10 * 1024 * 1024,  // 10MB
+    library_documents: 20 * 1024 * 1024,  // 20MB (matches Supabase bucket)
     student_photos: 2 * 1024 * 1024,  //  2MB
     certificates: 10 * 1024 * 1024,  // 10MB
     backups: 50 * 1024 * 1024,  // 50MB
@@ -63,12 +63,20 @@ const BUCKET_ALLOWED_TYPES: Record<StorageBucket, string[]> = {
         'application/vnd.ms-powerpoint',
         'application/vnd.openxmlformats-officedocument.presentationml.presentation',
         'text/plain',
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'image/gif',
         'audio/webm',
         'audio/mpeg',
+        'audio/mp3',
         'audio/wav',
         'audio/ogg',
+        'audio/mp4',
+        'audio/aac',
         'video/mp4',
         'video/webm',
+        'video/quicktime',
     ],
     student_photos: [
         'image/jpeg',

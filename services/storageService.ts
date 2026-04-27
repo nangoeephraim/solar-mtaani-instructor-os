@@ -72,7 +72,9 @@ export const fetchAppData = async (): Promise<AppData> => {
           isPinned: msg.is_pinned,
           isDeleted: msg.is_deleted,
           reactions: msg.reactions || {},
-          editedAt: msg.edited_at
+          editedAt: msg.edited_at,
+          replyToId: msg.reply_to_id,
+          attachments: msg.attachments || []
         };
 
         if (!messagesByChannel[msg.channel_id]) {

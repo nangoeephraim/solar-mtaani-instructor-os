@@ -530,7 +530,10 @@ export default function Communications({ data, onUpdateAppData }: Communications
                 else if (mime.startsWith('audio/')) attachmentType = 'audio';
                 else if (mime.startsWith('video/')) attachmentType = 'video';
 
-                const result = await uploadFile('library_documents', fileToSend);
+                const result = await uploadFile('library_documents', fileToSend, {
+                    contentType: mime,
+                    pathPrefix: 'chat_attachments'
+                });
 
                 attachmentsToSave.push({
                     id: `att_${Date.now()} `,
@@ -552,6 +555,11 @@ export default function Communications({ data, onUpdateAppData }: Communications
         const mentionMatches = messageInput.match(/@(\w+)/g);
         const mentionsList = mentionMatches ? mentionMatches.map(m => m.slice(1)) : undefined;
 
+        // For attachment-only messages (e.g. voice notes), use a descriptive fallback
+        const msgContent = messageInput.trim() || (attachmentsToSave.length > 0
+            ? (attachmentsToSave[0].type === 'audio' ? '🎤 Voice message' : attachmentsToSave[0].type === 'video' ? '🎬 Video' : attachmentsToSave[0].type === 'image' ? '📷 Photo' : `📎 ${attachmentsToSave[0].name}`)
+            : '');
+
         // Optimistic UI update
         const newData = await addChatMessage(data, {
             id: crypto.randomUUID(), // Provide a client-side UUID
@@ -559,7 +567,7 @@ export default function Communications({ data, onUpdateAppData }: Communications
             senderId: userId,
             senderName: user.name,
             senderRole: user.role as any,
-            content: messageInput.trim(),
+            content: msgContent,
             replyToId: replyToMsg?.id,
             mentions: mentionsList,
             attachments: attachmentsToSave
@@ -1043,7 +1051,7 @@ export default function Communications({ data, onUpdateAppData }: Communications
                                         {pendingAttachment && (
                                             <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden mb-2">
                                                 <div className="flex items-center gap-2 p-2.5 rounded-2xl text-xs border" style={{ background: 'var(--md-sys-color-surface-variant)', color: 'var(--md-sys-color-on-surface)', borderColor: 'var(--md-sys-color-outline-variant)' }}>
-                                                    {pendingAttachment.type.startsWith('image/') ? <ImageIcon size={16} className="text-blue-500" /> : <FileText size={16} className="text-orange-500" />}
+                                                    {pendingAttachment.type.startsWith('image/') ? <ImageIcon size={16} className="text-blue-500" /> : pendingAttachment.type.startsWith('audio/') ? <Mic size={16} className="text-green-500" /> : pendingAttachment.type.startsWith('video/') ? <ImageIcon size={16} className="text-purple-500" /> : <FileText size={16} className="text-orange-500" />}
                                                     <span className="font-bold truncate flex-1">{pendingAttachment.name}</span>
                                                     <span className="opacity-60">{(pendingAttachment.size / 1024).toFixed(1)} KB</span>
                                                     <button type="button" onClick={() => setPendingAttachment(null)} className="p-1.5 rounded-full hover:bg-[var(--md-sys-color-surface-2)] transition-colors"><X size={14} /></button>
