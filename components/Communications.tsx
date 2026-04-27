@@ -166,53 +166,54 @@ const MessageGroupRenderer = React.memo(({
                                         </div>
                                     </div>
                                 ) : (
+                                    <>
                                     <div className="leading-relaxed">
                                         {renderMarkdown(msg.content)}
                                         {msg.editedAt && <span className="text-[10px] ml-1 italic opacity-70">(edited)</span>}
                                         {msg.isPinned && <Pin size={10} className="inline ml-1" style={{ color: 'var(--google-yellow)' }} />}
                                     </div>
-                                )}
-                                {renderReactions(msg)}
-
-                                {/* Render Attachments */}
-                                {msg.attachments && msg.attachments.length > 0 && (
-                                    <div className="mt-2 flex flex-col gap-2">
-                                        {msg.attachments.map((att: any) => (
-                                            <div key={att.id} className="rounded-xl overflow-hidden shadow-sm" style={{ background: isMyMsg ? 'rgba(255,255,255,0.1)' : 'var(--md-sys-color-surface)' }}>
-                                                {att.type === 'image' ? (
-                                                    <a href={att.url} target="_blank" rel="noopener noreferrer" className="block relative group/link">
-                                                        <img src={att.url} alt="Attachment" className="max-w-xs max-h-60 object-contain rounded-xl" />
-                                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/link:opacity-100 transition-opacity flex items-center justify-center">
-                                                            <ImageIcon className="text-white" size={24} />
-                                                        </div>
-                                                    </a>
-                                                ) : att.type === 'audio' ? (
-                                                    <div className="p-2 min-w-[200px] flex flex-col">
-                                                        <span className="text-xs font-bold mb-1 ml-1 opacity-80">{att.name || "Voice Message"}</span>
-                                                        <audio controls src={att.url} className="w-full h-10" />
-                                                    </div>
-                                                ) : att.type === 'video' ? (
-                                                    <div className="relative">
-                                                        <video controls src={att.url} className="max-w-xs max-h-60 rounded-xl bg-black" />
-                                                    </div>
-                                                ) : (
-                                                    <a href={att.url} target="_blank" rel="noopener noreferrer" className={clsx("flex items-center justify-between p-3 transition-colors group/link hover:brightness-95", isMyMsg ? "text-white" : "text-[var(--md-sys-color-on-surface)]")}>
-                                                        <div className="flex items-center gap-3 overflow-hidden">
-                                                            <div className="p-2 rounded-lg" style={{ background: isMyMsg ? 'rgba(255,255,255,0.2)' : 'var(--md-sys-color-surface-variant)' }}>
-                                                                <FileText size={16} />
+                                    {/* Render Attachments — only for non-deleted messages */}
+                                    {msg.attachments && msg.attachments.length > 0 && (
+                                        <div className="mt-2 flex flex-col gap-2">
+                                            {msg.attachments.map((att: any) => (
+                                                <div key={att.id} className="rounded-xl overflow-hidden shadow-sm" style={{ background: isMyMsg ? 'rgba(255,255,255,0.1)' : 'var(--md-sys-color-surface)' }}>
+                                                    {att.type === 'image' ? (
+                                                        <a href={att.url} target="_blank" rel="noopener noreferrer" className="block relative group/link">
+                                                            <img src={att.url} alt="Attachment" className="max-w-xs max-h-60 object-contain rounded-xl" />
+                                                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/link:opacity-100 transition-opacity flex items-center justify-center">
+                                                                <ImageIcon className="text-white" size={24} />
                                                             </div>
-                                                            <div className="flex flex-col overflow-hidden">
-                                                                <span className="text-sm font-bold truncate">{att.name}</span>
-                                                                <span className="text-[10px] opacity-70">{(att.size / 1024).toFixed(1)} KB</span>
-                                                            </div>
+                                                        </a>
+                                                    ) : att.type === 'audio' ? (
+                                                        <div className="p-2 min-w-[200px] flex flex-col">
+                                                            <span className="text-xs font-bold mb-1 ml-1 opacity-80">{att.name || "Voice Message"}</span>
+                                                            <audio controls src={att.url} className="w-full h-10" />
                                                         </div>
-                                                        <Download size={16} className="opacity-0 group-hover/link:opacity-100 transition-opacity" />
-                                                    </a>
-                                                )}
-                                            </div>
-                                        ))}
-                                    </div>
+                                                    ) : att.type === 'video' ? (
+                                                        <div className="relative">
+                                                            <video controls src={att.url} className="max-w-xs max-h-60 rounded-xl bg-black" />
+                                                        </div>
+                                                    ) : (
+                                                        <a href={att.url} target="_blank" rel="noopener noreferrer" className={clsx("flex items-center justify-between p-3 transition-colors group/link hover:brightness-95", isMyMsg ? "text-white" : "text-[var(--md-sys-color-on-surface)]")}>
+                                                            <div className="flex items-center gap-3 overflow-hidden">
+                                                                <div className="p-2 rounded-lg" style={{ background: isMyMsg ? 'rgba(255,255,255,0.2)' : 'var(--md-sys-color-surface-variant)' }}>
+                                                                    <FileText size={16} />
+                                                                </div>
+                                                                <div className="flex flex-col overflow-hidden">
+                                                                    <span className="text-sm font-bold truncate">{att.name}</span>
+                                                                    <span className="text-[10px] opacity-70">{(att.size / 1024).toFixed(1)} KB</span>
+                                                                </div>
+                                                            </div>
+                                                            <Download size={16} className="opacity-0 group-hover/link:opacity-100 transition-opacity" />
+                                                        </a>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                    </>
                                 )}
+                                {!msg.isDeleted && renderReactions(msg)}
                             </div>
                         );
                     })}

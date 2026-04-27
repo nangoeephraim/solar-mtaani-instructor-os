@@ -357,6 +357,10 @@ export const editChatMessage = async (data: AppData, channelId: string, messageI
 };
 
 export const softDeleteChatMessage = async (data: AppData, channelId: string, messageId: string): Promise<AppData> => {
+  // Find the message to get attachment URLs before clearing
+  const existingMsg = (data.communications.messages[channelId] || []).find(m => m.id === messageId);
+  const attachments = existingMsg?.attachments || [];
+
   const newData = {
     ...data,
     communications: {
@@ -364,17 +368,40 @@ export const softDeleteChatMessage = async (data: AppData, channelId: string, me
       messages: {
         ...data.communications.messages,
         [channelId]: (data.communications.messages[channelId] || []).map(msg => 
-          msg.id === messageId ? { ...msg, isDeleted: true } : msg
+          msg.id === messageId ? { ...msg, isDeleted: true, content: '', attachments: [] } : msg
         )
       }
     }
   };
 
+  // Update the DB — mark deleted, clear content and attachments
   supabase.from('chat_messages').update({
-    is_deleted: true
+    is_deleted: true,
+    content: 'This message was deleted',
+    attachments: []
   }).eq('id', messageId).then(({ error }) => {
     if (error) console.error("Error deleting message:", error);
   });
+
+  // Clean up storage files for any attachments
+  if (attachments.length > 0) {
+    const filePaths = attachments
+      .map((att: any) => {
+        // Extract path from public URL: .../storage/v1/object/public/library_documents/<path>
+        try {
+          const url = new URL(att.url);
+          const match = url.pathname.match(/\/storage\/v1\/object\/public\/library_documents\/(.+)/);
+          return match ? match[1] : null;
+        } catch { return null; }
+      })
+      .filter(Boolean) as string[];
+
+    if (filePaths.length > 0) {
+      supabase.storage.from('library_documents').remove(filePaths).then(({ error }) => {
+        if (error) console.warn('[Storage] Failed to delete attachment files:', error.message);
+      });
+    }
+  }
 
   return newData;
 };
