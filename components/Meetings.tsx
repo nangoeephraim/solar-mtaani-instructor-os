@@ -1,29 +1,187 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, MicOff, Video, VideoOff, MonitorUp, Settings, PhoneOff, Maximize, Users, MessageSquare, Sparkles, LayoutGrid, AlertCircle } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, MonitorUp, Settings, Maximize, Users, MessageSquare, Sparkles, LayoutGrid, AlertCircle, Copy, CheckCircle2, PhoneOff } from 'lucide-react';
 import clsx from 'clsx';
-import UserAvatar from '../UserAvatar';
+import UserAvatar from './UserAvatar';
 
-// dummy participants for demo
-const DUMMY_PARTICIPANTS = [
-    { id: '1', name: 'You', isMe: true, isSpeaking: true, avatarUrl: null, videoEnabled: true, audioEnabled: true },
-    { id: '2', name: 'Alice M.', isMe: false, isSpeaking: false, avatarUrl: null, videoEnabled: true, audioEnabled: false },
-    { id: '3', name: 'Dr. Smith', isMe: false, isSpeaking: false, avatarUrl: null, videoEnabled: false, audioEnabled: true },
-    { id: '4', name: 'Engineering Team', isMe: false, isSpeaking: false, avatarUrl: null, videoEnabled: true, audioEnabled: true },
-];
-
-export default function VideoMeet({ channelName, onLeave }: { channelName: string, onLeave: () => void }) {
-    // states
+export default function Meetings() {
     const [audioEnabled, setAudioEnabled] = useState(true);
     const [videoEnabled, setVideoEnabled] = useState(true);
     const [screenShared, setScreenShared] = useState(false);
     const [showSidebar, setShowSidebar] = useState<'chat' | 'people' | 'effects' | null>(null);
     const [layout, setLayout] = useState<'grid' | 'spotlight'>('grid');
+    const [inMeeting, setInMeeting] = useState(false);
+    const [meetingId, setMeetingId] = useState('');
+    const [copied, setCopied] = useState(false);
+    const [stream, setStream] = useState<MediaStream | null>(null);
+    const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
+    const [hasError, setHasError] = useState<string | null>(null);
 
-    const participants = DUMMY_PARTICIPANTS; // in a real app, this is dynamic
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const screenRef = useRef<HTMLVideoElement>(null);
+
+    const generateMeetingId = () => {
+        return Math.random().toString(36).substring(2, 6) + '-' + Math.random().toString(36).substring(2, 6) + '-' + Math.random().toString(36).substring(2, 6);
+    };
+
+    const handleJoinMeeting = async () => {
+        try {
+            const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            setStream(mediaStream);
+            setInMeeting(true);
+            if (!meetingId) {
+                setMeetingId(generateMeetingId());
+            }
+            setHasError(null);
+        } catch (err) {
+            console.error("Failed to get local stream", err);
+            setHasError("Failed to access camera and microphone. Please check your permissions.");
+        }
+    };
+
+    const handleLeaveMeeting = () => {
+        if (stream) {
+            stream.getTracks().forEach(track => track.stop());
+        }
+        if (screenStream) {
+            screenStream.getTracks().forEach(track => track.stop());
+        }
+        setStream(null);
+        setScreenStream(null);
+        setInMeeting(false);
+        setScreenShared(false);
+    };
+
+    useEffect(() => {
+        if (videoRef.current && stream) {
+            videoRef.current.srcObject = stream;
+        }
+    }, [stream, inMeeting, videoEnabled]);
+
+    useEffect(() => {
+        if (screenRef.current && screenStream) {
+            screenRef.current.srcObject = screenStream;
+        }
+    }, [screenStream]);
+
+    // Handle toggles
+    useEffect(() => {
+        if (stream) {
+            stream.getAudioTracks().forEach(track => {
+                track.enabled = audioEnabled;
+            });
+            stream.getVideoTracks().forEach(track => {
+                track.enabled = videoEnabled;
+            });
+        }
+    }, [audioEnabled, videoEnabled, stream]);
+
+    const handleScreenShare = async () => {
+        if (screenShared) {
+            if (screenStream) {
+                screenStream.getTracks().forEach(track => track.stop());
+            }
+            setScreenStream(null);
+            setScreenShared(false);
+        } else {
+            try {
+                const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+                setScreenStream(displayStream);
+                setScreenShared(true);
+                
+                // Handle user stopping share via browser UI
+                displayStream.getVideoTracks()[0].onended = () => {
+                    setScreenShared(false);
+                    setScreenStream(null);
+                };
+            } catch (err) {
+                console.error("Failed to share screen", err);
+            }
+        }
+    };
+
+    const copyMeetingLink = () => {
+        navigator.clipboard.writeText(`https://prism.os/meet/${meetingId}`);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+    };
+
+    if (!inMeeting) {
+        return (
+            <div className="w-full h-full flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-[#0a0a0b] via-[#131416] to-[#0a0a0b] z-20">
+                <div className="absolute inset-0 pointer-events-none">
+                    <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-[120px]" />
+                    <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-[120px]" />
+                </div>
+                
+                <div className="relative z-10 p-8 max-w-4xl w-full grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+                    <div className="space-y-8">
+                        <div>
+                            <h1 className="text-4xl md:text-5xl font-google font-bold text-white mb-4 tracking-tight">
+                                Premium Video <br className="hidden md:block"/>Meetings
+                            </h1>
+                            <p className="text-[var(--md-sys-color-on-surface-variant)] text-lg leading-relaxed">
+                                Connect, collaborate, and celebrate from anywhere with PRISM Video Meetings. Built for high-performance and flawless reliability.
+                            </p>
+                        </div>
+
+                        {hasError && (
+                            <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-2xl flex items-center gap-3">
+                                <AlertCircle size={20} />
+                                <span className="text-sm font-medium">{hasError}</span>
+                            </div>
+                        )}
+
+                        <div className="flex flex-col sm:flex-row gap-4">
+                            <button 
+                                onClick={handleJoinMeeting}
+                                className="px-6 py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-2xl transition-all shadow-[0_0_20px_rgba(37,99,235,0.3)] hover:shadow-[0_0_30px_rgba(37,99,235,0.5)] hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2"
+                            >
+                                <Video size={20} />
+                                New Meeting
+                            </button>
+                            <div className="relative flex-1 group">
+                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                                    <span className="text-[var(--md-sys-color-on-surface-variant)]">
+                                        <MonitorUp size={20} />
+                                    </span>
+                                </div>
+                                <input
+                                    type="text"
+                                    placeholder="Enter meeting code"
+                                    value={meetingId}
+                                    onChange={(e) => setMeetingId(e.target.value)}
+                                    className="w-full bg-[var(--glass-bg)] backdrop-blur-md border border-[var(--md-sys-color-outline-variant)] rounded-2xl py-4 pl-12 pr-24 text-[var(--md-sys-color-on-surface)] outline-none focus:border-blue-500 transition-colors"
+                                />
+                                <button 
+                                    onClick={() => meetingId && handleJoinMeeting()}
+                                    disabled={!meetingId}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 px-4 py-2 bg-[var(--md-sys-color-surface-variant)] text-[var(--md-sys-color-on-surface)] font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[var(--md-sys-color-primary)] hover:text-white"
+                                >
+                                    Join
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Preview Area */}
+                    <div className="hidden md:flex items-center justify-center relative">
+                         <div className="absolute inset-0 bg-gradient-to-tr from-blue-500/20 to-purple-500/20 rounded-[3rem] blur-3xl transform rotate-6" />
+                         <div className="w-full aspect-[4/3] bg-[var(--glass-bg)] backdrop-blur-xl border border-[var(--md-sys-color-outline-variant)] rounded-[3rem] shadow-2xl overflow-hidden relative flex flex-col items-center justify-center z-10">
+                             <div className="w-24 h-24 bg-blue-500/20 rounded-full flex items-center justify-center mb-6 border border-blue-500/30 shadow-[0_0_40px_rgba(59,130,246,0.3)] animate-pulse">
+                                 <Video size={40} className="text-blue-400" />
+                             </div>
+                             <h3 className="text-xl font-bold text-white mb-2 font-google">Ready to join?</h3>
+                             <p className="text-white/50 text-sm">Allow camera and microphone access</p>
+                         </div>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
-        <div className="flex w-full h-full relative overflow-hidden bg-[#0A0A0B] text-white">
+        <div className="flex w-full h-full relative overflow-hidden bg-[#0a0a0b] text-white z-20">
             {/* Background elements for premium look */}
             <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
                 <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-blue-600/10 blur-[120px]" />
@@ -36,13 +194,13 @@ export default function VideoMeet({ channelName, onLeave }: { channelName: strin
                 {/* Header */}
                 <div className="absolute top-0 left-0 right-0 p-4 md:p-6 flex justify-between items-center bg-gradient-to-b from-black/80 to-transparent z-20">
                     <div className="flex items-center gap-3">
-                        <div className="bg-white/10 backdrop-blur-xl px-4 py-2 rounded-2xl border border-white/10 flex items-center gap-2.5 text-sm font-google font-bold shadow-lg">
+                        <div className="bg-white/10 backdrop-blur-xl px-4 py-2 rounded-2xl border border-white/10 flex items-center gap-2.5 text-sm font-google font-bold shadow-lg cursor-pointer hover:bg-white/20 transition-colors group" onClick={copyMeetingLink}>
                             <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
-                            {channelName}
+                            {meetingId}
+                            <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 text-white/50">
+                                {copied ? <CheckCircle2 size={14} className="text-green-400" /> : <Copy size={14} />}
+                            </span>
                         </div>
-                        <span className="text-white/70 text-xs font-black tracking-widest uppercase bg-white/5 px-2.5 py-1.5 rounded-xl border border-white/5 backdrop-blur-sm shadow-sm hidden sm:block">
-                            03:45
-                        </span>
                         <div className="bg-green-500/10 border border-green-500/20 text-green-400 px-2.5 py-1.5 rounded-xl flex items-center gap-1.5 text-xs font-bold backdrop-blur-sm hidden md:flex">
                             <AlertCircle size={12} /> Encrypted
                         </div>
@@ -58,69 +216,74 @@ export default function VideoMeet({ channelName, onLeave }: { channelName: strin
                 <div className="flex-1 p-4 md:p-6 flex items-center justify-center pt-24 pb-28">
                     <div className={clsx(
                         "w-full h-full grid gap-4 md:gap-6 transition-all duration-500 max-w-7xl mx-auto",
-                        layout === 'spotlight' ? "grid-cols-1 grid-rows-1" :
-                        participants.length === 1 ? "grid-cols-1 grid-rows-1" :
-                        participants.length === 2 ? "grid-cols-1 md:grid-cols-2 grid-rows-2 md:grid-rows-1" :
-                        participants.length <= 4 ? "grid-cols-2 grid-rows-2" :
-                        "grid-cols-2 md:grid-cols-3 grid-rows-3 md:grid-rows-2"
+                        screenShared ? "grid-cols-3 grid-rows-3" : "grid-cols-1 grid-rows-1"
                     )}>
-                        {participants.map((p, i) => (
-                            <motion.div 
+                        {/* Screen Share Spot */}
+                        {screenShared && (
+                             <motion.div 
                                 layout
                                 initial={{ opacity: 0, scale: 0.9 }}
                                 animate={{ opacity: 1, scale: 1 }}
-                                key={p.id} 
-                                className={clsx(
-                                    "relative rounded-3xl overflow-hidden shadow-2xl bg-[#131416] transition-all duration-300",
-                                    p.isSpeaking ? "ring-2 ring-blue-500 shadow-[0_0_30px_rgba(59,130,246,0.3)]" : "border border-white/5",
-                                    layout === 'spotlight' && i !== 0 ? "hidden" : "flex items-center justify-center"
-                                )}
+                                className="col-span-3 row-span-2 md:col-span-2 md:row-span-3 relative rounded-3xl overflow-hidden shadow-2xl bg-[#131416] border border-white/5 flex items-center justify-center"
                             >
-                                {/* Video Mockup / Background */}
-                                {p.videoEnabled && (!p.isMe || videoEnabled) ? (
-                                    <div className="absolute inset-0 bg-[#1A1C20]">
-                                        {/* Abstract placeholder for camera feed to look premium */}
-                                        <div className="absolute inset-0 flex items-center justify-center opacity-40 mix-blend-screen">
-                                            <div className={clsx("w-[150%] h-[150%] rounded-full blur-[80px] animate-[spin_12s_linear_infinite]", p.isMe ? "bg-blue-500/20" : "bg-indigo-500/20")} />
-                                            <div className={clsx("w-[120%] h-[120%] rounded-full blur-[100px] animate-[spin_15s_linear_infinite_reverse] absolute", p.isMe ? "bg-purple-500/20" : "bg-teal-500/20")} />
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#131416]">
-                                        <motion.div 
-                                            animate={p.isSpeaking ? { scale: [1, 1.1, 1] } : { scale: 1 }} 
-                                            transition={{ repeat: Infinity, duration: 1.5 }}
-                                            className={clsx("w-24 h-24 rounded-full flex items-center justify-center mb-4 relative", p.isSpeaking ? "bg-blue-500/20" : "bg-white/5")}
-                                        >
-                                            <UserAvatar name={p.name} size={72} />
-                                            {p.isSpeaking && (
-                                                <div className="absolute inset-0 rounded-full border-2 border-blue-500/50 animate-ping" />
-                                            )}
-                                        </motion.div>
-                                    </div>
-                                )}
-
-                                {/* Overlay UI */}
-                                <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end">
-                                    <div className="bg-black/50 backdrop-blur-xl px-3.5 py-2 rounded-xl border border-white/10 flex items-center gap-2.5 shadow-lg">
-                                        <span className="text-sm font-bold font-google">{p.name} {p.isMe && <span className="opacity-60 font-medium">(You)</span>}</span>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        {!p.audioEnabled || (p.isMe && !audioEnabled) ? (
-                                            <div className="bg-red-500/90 backdrop-blur-md p-2 rounded-xl shadow-lg border border-red-400/20">
-                                                <MicOff size={16} className="text-white" />
-                                            </div>
-                                        ) : p.isSpeaking && (
-                                            <div className="bg-blue-500/90 backdrop-blur-md p-2 rounded-xl flex gap-1 items-end h-[34px] shadow-lg border border-blue-400/20">
-                                                <motion.div animate={{ height: ['40%', '100%', '40%'] }} transition={{ repeat: Infinity, duration: 0.6 }} className="w-1.5 bg-white rounded-full" />
-                                                <motion.div animate={{ height: ['70%', '40%', '70%'] }} transition={{ repeat: Infinity, duration: 0.8 }} className="w-1.5 bg-white rounded-full" />
-                                                <motion.div animate={{ height: ['50%', '90%', '50%'] }} transition={{ repeat: Infinity, duration: 0.5 }} className="w-1.5 bg-white rounded-full" />
-                                            </div>
-                                        )}
-                                    </div>
+                                <video 
+                                    ref={screenRef} 
+                                    autoPlay 
+                                    playsInline 
+                                    className="w-full h-full object-contain"
+                                />
+                                <div className="absolute bottom-4 left-4 bg-blue-500/90 backdrop-blur-xl px-3.5 py-2 rounded-xl border border-blue-400/20 flex items-center gap-2.5 shadow-lg">
+                                    <MonitorUp size={16} />
+                                    <span className="text-sm font-bold font-google">Screen Sharing</span>
                                 </div>
-                            </motion.div>
-                        ))}
+                             </motion.div>
+                        )}
+
+                        {/* Local Camera */}
+                        <motion.div 
+                            layout
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className={clsx(
+                                "relative rounded-3xl overflow-hidden shadow-2xl bg-[#131416] transition-all duration-300 border border-white/5 flex items-center justify-center group",
+                                screenShared ? "col-span-3 row-span-1 md:col-span-1 md:row-span-3 aspect-video md:aspect-auto" : "w-full h-full"
+                            )}
+                        >
+                            {!videoEnabled ? (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#131416]">
+                                    <div className="w-24 h-24 rounded-full flex items-center justify-center mb-4 bg-white/5 border border-white/10 relative">
+                                         <UserAvatar name="You" size={72} />
+                                    </div>
+                                    <p className="text-white/50 text-sm font-medium">Camera off</p>
+                                </div>
+                            ) : (
+                                <video 
+                                    ref={videoRef} 
+                                    autoPlay 
+                                    playsInline 
+                                    muted 
+                                    className="w-full h-full object-cover transform -scale-x-100"
+                                />
+                            )}
+
+                            {/* Overlay UI */}
+                            <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="bg-black/50 backdrop-blur-xl px-3.5 py-2 rounded-xl border border-white/10 flex items-center gap-2.5 shadow-lg">
+                                    <span className="text-sm font-bold font-google">You</span>
+                                </div>
+                                <div className="flex gap-2">
+                                    {!audioEnabled ? (
+                                        <div className="bg-red-500/90 backdrop-blur-md p-2 rounded-xl shadow-lg border border-red-400/20">
+                                            <MicOff size={16} className="text-white" />
+                                        </div>
+                                    ) : (
+                                        <div className="bg-black/50 backdrop-blur-md p-2 rounded-xl shadow-lg border border-white/10">
+                                            <Mic size={16} className="text-white" />
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </motion.div>
                     </div>
                 </div>
 
@@ -137,7 +300,7 @@ export default function VideoMeet({ channelName, onLeave }: { channelName: strin
                         <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">Toggle Video</span>
                     </button>
                     
-                    <button onClick={() => setScreenShared(!screenShared)} className={clsx("p-3.5 md:p-4 rounded-2xl transition-all duration-300 relative group flex-shrink-0", screenShared ? "bg-blue-500 text-white shadow-[0_0_15px_rgba(59,130,246,0.4)]" : "bg-white/10 hover:bg-white/20 text-white")}>
+                    <button onClick={handleScreenShare} className={clsx("p-3.5 md:p-4 rounded-2xl transition-all duration-300 relative group flex-shrink-0", screenShared ? "bg-blue-500 text-white shadow-[0_0_15px_rgba(59,130,246,0.4)]" : "bg-white/10 hover:bg-white/20 text-white")}>
                         <MonitorUp size={22} />
                         <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">{screenShared ? 'Stop Sharing' : 'Share Screen'}</span>
                     </button>
@@ -156,13 +319,12 @@ export default function VideoMeet({ channelName, onLeave }: { channelName: strin
 
                     <button onClick={() => setShowSidebar(showSidebar === 'chat' ? null : 'chat')} className={clsx("p-3.5 md:p-4 rounded-2xl transition-all duration-300 relative group flex-shrink-0", showSidebar === 'chat' ? "bg-white/20 text-white" : "bg-white/10 hover:bg-white/20 text-white")}>
                         <MessageSquare size={22} />
-                        <div className="absolute top-3 right-3 w-2.5 h-2.5 rounded-full bg-blue-500 border-2 border-[#1c1c1e]" />
                         <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">Meeting Chat</span>
                     </button>
 
                     <div className="w-px h-8 bg-white/20 mx-1 md:mx-2 flex-shrink-0" />
 
-                    <button onClick={onLeave} className="px-5 md:px-6 py-3.5 md:py-4 rounded-2xl bg-red-500 text-white font-bold transition-all duration-300 hover:bg-red-600 hover:scale-105 shadow-[0_0_20px_rgba(239,68,68,0.4)] flex items-center gap-2 flex-shrink-0">
+                    <button onClick={handleLeaveMeeting} className="px-5 md:px-6 py-3.5 md:py-4 rounded-2xl bg-red-500 text-white font-bold transition-all duration-300 hover:bg-red-600 hover:scale-105 shadow-[0_0_20px_rgba(239,68,68,0.4)] flex items-center gap-2 flex-shrink-0">
                         <PhoneOff size={22} />
                         <span className="hidden sm:inline">Leave</span>
                     </button>
@@ -211,11 +373,9 @@ export default function VideoMeet({ channelName, onLeave }: { channelName: strin
                                             <div className="h-px bg-white/10 flex-1" /> Virtual Backgrounds <div className="h-px bg-white/10 flex-1" />
                                         </h4>
                                         <div className="grid grid-cols-2 gap-3">
-                                            {/* None option */}
                                             <div className="aspect-video bg-white/5 border border-white/20 rounded-xl flex items-center justify-center text-xs font-bold text-white/50 hover:bg-white/10 hover:text-white transition-colors cursor-pointer">
                                                 None
                                             </div>
-                                            {/* Generated options */}
                                             {[1,2,3,4,5].map(i => (
                                                 <div key={i} className="aspect-video bg-black/50 border border-white/10 rounded-xl overflow-hidden hover:border-purple-500 cursor-pointer transition-all hover:shadow-[0_0_15px_rgba(168,85,247,0.4)] relative group">
                                                     <img src={`https://picsum.photos/seed/${i * 42}/300/170`} alt="bg" className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-opacity" />
@@ -253,30 +413,28 @@ export default function VideoMeet({ channelName, onLeave }: { channelName: strin
 
                             {showSidebar === 'people' && (
                                 <div className="space-y-2 animate-fade-in">
-                                    {participants.map(p => (
-                                        <div key={p.id} className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5 hover:border-white/10 transition-colors">
-                                            <div className="flex items-center gap-3">
-                                                <div className="relative">
-                                                    <UserAvatar name={p.name} size={36} />
-                                                    {p.isSpeaking && <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 bg-blue-500 rounded-full border-2 border-[#1c1c1e]" />}
-                                                </div>
-                                                <div className="flex flex-col">
-                                                    <span className="text-sm font-bold font-google">{p.name}</span>
-                                                    <span className="text-[10px] text-white/50">{p.isMe ? 'Meeting Host' : 'Participant'}</span>
-                                                </div>
+                                    <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5 hover:border-white/10 transition-colors">
+                                        <div className="flex items-center gap-3">
+                                            <div className="relative">
+                                                <UserAvatar name="You" size={36} />
                                             </div>
-                                            <div className="flex items-center gap-2">
-                                                <button className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
-                                                    {p.audioEnabled ? <Mic size={14} className={p.isSpeaking ? "text-blue-400" : "text-white/70"} /> : <MicOff size={14} className="text-red-400" />}
-                                                </button>
-                                                <button className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
-                                                    {p.videoEnabled ? <Video size={14} className="text-white/70" /> : <VideoOff size={14} className="text-red-400" />}
-                                                </button>
+                                            <div className="flex flex-col">
+                                                <span className="text-sm font-bold font-google">You</span>
+                                                <span className="text-[10px] text-white/50">Meeting Host</span>
                                             </div>
                                         </div>
-                                    ))}
-                                    <button className="w-full mt-4 py-3 bg-white/5 border border-white/10 border-dashed rounded-xl text-sm font-bold text-white/70 hover:text-white hover:bg-white/10 hover:border-white/20 transition-all flex items-center justify-center gap-2">
-                                        <Users size={16} /> Invite People
+                                        <div className="flex items-center gap-2">
+                                            <button className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
+                                                {audioEnabled ? <Mic size={14} className="text-white/70" /> : <MicOff size={14} className="text-red-400" />}
+                                            </button>
+                                            <button className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
+                                                {videoEnabled ? <Video size={14} className="text-white/70" /> : <VideoOff size={14} className="text-red-400" />}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <button onClick={copyMeetingLink} className="w-full mt-4 py-3 bg-white/5 border border-white/10 border-dashed rounded-xl text-sm font-bold text-white/70 hover:text-white hover:bg-white/10 hover:border-white/20 transition-all flex items-center justify-center gap-2">
+                                        {copied ? <CheckCircle2 size={16} className="text-green-400" /> : <Copy size={16} />} 
+                                        {copied ? 'Link Copied!' : 'Copy Meeting Link'}
                                     </button>
                                 </div>
                             )}

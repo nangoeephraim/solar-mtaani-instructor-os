@@ -29,6 +29,7 @@ const Resources = lazy(() => import('./components/Resources'));
 const Communications = lazy(() => import('./components/Communications'));
 const Fees = lazy(() => import('./components/Fees'));
 const InstructorManagement = lazy(() => import('./components/InstructorManagement'));
+const Meetings = lazy(() => import('./components/Meetings'));
 
 // Loading Spinner Component
 const LoadingSpinner: React.FC = () => (
@@ -950,6 +951,10 @@ const AppContent: React.FC = () => {
           data={data}
           onUpdateAppData={handleUpdateAppData}
         />
+      )}
+
+      {currentView === 'meetings' && (
+        <Meetings key="meetings" />
       )}
 
       {currentView === 'fees' && (

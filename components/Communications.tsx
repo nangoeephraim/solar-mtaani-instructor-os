@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import {
     MessageSquare, Hash, Megaphone, Search, MoreVertical, Paperclip, Send,
     Image as ImageIcon, FileText, Smile, X, Edit2, Pencil, Trash2, Pin, CornerUpLeft,
-    Reply, ShieldAlert, Check, CheckCheck, Clock, Download, Bold, Italic, Code, Menu, Users, AtSign, UserPlus, User, Mic, Square, Video
+    Reply, ShieldAlert, Check, CheckCheck, Clock, Download, Bold, Italic, Code, Menu, Users, AtSign, UserPlus, User, Mic, Square
 } from 'lucide-react';
 import { useToast } from './Toast';
 import clsx from 'clsx';
@@ -15,7 +15,6 @@ import {
 } from '../services/storageService';
 import { uploadFile } from '../services/cloudStorageService';
 import { ChannelSidebar } from './comms/ChannelSidebar';
-import VideoMeet from './comms/VideoMeet';
 import { getAvatarStyle, formatDateSeparator, isSameDay } from './comms/helpers';
 import UserAvatar from './UserAvatar';
 import { fetchAvatarMap, fetchActiveUsers, ProfileData } from '../services/profileService';
@@ -279,7 +278,7 @@ export default function Communications({ data, onUpdateAppData }: Communications
     const [showNewChannel, setShowNewChannel] = useState(false);
     const [newChannelName, setNewChannelName] = useState('');
     const [newChannelDesc, setNewChannelDesc] = useState('');
-    const [newChannelType, setNewChannelType] = useState<'chat' | 'announcement' | 'video_room'>('chat');
+    const [newChannelType, setNewChannelType] = useState<'chat' | 'announcement'>('chat');
     const [hoveredMsgId, setHoveredMsgId] = useState<string | null>(null);
     const [isInputFocused, setIsInputFocused] = useState(false);
     const [showMobileSidebar, setShowMobileSidebar] = useState(false);
@@ -287,7 +286,6 @@ export default function Communications({ data, onUpdateAppData }: Communications
     const [showMentions, setShowMentions] = useState(false);
     const [mentionFilter, setMentionFilter] = useState('');
     const [avatarMap, setAvatarMap] = useState<Record<string, string>>({});
-    const [inVideoCall, setInVideoCall] = useState(false);
 
     // Remote typing indicators — map of userId → { name, timeoutId }
     const [remoteTypers, setRemoteTypers] = useState<Map<string, { name: string; timeoutId: ReturnType<typeof setTimeout> }>>(new Map());
@@ -813,7 +811,7 @@ export default function Communications({ data, onUpdateAppData }: Communications
     return (
         <div className="flex h-full w-full pb-20 lg:pb-0 glass-panel overflow-hidden animate-fade-in relative">
             {/* Sidebar */}
-            <ChannelSidebar channels={channels} activeChannelId={activeChannelId} onSelectChannel={(id) => { setActiveChannelId(id); setShowMobileSidebar(false); setInVideoCall(false); }} onCreateChannel={() => setShowNewChannel(true)} onStartDM={() => setShowNewDM(true)} avatarMap={avatarMap} userProfileMap={userProfileMap} onDeleteChannel={handleDeleteChannel} getUnreadCount={(chId) => getUnreadCount(data, chId, userId)} isAdmin={user?.role === 'admin'} user={user} isOpen={showMobileSidebar} onToggle={() => setShowMobileSidebar(p => !p)} />
+            <ChannelSidebar channels={channels} activeChannelId={activeChannelId} onSelectChannel={(id) => { setActiveChannelId(id); setShowMobileSidebar(false); }} onCreateChannel={() => setShowNewChannel(true)} onStartDM={() => setShowNewDM(true)} avatarMap={avatarMap} userProfileMap={userProfileMap} onDeleteChannel={handleDeleteChannel} getUnreadCount={(chId) => getUnreadCount(data, chId, userId)} isAdmin={user?.role === 'admin'} user={user} isOpen={showMobileSidebar} onToggle={() => setShowMobileSidebar(p => !p)} />
 
             {/* ═══ MAIN CHAT AREA ═══ */}
             {activeChannel ? (
@@ -824,7 +822,7 @@ export default function Communications({ data, onUpdateAppData }: Communications
                             <div className="flex items-center gap-3">
                                 <button onClick={() => setShowMobileSidebar(true)} className="lg:hidden p-2 rounded-xl hover:bg-[var(--md-sys-color-surface-variant)]"><Menu size={20} style={{ color: 'var(--md-sys-color-on-surface)' }} /></button>
                                 <div className="p-1.5 rounded-xl" style={{ background: 'var(--md-sys-color-primary-container)' }}>
-                                    {activeChannel.type === 'announcement' ? <Megaphone size={16} style={{ color: 'var(--md-sys-color-primary)' }} /> : activeChannel.type === 'dm' ? <User size={16} style={{ color: 'var(--md-sys-color-primary)' }} /> : activeChannel.type === 'video_room' ? <Video size={16} style={{ color: 'var(--md-sys-color-primary)' }} /> : <Hash size={16} style={{ color: 'var(--md-sys-color-primary)' }} />}
+                                    {activeChannel.type === 'announcement' ? <Megaphone size={16} style={{ color: 'var(--md-sys-color-primary)' }} /> : activeChannel.type === 'dm' ? <User size={16} style={{ color: 'var(--md-sys-color-primary)' }} /> : <Hash size={16} style={{ color: 'var(--md-sys-color-primary)' }} />}
                                 </div>
                                 <div>
                                     <h1 className="font-google font-bold text-sm" style={{ color: 'var(--md-sys-color-on-surface)' }}>
@@ -834,9 +832,6 @@ export default function Communications({ data, onUpdateAppData }: Communications
                                 </div>
                             </div>
                             <div className="flex items-center gap-1">
-                                {activeChannel.type !== 'video_room' && (
-                                    <button onClick={() => setInVideoCall(true)} title="Start Video Meeting" className={clsx("glass-button p-2", inVideoCall ? "btn-primary text-white" : "text-blue-500")}><Video size={15} /></button>
-                                )}
                                 {pinnedMessages.length > 0 && (
                                     <button onClick={() => setShowPinnedPanel(!showPinnedPanel)} className={clsx("glass-button px-2.5 py-1.5 text-xs flex items-center gap-1", showPinnedPanel && "btn-primary")} style={showPinnedPanel ? {} : {}}>
                                         <Pin size={13} /><span className="font-bold">{pinnedMessages.length}</span>
@@ -873,19 +868,13 @@ export default function Communications({ data, onUpdateAppData }: Communications
                             )}
                         </AnimatePresence>
 
-                        {(inVideoCall || activeChannel.type === 'video_room') ? (
-                            <div className="flex-1 relative z-20">
-                                <VideoMeet channelName={activeChannel.name} onLeave={() => setInVideoCall(false)} />
-                            </div>
-                        ) : (
-                        <>
                         <div className="flex flex-1 overflow-hidden relative">
                             {/* Messages Feed */}
                             <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-5 custom-scrollbar pb-4" style={{ minHeight: 0 }}>
                                 {/* Channel Intro */}
                                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="pb-6 pt-4 text-center">
                                     <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-3 mx-auto" style={{ background: 'var(--md-sys-color-primary-container)' }}>
-                                        {activeChannel.type === 'announcement' ? <Megaphone size={28} style={{ color: 'var(--md-sys-color-primary)' }} /> : activeChannel.type === 'dm' ? <User size={28} style={{ color: 'var(--md-sys-color-primary)' }} /> : activeChannel.type === 'video_room' ? <Video size={28} style={{ color: 'var(--md-sys-color-primary)' }} /> : <Hash size={28} style={{ color: 'var(--md-sys-color-primary)' }} />}
+                                        {activeChannel.type === 'announcement' ? <Megaphone size={28} style={{ color: 'var(--md-sys-color-primary)' }} /> : activeChannel.type === 'dm' ? <User size={28} style={{ color: 'var(--md-sys-color-primary)' }} /> : <Hash size={28} style={{ color: 'var(--md-sys-color-primary)' }} />}
                                     </div>
                                     <h2 className="text-xl font-google font-bold mb-1" style={{ color: 'var(--md-sys-color-on-surface)' }}>
                                         {activeChannel.type === 'dm' ? "Direct Message" : `Welcome to #${activeChannel.name}!`}
@@ -1117,8 +1106,6 @@ export default function Communications({ data, onUpdateAppData }: Communications
                             </div>
                         )}
                         </div>
-                        </>
-                        )}
                     </div>
                 </>
             ) : (
@@ -1155,7 +1142,6 @@ export default function Communications({ data, onUpdateAppData }: Communications
                                     <div className="flex gap-2">
                                         <button onClick={() => setNewChannelType('chat')} className={clsx("flex-1 py-2.5 rounded-xl text-sm font-bold transition-all", newChannelType === 'chat' ? "btn-primary" : "glass-button")}><Hash size={14} className="inline mr-1" /> Text</button>
                                         <button onClick={() => setNewChannelType('announcement')} className={clsx("flex-1 py-2.5 rounded-xl text-sm font-bold transition-all", newChannelType === 'announcement' ? "btn-primary" : "glass-button")}><Megaphone size={14} className="inline mr-1" /> Broadcast</button>
-                                        <button onClick={() => setNewChannelType('video_room')} className={clsx("flex-1 py-2.5 rounded-xl text-sm font-bold transition-all", newChannelType === 'video_room' ? "btn-primary" : "glass-button")}><Video size={14} className="inline mr-1" /> Video Room</button>
                                     </div>
                                 </div>
                             </div>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, Calendar, Users, UserCheck, MoreHorizontal, BarChart3, LineChart, ClipboardCheck, Settings, Box, X, MessageSquare, Wallet, UsersRound } from 'lucide-react';
+import { LayoutDashboard, Calendar, Users, UserCheck, MoreHorizontal, BarChart3, LineChart, ClipboardCheck, Settings, Box, X, MessageSquare, Wallet, UsersRound, Video } from 'lucide-react';
 import clsx from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
@@ -33,6 +33,7 @@ const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate }) => {
         { id: 'fees', label: 'Fees', icon: Wallet, minRole: 'admin' },
         { id: 'instructors', label: 'Instructors', icon: UsersRound, minRole: 'admin' },
         { id: 'communications', label: 'Communications', icon: MessageSquare, minRole: 'viewer' },
+        { id: 'meetings', label: 'Meetings', icon: Video, minRole: 'viewer' },
         { id: 'settings', label: 'Settings', icon: Settings, minRole: 'viewer' },
     ];
 

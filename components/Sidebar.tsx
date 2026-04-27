@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Calendar, Users, ClipboardCheck, Settings, BarChart3, UserCheck, LineChart, Box, MessageSquare, Wallet, UsersRound } from 'lucide-react';
+import { LayoutDashboard, Calendar, Users, ClipboardCheck, Settings, BarChart3, UserCheck, LineChart, Box, MessageSquare, Wallet, UsersRound, Video } from 'lucide-react';
 import clsx from 'clsx';
 import { motion } from 'framer-motion';
 import { AppData, UserRole } from '../types';
@@ -32,6 +32,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, data }) => {
     { id: 'fees', label: 'Fee Management', icon: Wallet, minRole: 'admin' },
     { id: 'instructors', label: 'Instructors', icon: UsersRound, minRole: 'admin' },
     { id: 'communications', label: 'Communications', icon: MessageSquare, minRole: 'viewer' },
+    { id: 'meetings', label: 'Video Meetings', icon: Video, minRole: 'viewer' },
     { id: 'settings', label: 'Settings', icon: Settings, minRole: 'viewer' },
   ];
 
