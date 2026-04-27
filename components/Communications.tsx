@@ -61,18 +61,27 @@ const renderMarkdown = (text: string): React.ReactNode[] => {
 const TypingIndicator = ({ typers }: { typers: string[] }) => (
     <AnimatePresence>
         {typers.length > 0 && (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="flex items-center gap-2 px-4 py-2 text-xs font-medium" style={{ color: 'var(--md-sys-color-secondary)' }}>
-                <div className="flex gap-1">
-                    {[0, 1, 2].map(i => <motion.div key={i} className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--md-sys-color-secondary)' }} animate={{ y: [0, -4, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: i * 0.15 }} />)}
+            <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden flex-shrink-0"
+                style={{ borderTop: '1px solid var(--md-sys-color-outline-variant)', background: 'var(--md-sys-color-surface)' }}
+            >
+                <div className="flex items-center gap-2 px-5 py-2 text-xs font-medium" style={{ color: 'var(--md-sys-color-secondary)' }}>
+                    <div className="flex gap-1 items-center">
+                        {[0, 1, 2].map(i => <motion.div key={i} className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--md-sys-color-primary)' }} animate={{ y: [0, -4, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: i * 0.15 }} />)}
+                    </div>
+                    <span>
+                        <strong style={{ color: 'var(--md-sys-color-on-surface)' }}>{typers.length <= 2 ? typers.join(' and ') : `${typers[0]} and ${typers.length - 1} others`}</strong>
+                        {typers.length === 1 ? ' is typing...' : ' are typing...'}
+                    </span>
                 </div>
-                <span>
-                    <strong>{typers.length <= 2 ? typers.join(' and ') : `${typers[0]} and ${typers.length - 1} others`}</strong>
-                    {typers.length === 1 ? ' is typing...' : ' are typing...'}
-                </span>
             </motion.div>
         )}
     </AnimatePresence>
 );
+
 
 /* ─── Date Separator ─── */
 const DateSeparator = ({ date }: { date: string }) => (
@@ -852,7 +861,6 @@ export default function Communications({ data, onUpdateAppData }: Communications
                                         })}
                                     </div>
                                 )}
-                                <TypingIndicator typers={Array.from(remoteTypers.values()).map(t => t.name)} />
                                 <div ref={messagesEndRef} />
                             </div>
 
@@ -896,6 +904,9 @@ export default function Communications({ data, onUpdateAppData }: Communications
                                 )}
                             </AnimatePresence>
                         </div>
+
+                        {/* Typing Indicator — always visible above input, never hidden by scroll */}
+                        <TypingIndicator typers={Array.from(remoteTypers.values()).map(t => t.name)} />
 
                         {/* Input Area */}
                         {activeChannel.type === 'announcement' && user?.role !== 'admin' ? (
