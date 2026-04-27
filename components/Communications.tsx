@@ -712,7 +712,7 @@ export default function Communications({ data, onUpdateAppData }: Communications
     }
 
     return (
-        <div className={clsx("flex h-full w-full lg:pb-0 glass-panel overflow-hidden animate-fade-in relative", !isInputFocused ? "pb-20" : "pb-0")}>
+        <div className="flex h-full w-full pb-20 lg:pb-0 glass-panel overflow-hidden animate-fade-in relative">
             {/* Sidebar */}
             <ChannelSidebar channels={channels} activeChannelId={activeChannelId} onSelectChannel={(id) => { setActiveChannelId(id); setShowMobileSidebar(false); }} onCreateChannel={() => setShowNewChannel(true)} onStartDM={() => setShowNewDM(true)} avatarMap={avatarMap} userProfileMap={userProfileMap} onDeleteChannel={handleDeleteChannel} getUnreadCount={(chId) => getUnreadCount(data, chId, userId)} isAdmin={user?.role === 'admin'} user={user} isOpen={showMobileSidebar} onToggle={() => setShowMobileSidebar(p => !p)} />
 

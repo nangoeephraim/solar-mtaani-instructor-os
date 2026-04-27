@@ -114,6 +114,21 @@ const AppContent: React.FC = () => {
   useEffect(() => { currentViewRef.current = currentView; }, [currentView]);
   useEffect(() => { userRef.current = user; }, [user]);
 
+  // Handle visual viewport for mobile keyboards
+  useEffect(() => {
+    if (!window.visualViewport) return;
+    const handleResize = () => {
+      document.documentElement.style.setProperty('--vh', `${window.visualViewport!.height * 0.01}px`);
+    };
+    window.visualViewport.addEventListener('resize', handleResize);
+    window.addEventListener('resize', handleResize);
+    handleResize();
+    return () => {
+      window.visualViewport?.removeEventListener('resize', handleResize);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
+
   const userLevel = ROLE_LEVEL[user?.role || 'viewer'] || 1;
 
   // Redirect guard: if current view is restricted, bounce to dashboard
