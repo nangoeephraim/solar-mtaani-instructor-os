@@ -114,9 +114,15 @@ export const validateFile = (
     }
 
     const allowedTypes = BUCKET_ALLOWED_TYPES[bucket];
-    if (file instanceof File && allowedTypes.length > 0) {
-        const fileType = file.type || 'application/octet-stream';
-        if (!allowedTypes.includes(fileType)) {
+    // Validate MIME type for File objects (Blobs from MediaRecorder skip this)
+    const fileType = (file instanceof File ? file.type : (file as any).type) || '';
+    if (fileType && allowedTypes.length > 0) {
+        // Accept if exact match OR if the MIME prefix matches a known media category
+        const isExactMatch = allowedTypes.includes(fileType);
+        const isMediaType = fileType.startsWith('image/') || fileType.startsWith('audio/') || fileType.startsWith('video/');
+        const bucketAcceptsMedia = bucket === 'library_documents';
+        
+        if (!isExactMatch && !(isMediaType && bucketAcceptsMedia)) {
             return `File type "${fileType}" is not allowed. Accepted types: ${allowedTypes.map(t => t.split('/')[1]).join(', ')}`;
         }
     }
