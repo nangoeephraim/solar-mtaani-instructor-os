@@ -43,4 +43,3 @@ export default defineConfig({
     include: ['react', 'react-dom', 'recharts', 'framer-motion', 'lucide-react', 'clsx', 'date-fns']
   }
 });
-
