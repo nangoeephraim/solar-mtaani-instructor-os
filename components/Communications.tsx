@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import {
     MessageSquare, Hash, Megaphone, Search, MoreVertical, Paperclip, Send,
     Image as ImageIcon, FileText, Smile, X, Edit2, Pencil, Trash2, Pin, CornerUpLeft,
-    Reply, ShieldAlert, Check, CheckCheck, Clock, Download, Bold, Italic, Code, Menu, Users, AtSign, UserPlus, User
+    Reply, ShieldAlert, Check, CheckCheck, Clock, Download, Bold, Italic, Code, Menu, Users, AtSign, UserPlus, User, Mic, Square
 } from 'lucide-react';
 import { useToast } from './Toast';
 import clsx from 'clsx';
@@ -19,6 +19,7 @@ import { getAvatarStyle, formatDateSeparator, isSameDay } from './comms/helpers'
 import UserAvatar from './UserAvatar';
 import { fetchAvatarMap, fetchActiveUsers, ProfileData } from '../services/profileService';
 import { createTypingChannel, broadcastTyping, TypingEvent } from '../services/realtimeService';
+import { playSendSound, playReceiveSound } from '../utils/audioUtils';
 
 const EMOJI_OPTIONS = ['👍', '❤️', '😂', '🎉', '✅', '👀', '🔥'];
 const ANNOUNCEMENT_TEMPLATES = [
@@ -62,15 +63,14 @@ const TypingIndicator = ({ typers }: { typers: string[] }) => (
     <AnimatePresence>
         {typers.length > 0 && (
             <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="overflow-hidden flex-shrink-0"
-                style={{ borderTop: '1px solid var(--md-sys-color-outline-variant)', background: 'var(--md-sys-color-surface)' }}
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                className="absolute bottom-full left-4 mb-2 z-10"
             >
-                <div className="flex items-center gap-2 px-5 py-2 text-xs font-medium" style={{ color: 'var(--md-sys-color-secondary)' }}>
+                <div className="flex items-center gap-2 px-4 py-2 text-xs font-medium rounded-2xl shadow-md border" style={{ background: 'var(--md-sys-color-surface-variant)', color: 'var(--md-sys-color-on-surface)', borderColor: 'var(--md-sys-color-outline-variant)' }}>
                     <div className="flex gap-1 items-center">
-                        {[0, 1, 2].map(i => <motion.div key={i} className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--md-sys-color-primary)' }} animate={{ y: [0, -4, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: i * 0.15 }} />)}
+                        {[0, 1, 2].map(i => <motion.div key={i} className="w-1.5 h-1.5 rounded-full" style={{ background: 'var(--md-sys-color-primary)' }} animate={{ y: [0, -3, 0] }} transition={{ repeat: Infinity, duration: 0.6, delay: i * 0.15 }} />)}
                     </div>
                     <span>
                         <strong style={{ color: 'var(--md-sys-color-on-surface)' }}>{typers.length <= 2 ? typers.join(' and ') : `${typers[0]} and ${typers.length - 1} others`}</strong>
@@ -186,6 +186,15 @@ const MessageGroupRenderer = React.memo(({
                                                             <ImageIcon className="text-white" size={24} />
                                                         </div>
                                                     </a>
+                                                ) : att.type === 'audio' ? (
+                                                    <div className="p-2 min-w-[200px] flex flex-col">
+                                                        <span className="text-xs font-bold mb-1 ml-1 opacity-80">{att.name || "Voice Message"}</span>
+                                                        <audio controls src={att.url} className="w-full h-10" />
+                                                    </div>
+                                                ) : att.type === 'video' ? (
+                                                    <div className="relative">
+                                                        <video controls src={att.url} className="max-w-xs max-h-60 rounded-xl bg-black" />
+                                                    </div>
                                                 ) : (
                                                     <a href={att.url} target="_blank" rel="noopener noreferrer" className={clsx("flex items-center justify-between p-3 transition-colors group/link hover:brightness-95", isMyMsg ? "text-white" : "text-[var(--md-sys-color-on-surface)]")}>
                                                         <div className="flex items-center gap-3 overflow-hidden">
@@ -292,6 +301,13 @@ export default function Communications({ data, onUpdateAppData }: Communications
     const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
     const [pendingAttachment, setPendingAttachment] = useState<File | null>(null);
 
+    // Voice Recording State
+    const [isRecording, setIsRecording] = useState(false);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const audioChunksRef = useRef<Blob[]>([]);
+    const [recordingDuration, setRecordingDuration] = useState(0);
+    const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
     const activeChannel = useMemo(() => channels.find(c => c.id === activeChannelId), [channels, activeChannelId]);
     const allActiveMessages = useMemo(() => messages[activeChannelId] || [], [messages, activeChannelId]);
     const activeMessages = useMemo(() => allActiveMessages.filter(m =>
@@ -316,6 +332,24 @@ export default function Communications({ data, onUpdateAppData }: Communications
             });
         }
     }, [userId]);
+    const prevMessagesLengthRef = useRef<number>(0);
+
+    // Track new messages to play receive sound
+    useEffect(() => {
+        if (!activeChannelId) return;
+        const currentMsgs = messages[activeChannelId] || [];
+        const prevLength = prevMessagesLengthRef.current;
+        
+        if (currentMsgs.length > prevLength && prevLength !== 0) {
+            // New message(s) arrived. Check if the latest one is from someone else.
+            const latestMsg = currentMsgs[currentMsgs.length - 1];
+            if (latestMsg && latestMsg.senderId !== userId) {
+                playReceiveSound();
+            }
+        }
+        
+        prevMessagesLengthRef.current = currentMsgs.length;
+    }, [messages, activeChannelId, userId]);
 
     // Build a lookup map for DM partner names/avatars
     const userProfileMap = useMemo(() => {
@@ -430,29 +464,81 @@ export default function Communications({ data, onUpdateAppData }: Communications
     }, []);
 
     /* ─── Handlers ─── */
-    const handleSendMessage = async (e?: React.FormEvent) => {
+    const startRecording = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const mediaRecorder = new MediaRecorder(stream);
+            mediaRecorderRef.current = mediaRecorder;
+            audioChunksRef.current = [];
+            
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) audioChunksRef.current.push(event.data);
+            };
+            
+            mediaRecorder.onstop = () => {
+                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                const file = new File([audioBlob], `Voice_Message_${new Date().toLocaleTimeString().replace(/:/g, '-')}.webm`, { type: 'audio/webm' });
+                setPendingAttachment(file);
+                stream.getTracks().forEach(track => track.stop());
+            };
+
+            mediaRecorder.start();
+            setIsRecording(true);
+            setRecordingDuration(0);
+            recordingTimerRef.current = setInterval(() => {
+                setRecordingDuration(prev => prev + 1);
+            }, 1000);
+        } catch (err) {
+            showToast("Microphone access denied or unavailable", "error");
+        }
+    };
+
+    const stopRecording = (cancel: boolean = false) => {
+        if (mediaRecorderRef.current && isRecording) {
+            mediaRecorderRef.current.onstop = () => {
+                const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+                const file = new File([audioBlob], `Voice_Message_${new Date().toLocaleTimeString().replace(/:/g, '-')}.webm`, { type: 'audio/webm' });
+                mediaRecorderRef.current?.stream.getTracks().forEach(track => track.stop());
+                if (!cancel) {
+                    handleSendMessage(undefined, file);
+                }
+            };
+            mediaRecorderRef.current.stop();
+            setIsRecording(false);
+            if (recordingTimerRef.current) {
+                clearInterval(recordingTimerRef.current);
+                recordingTimerRef.current = null;
+            }
+        }
+    };
+
+    const handleSendMessage = async (e?: React.FormEvent, overrideAttachment?: File) => {
         if (e) e.preventDefault();
-        if ((!messageInput.trim() && !pendingAttachment) || !activeChannelId || !user) return;
+        const fileToSend = overrideAttachment || pendingAttachment;
+        if ((!messageInput.trim() && !fileToSend) || !activeChannelId || !user) return;
         if (activeChannel?.type === 'announcement' && user.role !== 'admin') { showToast("Only administrators can post announcements.", "error"); return; }
 
         let attachmentsToSave: ChatAttachment[] = [];
 
-        if (pendingAttachment) {
+        if (fileToSend) {
             setIsUploadingAttachment(true);
             try {
                 // Determine attachment type based on MIME
-                const isImage = pendingAttachment.type.startsWith('image/');
-                const attachmentType = isImage ? 'image' : 'document';
+                const mime = fileToSend.type;
+                let attachmentType = 'document';
+                if (mime.startsWith('image/')) attachmentType = 'image';
+                else if (mime.startsWith('audio/')) attachmentType = 'audio';
+                else if (mime.startsWith('video/')) attachmentType = 'video';
 
-                const result = await uploadFile('library_documents', pendingAttachment);
+                const result = await uploadFile('library_documents', fileToSend);
 
                 attachmentsToSave.push({
                     id: `att_${Date.now()} `,
-                    name: pendingAttachment.name,
+                    name: fileToSend.name,
                     type: attachmentType as any,
                     url: result.publicUrl,
-                    size: pendingAttachment.size,
-                    mimeType: pendingAttachment.type
+                    size: fileToSend.size,
+                    mimeType: fileToSend.type
                 });
             } catch (err: any) {
                 showToast(`Failed to upload attachment: ${err.message} `, "error");
@@ -480,6 +566,7 @@ export default function Communications({ data, onUpdateAppData }: Communications
         } as any);
 
         onUpdateAppData(newData);
+        playSendSound();
 
         // Wait for realtime subscription to pull the message. Just clear input.
         setMessageInput('');
@@ -905,16 +992,16 @@ export default function Communications({ data, onUpdateAppData }: Communications
                             </AnimatePresence>
                         </div>
 
-                        {/* Typing Indicator — always visible above input, never hidden by scroll */}
-                        <TypingIndicator typers={Array.from(remoteTypers.values()).map(t => t.name)} />
-
                         {/* Input Area */}
-                        {activeChannel.type === 'announcement' && user?.role !== 'admin' ? (
-                            <div className="p-4 text-center" style={{ borderTop: '1px solid var(--md-sys-color-outline-variant)', background: 'var(--md-sys-color-surface-variant)' }}>
-                                <p className="text-sm font-bold flex items-center justify-center gap-2" style={{ color: 'var(--md-sys-color-secondary)' }}><ShieldAlert size={16} /> Only administrators can broadcast here.</p>
-                            </div>
-                        ) : (
-                            <div className="px-5 pb-5 pt-3" style={{ background: 'var(--md-sys-color-surface)' }}>
+                        <div className="relative">
+                            <TypingIndicator typers={Array.from(remoteTypers.values()).map(t => t.name)} />
+                            
+                            {activeChannel.type === 'announcement' && user?.role !== 'admin' ? (
+                                <div className="p-4 text-center" style={{ borderTop: '1px solid var(--md-sys-color-outline-variant)', background: 'var(--md-sys-color-surface-variant)' }}>
+                                    <p className="text-sm font-bold flex items-center justify-center gap-2" style={{ color: 'var(--md-sys-color-secondary)' }}><ShieldAlert size={16} /> Only administrators can broadcast here.</p>
+                                </div>
+                            ) : (
+                                <div className="px-5 pb-5 pt-3" style={{ background: 'var(--md-sys-color-surface)' }}>
                                 <AnimatePresence>
                                     {replyToMsg && (
                                         <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden max-w-4xl mx-auto">
@@ -965,21 +1052,50 @@ export default function Communications({ data, onUpdateAppData }: Communications
                                         )}
                                     </AnimatePresence>
 
-                                    <div className={clsx("flex items-end bg-[var(--md-sys-color-surface-variant)] rounded-[32px] shadow-sm border transition-all duration-300", isInputFocused ? "border-[var(--md-sys-color-primary)] shadow-md" : "border-[var(--md-sys-color-outline-variant)]")}>
+                                    <div className={clsx("flex items-end bg-[var(--md-sys-color-surface-variant)] rounded-[32px] shadow-sm border transition-all duration-300", isInputFocused || isRecording ? "border-[var(--md-sys-color-primary)] shadow-md" : "border-[var(--md-sys-color-outline-variant)]")}>
                                         <div className="pl-3 pb-3 pt-3 flex items-center h-full">
-                                            <input type="file" ref={fileInputRef} className="hidden" onChange={(e) => { if (e.target.files?.[0]) { setPendingAttachment(e.target.files[0]); setTimeout(() => textareaRef.current?.focus(), 100); } }} />
+                                            <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt" onChange={(e) => { if (e.target.files?.[0]) { setPendingAttachment(e.target.files[0]); setTimeout(() => textareaRef.current?.focus(), 100); } }} />
                                             <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2.5 rounded-full hover:bg-[var(--md-sys-color-surface-2)] transition-colors text-[var(--md-sys-color-secondary)] hover:text-[var(--md-sys-color-primary)]" title="Attach file"><Paperclip size={18} /></button>
                                         </div>
-                                        <textarea ref={textareaRef} value={messageInput} onChange={handleInputChange} onKeyDown={handleKeyDown} onFocus={() => setIsInputFocused(true)} onBlur={() => setTimeout(() => { setIsInputFocused(false); setShowMentions(false); }, 200)} placeholder={activeChannel.type === 'announcement' ? 'Compose broadcast message...' : `Message #${activeChannel.name}`} className="flex-1 bg-transparent py-4 px-2 outline-none resize-none overflow-hidden max-h-32 min-h-[56px] text-[15px] font-google font-medium text-[var(--md-sys-color-on-surface)]" rows={1} />
-                                        <div className="pr-3 pb-3 pt-3 flex items-center h-full">
-                                            <button type="submit" disabled={(!messageInput.trim() && !pendingAttachment) || isUploadingAttachment} className="bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] w-10 h-10 flex items-center justify-center rounded-full disabled:opacity-40 hover:opacity-90 hover:scale-105 transition-all shadow-md active:scale-95 disabled:hover:scale-100 disabled:shadow-none">
-                                                {isUploadingAttachment ? <div className="w-4 h-4 rounded-full border-2 border-[var(--md-sys-color-on-primary)] border-t-transparent animate-spin" /> : <Send size={16} className="ml-0.5" />}
-                                            </button>
+                                        
+                                        {isRecording ? (
+                                            <div className="flex-1 flex items-center gap-3 py-4 px-3">
+                                                <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+                                                <span className="font-google font-bold text-red-500 text-sm">
+                                                    {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
+                                                </span>
+                                                <span className="text-xs ml-auto opacity-70 animate-pulse hidden sm:inline">Recording...</span>
+                                            </div>
+                                        ) : (
+                                            <textarea ref={textareaRef} value={messageInput} onChange={handleInputChange} onKeyDown={handleKeyDown} onFocus={() => setIsInputFocused(true)} onBlur={() => setTimeout(() => { setIsInputFocused(false); setShowMentions(false); }, 200)} placeholder={activeChannel.type === 'announcement' ? 'Compose broadcast message...' : `Message #${activeChannel.name}`} className="flex-1 bg-transparent py-4 px-2 outline-none resize-none overflow-hidden max-h-32 min-h-[56px] text-[15px] font-google font-medium text-[var(--md-sys-color-on-surface)]" rows={1} />
+                                        )}
+
+                                        <div className="pr-3 pb-3 pt-3 flex items-center h-full gap-1">
+                                            {isRecording ? (
+                                                <>
+                                                    <button type="button" onClick={() => stopRecording(true)} className="p-2 text-red-500 hover:bg-red-500/10 rounded-full transition-colors"><Trash2 size={18} /></button>
+                                                    <button type="button" onClick={() => stopRecording(false)} className="bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] w-10 h-10 flex items-center justify-center rounded-full hover:scale-105 transition-all shadow-md active:scale-95">
+                                                        <Send size={16} className="ml-0.5" />
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                <button type="button" onClick={(e) => {
+                                                    if (!messageInput.trim() && !pendingAttachment) {
+                                                        startRecording();
+                                                    } else {
+                                                        handleSendMessage(e as any);
+                                                    }
+                                                }} disabled={isUploadingAttachment} className="bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] w-10 h-10 flex items-center justify-center rounded-full disabled:opacity-40 hover:opacity-90 hover:scale-105 transition-all shadow-md active:scale-95 disabled:hover:scale-100 disabled:shadow-none">
+                                                    {isUploadingAttachment ? <div className="w-4 h-4 rounded-full border-2 border-[var(--md-sys-color-on-primary)] border-t-transparent animate-spin" /> : 
+                                                    (!messageInput.trim() && !pendingAttachment) ? <Mic size={18} /> : <Send size={16} className="ml-0.5" />}
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 </form>
                             </div>
                         )}
+                        </div>
                     </div>
                 </>
             ) : (

@@ -63,6 +63,12 @@ const BUCKET_ALLOWED_TYPES: Record<StorageBucket, string[]> = {
         'application/vnd.ms-powerpoint',
         'application/vnd.openxmlformats-officedocument.presentationml.presentation',
         'text/plain',
+        'audio/webm',
+        'audio/mpeg',
+        'audio/wav',
+        'audio/ogg',
+        'video/mp4',
+        'video/webm',
     ],
     student_photos: [
         'image/jpeg',

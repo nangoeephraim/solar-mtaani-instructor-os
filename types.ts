@@ -218,7 +218,7 @@ export interface ChatChannel {
 export interface ChatAttachment {
   id: string;
   name: string;
-  type: 'image' | 'document' | 'link';
+  type: 'image' | 'document' | 'link' | 'audio' | 'video';
   url: string;
   size?: number;
   mimeType?: string;
