@@ -453,7 +453,6 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
     dataRef.current = data;
 
     const [activeChannelId, setActiveChannelId] = useState<string>(channels[0]?.id || '');
-    const [activeMeetingId, setActiveMeetingId] = useState<string | undefined>();
     const [messageInput, setMessageInput] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const [showSearch, setShowSearch] = useState(false);
@@ -463,9 +462,6 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
     // Global meeting listeners
     useEffect(() => {
         const handleJoin = (e: any) => {
-            if (e.detail && typeof e.detail === 'string') {
-                setActiveMeetingId(e.detail);
-            }
             setActiveChannelId('video_meetings');
         };
         const handleBroadcast = async (e: any) => {
@@ -788,7 +784,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
             mediaRecorder.onstop = () => {
                 const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
                 const file = new File([audioBlob], `Voice_Message_${new Date().toLocaleTimeString().replace(/:/g, '-')}.webm`, { type: 'audio/webm' });
-                setPendingAttachments(prev => [...prev, file]);
+                setPendingAttachment(file);
                 stream.getTracks().forEach(track => track.stop());
             };
 
@@ -1174,8 +1170,8 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
 
             {/* ═══ MAIN CHAT AREA ═══ */}
             {activeChannelId === 'video_meetings' ? (
-                <div className="flex-1 flex flex-col h-full bg-[#202124] overflow-hidden rounded-r-3xl">
-                    <Meetings initialMeetingId={activeMeetingId} currentUser={user} />
+                <div className="flex-1 flex flex-col relative overflow-hidden" style={{ background: 'var(--md-sys-color-background)' }}>
+                    <Meetings />
                 </div>
             ) : activeChannel ? (
                 <>
@@ -1363,6 +1359,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
                                                             setEditingMsgId(msg.id);
                                                             setEditContent(msg.content);
                                                         }}
+                                                        avatarMap={avatarMap}
                                                         channelLastReadBy={activeChannel?.lastReadBy}
                                                     />
                                                 </React.Fragment>

@@ -114,8 +114,8 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ student }) => {
                             <div className="flex items-center gap-2 mt-1">
                                 <span className={clsx(
                                     "w-2 h-2 rounded-full",
-                                    ['T1', 'T2', 'T3'].includes(student.epraLicenseStatus as string) ? 'bg-emerald-500' :
-                                        student.epraLicenseStatus === 'None' ? 'bg-rose-500' : 'bg-slate-300'
+                                    student.epraLicenseStatus === 'Valid' ? 'bg-emerald-500' :
+                                        student.epraLicenseStatus === 'Expired' ? 'bg-rose-500' : 'bg-slate-300'
                                 )} />
                                 <p className="text-sm font-bold text-[var(--md-sys-color-on-surface)]">{student.epraLicenseStatus || 'None'}</p>
                             </div>
