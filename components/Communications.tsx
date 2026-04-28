@@ -21,6 +21,7 @@ import { fetchAvatarMap, fetchActiveUsers, ProfileData } from '../services/profi
 import { createTypingChannel, broadcastTyping, TypingEvent } from '../services/realtimeService';
 import { playSendSound, playReceiveSound } from '../utils/audioUtils';
 import Meetings from './Meetings';
+import { supabase } from '../services/supabase';
 
 const EMOJI_OPTIONS = ['👍', '❤️', '😂', '🎉', '✅', '👀', '🔥'];
 const ANNOUNCEMENT_TEMPLATES = [
@@ -362,6 +363,15 @@ const MessageGroupRenderer = React.memo(({
                                     </>
                                 )}
                                 {!msg.isDeleted && renderReactions(msg)}
+                                {/* Inline timestamp + read tick — last bubble only, own messages */}
+                                {isLast && isMyMsg && !msg.isDeleted && (
+                                    <div className="flex items-center justify-end gap-0.5 mt-0.5 -mb-0.5">
+                                        <span className="text-[9px] font-medium opacity-60">
+                                            {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </span>
+                                        <CheckCheck size={12} className="opacity-70" />
+                                    </div>
+                                )}
                             </motion.div>
                             </SwipeableMessage>
                         );
@@ -397,6 +407,12 @@ const MessageGroupRenderer = React.memo(({
     for (let i = 0; i < prevProps.group.length; i++) {
         if (prevProps.group[i] !== nextProps.group[i]) return false;
     }
+
+    // Re-render if any sender's avatar URL changed (so new photos appear without page refresh)
+    const hasAvatarChange = nextProps.group.some((m: any) =>
+        prevProps.avatarMap?.[m.senderId] !== nextProps.avatarMap?.[m.senderId]
+    );
+    if (hasAvatarChange) return false;
 
     return true;
 });
@@ -468,7 +484,12 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
     const [showInfoDrawer, setShowInfoDrawer] = useState(false);
     const [showMentions, setShowMentions] = useState(false);
     const [mentionFilter, setMentionFilter] = useState('');
-    const [avatarMap, setAvatarMap] = useState<Record<string, string>>({});
+    const [avatarMap, setAvatarMap] = useState<Record<string, string>>(() => {
+        // Immediately seed the current user's own avatar if AuthContext has it
+        const own: Record<string, string> = {};
+        if (userId && (user as any)?.avatarUrl) own[userId] = (user as any).avatarUrl;
+        return own;
+    });
 
     // Remote typing indicators — map of userId → { name, timeoutId }
     const [remoteTypers, setRemoteTypers] = useState<Map<string, { name: string; timeoutId: ReturnType<typeof setTimeout> }>>(new Map());
@@ -516,13 +537,19 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
     // Mobile: whether the formatting toolbar is expanded (hidden by default like WhatsApp)
     const [showMobileFormats, setShowMobileFormats] = useState(false);
 
-    // Fetch users for DM directory (eagerly, so sidebar can display names)
+    // Fetch users for DM directory AND eagerly pre-load all their avatars
     useEffect(() => {
         if (dmUsers.length === 0) {
             setIsLoadingUsers(true);
             fetchActiveUsers(userId).then(users => {
                 setDmUsers(users);
                 setIsLoadingUsers(false);
+                // Eagerly seed the avatarMap with all known users right now
+                const eagerMap: Record<string, string> = {};
+                users.forEach(u => { if (u.avatarUrl) eagerMap[u.id] = u.avatarUrl; });
+                if (Object.keys(eagerMap).length > 0) {
+                    setAvatarMap(prev => ({ ...eagerMap, ...prev })); // prev wins (own avatar stays)
+                }
             }).catch(err => {
                 console.error("Failed to load users", err);
                 setIsLoadingUsers(false);
@@ -589,14 +616,29 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
         if (allRelevantIds.length === 0) return;
         fetchAvatarMap(allRelevantIds).then(freshMap => {
             setAvatarMap(prev => {
-                // Merge: keep existing entries, overlay with fresh ones (handles updates)
                 const merged = { ...prev, ...freshMap };
-                // Check if anything actually changed before triggering re-render
                 const changed = allRelevantIds.some(id => prev[id] !== merged[id]);
                 return changed ? merged : prev;
             });
         }).catch(() => { });
     }, [allRelevantIds]);
+
+    // Subscribe to Supabase realtime profile changes so avatar updates are instant
+    useEffect(() => {
+        const channel = supabase
+            .channel('avatar-updates')
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, (payload) => {
+                const row = payload.new as any;
+                if (row?.id && row?.avatar_url) {
+                    setAvatarMap(prev => {
+                        if (prev[row.id] === row.avatar_url) return prev;
+                        return { ...prev, [row.id]: row.avatar_url };
+                    });
+                }
+            })
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
+    }, []);
 
     // ─── Typing Broadcast Channel ───
     // Subscribe to the typing broadcast channel for the active chat channel.
@@ -1267,6 +1309,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
                                                             setEditingMsgId(msg.id);
                                                             setEditContent(msg.content);
                                                         }}
+                                                        avatarMap={avatarMap}
                                                     />
                                                 </React.Fragment>
                                             );
