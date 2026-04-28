@@ -481,10 +481,18 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
     const [isLoadingUsers, setIsLoadingUsers] = useState(false);
     const [dmUserSearch, setDmUserSearch] = useState('');
 
-    // Attachments State
-    const fileInputRef = useRef<HTMLInputElement>(null);
+    // Attachments State — multi-file queue
+    const fileInputRef    = useRef<HTMLInputElement>(null);
+    const imageInputRef   = useRef<HTMLInputElement>(null);
+    const cameraInputRef  = useRef<HTMLInputElement>(null);
+    const docInputRef     = useRef<HTMLInputElement>(null);
     const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
-    const [pendingAttachment, setPendingAttachment] = useState<File | null>(null);
+    const [pendingAttachments, setPendingAttachments] = useState<File[]>([]);
+    // Mobile attach sheet
+    const [showMobileAttachSheet, setShowMobileAttachSheet] = useState(false);
+    // Drag-drop
+    const [isDragOver, setIsDragOver] = useState(false);
+    const chatAreaRef = useRef<HTMLDivElement>(null);
 
     // Voice Recording State
     const [isRecording, setIsRecording] = useState(false);
@@ -720,39 +728,43 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
 
     const handleSendMessage = async (e?: React.FormEvent, overrideAttachment?: File) => {
         if (e) e.preventDefault();
-        const fileToSend = overrideAttachment || pendingAttachment;
-        if ((!messageInput.trim() && !fileToSend) || !activeChannelId || !user) return;
+        // Build unified file list
+        const filesToSend: File[] = overrideAttachment
+            ? [overrideAttachment]
+            : [...pendingAttachments];
+        if ((!messageInput.trim() && filesToSend.length === 0) || !activeChannelId || !user) return;
         if (activeChannel?.type === 'announcement' && user.role !== 'admin') { showToast("Only administrators can post announcements.", "error"); return; }
 
         let attachmentsToSave: ChatAttachment[] = [];
 
-        if (fileToSend) {
+        if (filesToSend.length > 0) {
             setIsUploadingAttachment(true);
             try {
-                // Determine attachment type based on MIME
-                const mime = fileToSend.type;
-                let attachmentType = 'document';
-                if (mime.startsWith('image/')) attachmentType = 'image';
-                else if (mime.startsWith('audio/')) attachmentType = 'audio';
-                else if (mime.startsWith('video/')) attachmentType = 'video';
+                for (const fileToSend of filesToSend) {
+                    const mime = fileToSend.type;
+                    let attachmentType = 'document';
+                    if (mime.startsWith('image/')) attachmentType = 'image';
+                    else if (mime.startsWith('audio/')) attachmentType = 'audio';
+                    else if (mime.startsWith('video/')) attachmentType = 'video';
 
-                const result = await uploadFile('library_documents', fileToSend, {
-                    contentType: mime,
-                    pathPrefix: 'chat_attachments'
-                });
+                    const result = await uploadFile('library_documents', fileToSend, {
+                        contentType: mime,
+                        pathPrefix: 'chat_attachments'
+                    });
 
-                attachmentsToSave.push({
-                    id: `att_${Date.now()} `,
-                    name: fileToSend.name,
-                    type: attachmentType as any,
-                    url: result.publicUrl,
-                    size: fileToSend.size,
-                    mimeType: fileToSend.type
-                });
+                    attachmentsToSave.push({
+                        id: `att_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+                        name: fileToSend.name,
+                        type: attachmentType as any,
+                        url: result.publicUrl,
+                        size: fileToSend.size,
+                        mimeType: fileToSend.type
+                    });
+                }
             } catch (err: any) {
-                showToast(`Failed to upload attachment: ${err.message} `, "error");
+                showToast(`Failed to upload: ${err.message}`, "error");
                 setIsUploadingAttachment(false);
-                return; // Abort send if upload fails
+                return;
             }
             setIsUploadingAttachment(false);
         }
@@ -761,9 +773,10 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
         const mentionMatches = messageInput.match(/@(\w+)/g);
         const mentionsList = mentionMatches ? mentionMatches.map(m => m.slice(1)) : undefined;
 
-        // For attachment-only messages (e.g. voice notes), use a descriptive fallback
-        const msgContent = messageInput.trim() || (attachmentsToSave.length > 0
-            ? (attachmentsToSave[0].type === 'audio' ? '🎤 Voice message' : attachmentsToSave[0].type === 'video' ? '🎬 Video' : attachmentsToSave[0].type === 'image' ? '📷 Photo' : `📎 ${attachmentsToSave[0].name}`)
+        // For attachment-only messages use a descriptive fallback
+        const firstAtt = attachmentsToSave[0];
+        const msgContent = messageInput.trim() || (firstAtt
+            ? (firstAtt.type === 'audio' ? '🎤 Voice message' : firstAtt.type === 'video' ? '🎬 Video' : firstAtt.type === 'image' ? `📷 ${attachmentsToSave.length > 1 ? `${attachmentsToSave.length} photos` : 'Photo'}` : `📎 ${firstAtt.name}`)
             : '');
 
         // Optimistic UI update
@@ -785,16 +798,61 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
         // Wait for realtime subscription to pull the message. Just clear input.
         setMessageInput('');
         setReplyToMsg(null);
-        setPendingAttachment(null);
+        setPendingAttachments([]);
         if (textareaRef.current) textareaRef.current.style.height = 'auto';
 
-        // Stop typing indicator for other users
+        // Stop typing indicator
         if (typingDebounceRef.current) {
             clearTimeout(typingDebounceRef.current);
             typingDebounceRef.current = null;
         }
         broadcastTyping(activeChannelId, userId, user.name, false);
         if (fileInputRef.current) fileInputRef.current.value = '';
+        if (imageInputRef.current) imageInputRef.current.value = '';
+        if (docInputRef.current) docInputRef.current.value = '';
+    };
+
+    // ─── Clipboard Paste → attach images ───
+    useEffect(() => {
+        const handlePaste = (e: ClipboardEvent) => {
+            const items = e.clipboardData?.items;
+            if (!items) return;
+            const imageItems = Array.from(items).filter(item => item.type.startsWith('image/'));
+            if (imageItems.length === 0) return;
+            e.preventDefault();
+            const newFiles = imageItems
+                .map(item => item.getAsFile())
+                .filter((f): f is File => f !== null);
+            setPendingAttachments(prev => [...prev, ...newFiles].slice(0, 5));
+            showToast(`${newFiles.length} image${newFiles.length > 1 ? 's' : ''} pasted`, 'success');
+        };
+        document.addEventListener('paste', handlePaste);
+        return () => document.removeEventListener('paste', handlePaste);
+    }, []);
+
+    // ─── Drag and Drop onto chat area ───
+    const handleDragOver = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragOver(true);
+    }, []);
+    const handleDragLeave = useCallback(() => setIsDragOver(false), []);
+    const handleDrop = useCallback((e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragOver(false);
+        const dropped = Array.from(e.dataTransfer.files).slice(0, 5);
+        if (dropped.length > 0) {
+            setPendingAttachments(prev => [...prev, ...dropped].slice(0, 5));
+            showToast(`${dropped.length} file${dropped.length > 1 ? 's' : ''} added`, 'success');
+        }
+    }, []);
+
+    // Helper to add files from any picker
+    const addFiles = (files: FileList | null) => {
+        if (!files || files.length === 0) return;
+        const arr = Array.from(files).slice(0, 5);
+        setPendingAttachments(prev => [...prev, ...arr].slice(0, 5));
+        setShowMobileAttachSheet(false);
+        setTimeout(() => textareaRef.current?.focus(), 100);
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1025,7 +1083,26 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
                 </div>
             ) : activeChannel ? (
                 <>
-                    <div className="flex-1 flex flex-col relative overflow-hidden" style={{ background: 'var(--md-sys-color-background)' }}>
+                    <div
+                        className="flex-1 flex flex-col relative overflow-hidden"
+                        style={{ background: 'var(--md-sys-color-background)' }}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                    >
+                        {/* Drag-drop overlay */}
+                        <AnimatePresence>
+                            {isDragOver && (
+                                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                                    className="absolute inset-0 z-50 flex flex-col items-center justify-center pointer-events-none rounded-2xl border-4 border-dashed"
+                                    style={{ background: 'var(--md-sys-color-primary-container)', borderColor: 'var(--md-sys-color-primary)', opacity: 0.92 }}
+                                >
+                                    <Paperclip size={48} style={{ color: 'var(--md-sys-color-primary)' }} className="mb-4 animate-bounce" />
+                                    <p className="text-xl font-google font-bold" style={{ color: 'var(--md-sys-color-primary)' }}>Drop files to attach</p>
+                                    <p className="text-sm mt-1" style={{ color: 'var(--md-sys-color-on-primary-container)' }}>Up to 5 files at once</p>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
                         {/* Header */}
                         <div className="h-14 px-4 flex items-center justify-between flex-shrink-0 z-10 sidebar-glass" style={{ borderBottom: '1px solid var(--md-sys-color-outline-variant)' }}>
                             <div className="flex items-center gap-2">
@@ -1292,42 +1369,88 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
                                     )}
                                 </div>
                                 <form onSubmit={handleSendMessage} className="relative max-w-4xl mx-auto">
+                                    {/* ── Multi-file preview chips ── */}
                                     <AnimatePresence>
-                                        {pendingAttachment && (
+                                        {pendingAttachments.length > 0 && (
                                             <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden mb-2">
-                                                <div className="flex items-center gap-2 p-2.5 rounded-2xl text-xs border" style={{ background: 'var(--md-sys-color-surface-variant)', color: 'var(--md-sys-color-on-surface)', borderColor: 'var(--md-sys-color-outline-variant)' }}>
-                                                    {pendingAttachment.type.startsWith('image/') ? <ImageIcon size={16} className="text-blue-500" /> : pendingAttachment.type.startsWith('audio/') ? <Mic size={16} className="text-green-500" /> : pendingAttachment.type.startsWith('video/') ? <ImageIcon size={16} className="text-purple-500" /> : <FileText size={16} className="text-orange-500" />}
-                                                    <span className="font-bold truncate flex-1">{pendingAttachment.name}</span>
-                                                    <span className="opacity-60">{(pendingAttachment.size / 1024).toFixed(1)} KB</span>
-                                                    <button type="button" onClick={() => setPendingAttachment(null)} className="p-1.5 rounded-full hover:bg-[var(--md-sys-color-surface-2)] transition-colors"><X size={14} /></button>
+                                                <div className="flex flex-wrap gap-2 p-2">
+                                                    {pendingAttachments.map((file, idx) => {
+                                                        const isImg = file.type.startsWith('image/');
+                                                        const isAudio = file.type.startsWith('audio/');
+                                                        const isVideo = file.type.startsWith('video/');
+                                                        const objUrl = isImg ? URL.createObjectURL(file) : null;
+                                                        return (
+                                                            <div key={idx} className="relative flex items-center gap-2 rounded-2xl text-xs border pr-2 overflow-hidden" style={{ background: 'var(--md-sys-color-surface-variant)', borderColor: 'var(--md-sys-color-outline-variant)', maxWidth: '200px' }}>
+                                                                {isImg && objUrl
+                                                                    ? <img src={objUrl} alt={file.name} className="w-10 h-10 object-cover rounded-l-2xl flex-shrink-0" onLoad={() => URL.revokeObjectURL(objUrl)} />
+                                                                    : <div className="w-10 h-10 flex items-center justify-center flex-shrink-0 rounded-l-2xl" style={{ background: 'var(--md-sys-color-primary-container)' }}>
+                                                                        {isAudio ? <Mic size={16} style={{ color: 'var(--md-sys-color-primary)' }} /> : isVideo ? <ImageIcon size={16} style={{ color: 'var(--md-sys-color-primary)' }} /> : <FileText size={16} style={{ color: 'var(--md-sys-color-primary)' }} />}
+                                                                    </div>
+                                                                }
+                                                                <div className="flex flex-col min-w-0 py-1">
+                                                                    <span className="font-bold truncate" style={{ color: 'var(--md-sys-color-on-surface)', maxWidth: '100px' }}>{file.name}</span>
+                                                                    <span className="opacity-60" style={{ color: 'var(--md-sys-color-on-surface)' }}>{(file.size / 1024).toFixed(1)} KB</span>
+                                                                </div>
+                                                                <button type="button" onClick={() => setPendingAttachments(prev => prev.filter((_, i) => i !== idx))} className="p-1 rounded-full ml-1 hover:bg-[var(--md-sys-color-surface)] transition-colors flex-shrink-0" style={{ color: 'var(--md-sys-color-error)' }}><X size={12} /></button>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                    {pendingAttachments.length < 5 && (
+                                                        <button type="button" onClick={() => fileInputRef.current?.click()} className="w-10 h-10 rounded-2xl flex items-center justify-center border-2 border-dashed transition-colors hover:border-[var(--md-sys-color-primary)]" style={{ borderColor: 'var(--md-sys-color-outline-variant)', color: 'var(--md-sys-color-secondary)' }}>
+                                                            <Plus size={16} />
+                                                        </button>
+                                                    )}
                                                 </div>
                                             </motion.div>
                                         )}
                                     </AnimatePresence>
 
-                                    <div className={clsx("flex items-end rounded-[32px] transition-all duration-300 backdrop-blur-md", isInputFocused || isRecording ? "border-[var(--md-sys-color-primary)] shadow-lg bg-[var(--md-sys-color-surface-variant)] scale-[1.01]" : "border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface)] hover:bg-[var(--md-sys-color-surface-variant)] shadow-sm")} style={{ border: '1px solid', borderColor: isInputFocused || isRecording ? 'var(--md-sys-color-primary)' : 'var(--md-sys-color-outline-variant)' }}>
+                                    {/* Hidden file inputs for all picker types */}
+                                    <input type="file" ref={fileInputRef} className="hidden" multiple accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt" onChange={e => addFiles(e.target.files)} />
+                                    <input type="file" ref={imageInputRef} className="hidden" multiple accept="image/*,video/*" onChange={e => addFiles(e.target.files)} />
+                                    <input type="file" ref={cameraInputRef} className="hidden" accept="image/*" capture="environment" onChange={e => addFiles(e.target.files)} />
+                                    <input type="file" ref={docInputRef} className="hidden" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv" onChange={e => addFiles(e.target.files)} />
+
+                                    {/* ── Mobile Attach Action Sheet ── */}
+                                    <AnimatePresence>
+                                        {showMobileAttachSheet && (
+                                            <>
+                                                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-40 bg-black/40" onClick={() => setShowMobileAttachSheet(false)} />
+                                                <motion.div initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 60, opacity: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 35 }} className="fixed bottom-0 left-0 right-0 z-50 rounded-t-3xl p-6 pb-8 grid grid-cols-4 gap-4" style={{ background: 'var(--md-sys-color-surface)', boxShadow: 'var(--shadow-elevation-3)' }}>
+                                                    {[
+                                                        { icon: <ImageIcon size={22} />, label: 'Photos', color: '#3b82f6', action: () => imageInputRef.current?.click() },
+                                                        { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M20 7h-3.5l-1.5-2h-6L7.5 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/></svg>, label: 'Camera', color: '#10b981', action: () => cameraInputRef.current?.click() },
+                                                        { icon: <FileText size={22} />, label: 'Document', color: '#f59e0b', action: () => docInputRef.current?.click() },
+                                                        { icon: <Mic size={22} />, label: 'Audio', color: '#8b5cf6', action: () => { setShowMobileAttachSheet(false); startRecording(); } },
+                                                    ].map(({ icon, label, color, action }) => (
+                                                        <button key={label} type="button" onClick={action} className="flex flex-col items-center gap-2 active:scale-95 transition-transform">
+                                                            <div className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-md" style={{ background: color + '22', color }}>
+                                                                {icon}
+                                                            </div>
+                                                            <span className="text-xs font-semibold" style={{ color: 'var(--md-sys-color-on-surface)' }}>{label}</span>
+                                                        </button>
+                                                    ))}
+                                                </motion.div>
+                                            </>
+                                        )}
+                                    </AnimatePresence>
+
+                                    <div className={clsx("flex items-end rounded-[32px] transition-all duration-300 backdrop-blur-md", isInputFocused || isRecording ? "shadow-lg bg-[var(--md-sys-color-surface-variant)] scale-[1.01]" : "bg-[var(--md-sys-color-surface)] hover:bg-[var(--md-sys-color-surface-variant)] shadow-sm")} style={{ border: '1px solid', borderColor: isInputFocused || isRecording ? 'var(--md-sys-color-primary)' : 'var(--md-sys-color-outline-variant)' }}>
                                         <div className="pl-2 pb-2 pt-2 flex items-center h-full gap-0.5">
-                                            <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt" onChange={(e) => { if (e.target.files?.[0]) { setPendingAttachment(e.target.files[0]); setTimeout(() => textareaRef.current?.focus(), 100); } }} />
-                                            {/* Mobile '+' button to expand formatting toolbar; desktop shows attachment clip */}
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowMobileFormats(p => !p)}
-                                                className="md:hidden p-2.5 rounded-full hover:bg-[var(--md-sys-color-surface-2)] transition-all text-[var(--md-sys-color-secondary)] active:scale-90"
-                                                title="More options"
-                                            >
-                                                <motion.div animate={{ rotate: showMobileFormats ? 45 : 0 }} transition={{ type: 'spring', stiffness: 400, damping: 20 }}>
+                                            {/* Mobile: '+' opens the attach sheet */}
+                                            <button type="button" onClick={() => setShowMobileAttachSheet(p => !p)} className="md:hidden p-2.5 rounded-full hover:bg-[var(--md-sys-color-surface-2)] transition-all active:scale-90" style={{ color: 'var(--md-sys-color-secondary)' }} title="Attach">
+                                                <motion.div animate={{ rotate: showMobileAttachSheet ? 45 : 0 }} transition={{ type: 'spring', stiffness: 400, damping: 20 }}>
                                                     <Plus size={20} />
                                                 </motion.div>
                                             </button>
-                                            <button type="button" onClick={() => fileInputRef.current?.click()} className="hidden md:flex p-2.5 rounded-full hover:bg-[var(--md-sys-color-surface-2)] transition-colors text-[var(--md-sys-color-secondary)] hover:text-[var(--md-sys-color-primary)]" title="Attach file"><Paperclip size={18} /></button>
+                                            {/* Desktop: paperclip opens full picker */}
+                                            <button type="button" onClick={() => fileInputRef.current?.click()} className="hidden md:flex p-2.5 rounded-full hover:bg-[var(--md-sys-color-surface-2)] transition-colors hover:text-[var(--md-sys-color-primary)]" style={{ color: 'var(--md-sys-color-secondary)' }} title="Attach file (or drag & drop / paste image)"><Paperclip size={18} /></button>
                                         </div>
-                                        
+
                                         {isRecording ? (
                                             <div className="flex-1 flex items-center gap-3 py-4 px-3">
                                                 <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-                                                <span className="font-google font-bold text-red-500 text-sm">
-                                                    {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
-                                                </span>
+                                                <span className="font-google font-bold text-red-500 text-sm">{Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}</span>
                                                 <span className="text-xs ml-auto opacity-70 animate-pulse hidden sm:inline">Recording...</span>
                                             </div>
                                         ) : (
@@ -1338,20 +1461,16 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
                                             {isRecording ? (
                                                 <>
                                                     <button type="button" onClick={() => stopRecording(true)} className="p-2 text-red-500 hover:bg-red-500/10 rounded-full transition-colors"><Trash2 size={18} /></button>
-                                                    <button type="button" onClick={() => stopRecording(false)} className="bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] w-10 h-10 flex items-center justify-center rounded-full hover:scale-105 transition-all shadow-md active:scale-95">
-                                                        <Send size={16} className="ml-0.5" />
-                                                    </button>
+                                                    <button type="button" onClick={() => stopRecording(false)} className="bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] w-10 h-10 flex items-center justify-center rounded-full hover:scale-105 transition-all shadow-md active:scale-95"><Send size={16} className="ml-0.5" /></button>
                                                 </>
                                             ) : (
-                                                <button type="button" onClick={(e) => {
-                                                    if (!messageInput.trim() && !pendingAttachment) {
-                                                        startRecording();
-                                                    } else {
-                                                        handleSendMessage(e as any);
-                                                    }
-                                                }} disabled={isUploadingAttachment} className="bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] w-10 h-10 flex items-center justify-center rounded-full disabled:opacity-40 hover:opacity-90 hover:scale-105 transition-all shadow-md active:scale-95 disabled:hover:scale-100 disabled:shadow-none">
-                                                    {isUploadingAttachment ? <div className="w-4 h-4 rounded-full border-2 border-[var(--md-sys-color-on-primary)] border-t-transparent animate-spin" /> : 
-                                                    (!messageInput.trim() && !pendingAttachment) ? <Mic size={18} /> : <Send size={16} className="ml-0.5" />}
+                                                <button type="button" onClick={e => {
+                                                    if (!messageInput.trim() && pendingAttachments.length === 0) { startRecording(); }
+                                                    else { handleSendMessage(e as any); }
+                                                }} disabled={isUploadingAttachment} className="bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] w-10 h-10 flex items-center justify-center rounded-full disabled:opacity-40 hover:scale-105 transition-all shadow-md active:scale-95 disabled:hover:scale-100">
+                                                    {isUploadingAttachment
+                                                        ? <div className="w-4 h-4 rounded-full border-2 border-[var(--md-sys-color-on-primary)] border-t-transparent animate-spin" />
+                                                        : (!messageInput.trim() && pendingAttachments.length === 0) ? <Mic size={18} /> : <Send size={16} className="ml-0.5" />}
                                                 </button>
                                             )}
                                         </div>
