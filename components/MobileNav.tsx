@@ -18,6 +18,10 @@ const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate }) => {
     const { user } = useAuth();
     const userLevel = ROLE_LEVEL[user?.role || 'viewer'] || 1;
 
+    // ── WhatsApp pattern: hide nav entirely when inside a full-screen chat/comms view ──
+    // This prevents accidental tab switches while typing and maximises chat screen space.
+    if (currentView === 'communications') return null;
+
     const primaryItems: { id: string; label: string; icon: any; minRole: UserRole }[] = [
         { id: 'dashboard', label: 'Home', icon: LayoutDashboard, minRole: 'viewer' },
         { id: 'schedule', label: 'Schedule', icon: Calendar, minRole: 'viewer' },

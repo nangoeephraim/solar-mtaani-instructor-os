@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import {
     MessageSquare, Hash, Megaphone, Search, MoreVertical, Paperclip, Send,
     Image as ImageIcon, FileText, Smile, X, Edit2, Pencil, Trash2, Pin, CornerUpLeft,
-    Reply, ShieldAlert, Check, CheckCheck, Clock, Download, Bold, Italic, Code, Menu, Users, AtSign, UserPlus, User, Mic, Square, Video
+    Reply, ShieldAlert, Check, CheckCheck, Clock, Download, Bold, Italic, Code, Menu, Users, AtSign, UserPlus, User, Mic, Square, Video, Plus
 } from 'lucide-react';
 import { useToast } from './Toast';
 import clsx from 'clsx';
@@ -306,9 +306,10 @@ const MessageGroupRenderer = React.memo(({
 interface CommunicationsProps {
     data: AppData;
     onUpdateAppData: (newData: AppData) => void;
+    onNavigate?: (view: string) => void;
 }
 
-export default function Communications({ data, onUpdateAppData }: CommunicationsProps) {
+export default function Communications({ data, onUpdateAppData, onNavigate }: CommunicationsProps) {
     const { user } = useAuth();
     // Derive userId immediately so all effects below can reference it safely
     const userId = user?.id || '';
@@ -405,6 +406,8 @@ export default function Communications({ data, onUpdateAppData }: Communications
     // Mobile bottom-sheet state: which message ID has it open
     const [mobileActionMsg, setMobileActionMsg] = useState<ChatMessage | null>(null);
     const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    // Mobile: whether the formatting toolbar is expanded (hidden by default like WhatsApp)
+    const [showMobileFormats, setShowMobileFormats] = useState(false);
 
     // Fetch users for DM directory (eagerly, so sidebar can display names)
     useEffect(() => {
@@ -912,7 +915,7 @@ export default function Communications({ data, onUpdateAppData }: Communications
     }
 
     return (
-        <div className="flex h-full w-full pb-20 lg:pb-0 glass-panel overflow-hidden animate-fade-in relative">
+        <div className="flex h-full w-full glass-panel overflow-hidden animate-fade-in relative">
             {/* Sidebar */}
             <ChannelSidebar channels={channels} activeChannelId={activeChannelId} onSelectChannel={(id) => { setActiveChannelId(id); setShowMobileSidebar(false); }} onCreateChannel={() => setShowNewChannel(true)} onStartDM={() => setShowNewDM(true)} avatarMap={avatarMap} userProfileMap={userProfileMap} onDeleteChannel={handleDeleteChannel} getUnreadCount={(chId) => getUnreadCount(data, chId, userId)} isAdmin={user?.role === 'admin'} user={user} isOpen={showMobileSidebar} onToggle={() => setShowMobileSidebar(p => !p)} />
 
@@ -926,8 +929,23 @@ export default function Communications({ data, onUpdateAppData }: Communications
                     <div className="flex-1 flex flex-col relative overflow-hidden" style={{ background: 'var(--md-sys-color-background)' }}>
                         {/* Header */}
                         <div className="h-14 px-4 flex items-center justify-between flex-shrink-0 z-10 sidebar-glass" style={{ borderBottom: '1px solid var(--md-sys-color-outline-variant)' }}>
-                            <div className="flex items-center gap-3">
-                                <button onClick={() => setShowMobileSidebar(true)} className="lg:hidden p-2 rounded-xl hover:bg-[var(--md-sys-color-surface-variant)]"><Menu size={20} style={{ color: 'var(--md-sys-color-on-surface)' }} /></button>
+                            <div className="flex items-center gap-2">
+                                {/* Mobile: back-to-app arrow (replaces hamburger trap) */}
+                                {onNavigate && (
+                                    <button
+                                        onClick={() => onNavigate('dashboard')}
+                                        className="lg:hidden p-2 rounded-xl hover:bg-[var(--md-sys-color-surface-variant)] transition-colors"
+                                        title="Back to app"
+                                    >
+                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--md-sys-color-on-surface)' }}>
+                                            <polyline points="15 18 9 12 15 6" />
+                                        </svg>
+                                    </button>
+                                )}
+                                {/* Channel sidebar toggle */}
+                                <button onClick={() => setShowMobileSidebar(true)} className="lg:hidden p-2 rounded-xl hover:bg-[var(--md-sys-color-surface-variant)]">
+                                    <Menu size={20} style={{ color: 'var(--md-sys-color-on-surface)' }} />
+                                </button>
                                 <div className="p-1.5 rounded-xl" style={{ background: 'var(--md-sys-color-primary-container)' }}>
                                     {activeChannel.type === 'announcement' ? <Megaphone size={16} style={{ color: 'var(--md-sys-color-primary)' }} /> : activeChannel.type === 'dm' ? <User size={16} style={{ color: 'var(--md-sys-color-primary)' }} /> : <Hash size={16} style={{ color: 'var(--md-sys-color-primary)' }} />}
                                 </div>
@@ -1124,7 +1142,7 @@ export default function Communications({ data, onUpdateAppData }: Communications
                                     <p className="text-sm font-bold flex items-center justify-center gap-2" style={{ color: 'var(--md-sys-color-secondary)' }}><ShieldAlert size={16} /> Only administrators can broadcast here.</p>
                                 </div>
                             ) : (
-                                <div className="px-5 pb-5 pt-3" style={{ background: 'var(--md-sys-color-surface)' }}>
+                                <div className="px-3 pb-safe-bottom pt-3 md:px-5 md:pb-5" style={{ background: 'var(--md-sys-color-surface)', paddingBottom: 'max(12px, env(safe-area-inset-bottom, 12px))' }}>
                                 <AnimatePresence>
                                     {replyToMsg && (
                                         <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden max-w-4xl mx-auto">
@@ -1137,7 +1155,12 @@ export default function Communications({ data, onUpdateAppData }: Communications
                                         </motion.div>
                                     )}
                                 </AnimatePresence>
-                                <div className="max-w-4xl mx-auto flex flex-nowrap overflow-x-auto custom-scrollbar items-center gap-1.5 mb-2 px-1">
+                                {/* Formatting toolbar — always visible on desktop, toggle on mobile */}
+                                <div className={clsx(
+                                    "max-w-4xl mx-auto flex flex-nowrap overflow-x-auto custom-scrollbar items-center gap-1.5 mb-2 px-1 transition-all",
+                                    // On mobile: only show when expanded via the '+' button
+                                    showMobileFormats ? "flex" : "hidden md:flex"
+                                )}>
                                     <button onClick={() => insertFormatting('**', '**')} className="flex-shrink-0 p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors" style={{ color: 'var(--md-sys-color-secondary)' }} title="Bold"><Bold size={14} /></button>
                                     <button onClick={() => insertFormatting('*', '*')} className="flex-shrink-0 p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors" style={{ color: 'var(--md-sys-color-secondary)' }} title="Italic"><Italic size={14} /></button>
                                     <button onClick={() => insertFormatting('`', '`')} className="flex-shrink-0 p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors" style={{ color: 'var(--md-sys-color-secondary)' }} title="Code snippet"><Code size={14} /></button>
@@ -1176,9 +1199,20 @@ export default function Communications({ data, onUpdateAppData }: Communications
                                     </AnimatePresence>
 
                                     <div className={clsx("flex items-end rounded-[32px] transition-all duration-300 backdrop-blur-md", isInputFocused || isRecording ? "border-[var(--md-sys-color-primary)] shadow-lg bg-[var(--md-sys-color-surface-variant)] scale-[1.01]" : "border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface)] hover:bg-[var(--md-sys-color-surface-variant)] shadow-sm")} style={{ border: '1px solid', borderColor: isInputFocused || isRecording ? 'var(--md-sys-color-primary)' : 'var(--md-sys-color-outline-variant)' }}>
-                                        <div className="pl-3 pb-3 pt-3 flex items-center h-full">
+                                        <div className="pl-2 pb-2 pt-2 flex items-center h-full gap-0.5">
                                             <input type="file" ref={fileInputRef} className="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt" onChange={(e) => { if (e.target.files?.[0]) { setPendingAttachment(e.target.files[0]); setTimeout(() => textareaRef.current?.focus(), 100); } }} />
-                                            <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2.5 rounded-full hover:bg-[var(--md-sys-color-surface-2)] transition-colors text-[var(--md-sys-color-secondary)] hover:text-[var(--md-sys-color-primary)]" title="Attach file"><Paperclip size={18} /></button>
+                                            {/* Mobile '+' button to expand formatting toolbar; desktop shows attachment clip */}
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowMobileFormats(p => !p)}
+                                                className="md:hidden p-2.5 rounded-full hover:bg-[var(--md-sys-color-surface-2)] transition-all text-[var(--md-sys-color-secondary)] active:scale-90"
+                                                title="More options"
+                                            >
+                                                <motion.div animate={{ rotate: showMobileFormats ? 45 : 0 }} transition={{ type: 'spring', stiffness: 400, damping: 20 }}>
+                                                    <Plus size={20} />
+                                                </motion.div>
+                                            </button>
+                                            <button type="button" onClick={() => fileInputRef.current?.click()} className="hidden md:flex p-2.5 rounded-full hover:bg-[var(--md-sys-color-surface-2)] transition-colors text-[var(--md-sys-color-secondary)] hover:text-[var(--md-sys-color-primary)]" title="Attach file"><Paperclip size={18} /></button>
                                         </div>
                                         
                                         {isRecording ? (

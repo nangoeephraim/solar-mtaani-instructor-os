@@ -949,6 +949,7 @@ const AppContent: React.FC = () => {
           key="communications"
           data={data}
           onUpdateAppData={handleUpdateAppData}
+          onNavigate={handleNavigate}
         />
       )}
 
