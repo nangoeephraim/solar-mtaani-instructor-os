@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useMotionValue, useTransform, animate } from 'framer-motion';
 import { AppData, ChatChannel, ChatMessage, ChatAttachment } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import {
@@ -136,6 +136,96 @@ const UnreadSeparator = () => (
     </div>
 );
 
+/* ─── SwipeableMessage ───
+   Wraps each message bubble with horizontal swipe gestures.
+   → Swipe RIGHT on any message         → Reply (WhatsApp standard)
+   → Swipe LEFT  on own messages        → Quick Edit (unique)
+   Both snap back with a satisfying spring after release. */
+const SwipeableMessage = ({
+    msg,
+    isMyMsg,
+    onSwipeReply,
+    onSwipeEdit,
+    children,
+}: {
+    msg: any;
+    isMyMsg: boolean;
+    onSwipeReply: (msg: any) => void;
+    onSwipeEdit?: (msg: any) => void;
+    children: React.ReactNode;
+}) => {
+    const x = useMotionValue(0);
+    const THRESHOLD = 76;
+
+    // Reply indicator transforms (left side, swipe-right)
+    const replyOpacity = useTransform(x, [0, THRESHOLD * 0.3, THRESHOLD], [0, 0.5, 1]);
+    const replyScale   = useTransform(x, [0, THRESHOLD * 0.5, THRESHOLD], [0.5, 0.75, 1]);
+    const replyXShift  = useTransform(x, [0, THRESHOLD], [-16, 0]);
+
+    // Edit indicator transforms (right side, swipe-left — own messages only)
+    const editOpacity = useTransform(x, [0, -THRESHOLD * 0.3, -THRESHOLD], [0, 0.5, 1]);
+    const editScale   = useTransform(x, [0, -THRESHOLD * 0.5, -THRESHOLD], [0.5, 0.75, 1]);
+    const editXShift  = useTransform(x, [0, -THRESHOLD], [16, 0]);
+
+    return (
+        // touchAction: pan-y — lets the scroll container still scroll vertically
+        // while Framer Motion captures horizontal drags only
+        <div className="relative" style={{ touchAction: 'pan-y' }}>
+
+            {/* ← Reply indicator */}
+            <motion.div
+                className="absolute left-1 top-1/2 -translate-y-1/2 z-0 pointer-events-none"
+                style={{ opacity: replyOpacity, scale: replyScale, x: replyXShift }}
+            >
+                <div
+                    className="w-9 h-9 rounded-full flex items-center justify-center shadow-lg"
+                    style={{ background: 'var(--md-sys-color-primary)' }}
+                >
+                    <Reply size={15} style={{ color: 'white' }} />
+                </div>
+            </motion.div>
+
+            {/* → Edit indicator (own messages only) */}
+            {isMyMsg && !msg.isDeleted && (
+                <motion.div
+                    className="absolute right-1 top-1/2 -translate-y-1/2 z-0 pointer-events-none"
+                    style={{ opacity: editOpacity, scale: editScale, x: editXShift }}
+                >
+                    <div
+                        className="w-9 h-9 rounded-full flex items-center justify-center shadow-lg"
+                        style={{ background: 'var(--md-sys-color-secondary-container)' }}
+                    >
+                        <Pencil size={13} style={{ color: 'var(--md-sys-color-on-secondary-container)' }} />
+                    </div>
+                </motion.div>
+            )}
+
+            {/* Draggable wrapper */}
+            <motion.div
+                style={{ x }}
+                drag="x"
+                dragConstraints={{
+                    left:  isMyMsg && !msg.isDeleted ? -THRESHOLD : 0,
+                    right: !msg.isDeleted ? THRESHOLD : 0,
+                }}
+                dragElastic={{ left: 0.15, right: 0.3 }}
+                dragMomentum={false}
+                onDragEnd={(_, info) => {
+                    if (!msg.isDeleted && info.offset.x >= THRESHOLD) {
+                        onSwipeReply(msg);
+                    } else if (isMyMsg && !msg.isDeleted && info.offset.x <= -THRESHOLD) {
+                        onSwipeEdit?.(msg);
+                    }
+                    // Spring back to rest
+                    animate(x, 0, { type: 'spring', stiffness: 500, damping: 35 });
+                }}
+            >
+                {children}
+            </motion.div>
+        </div>
+    );
+};
+
 /* ─── Memoized Message Group Renderer ─── */
 const MessageGroupRenderer = React.memo(({
     group,
@@ -156,7 +246,9 @@ const MessageGroupRenderer = React.memo(({
     renderReplyPreview,
     renderReactions,
     activeChannelId,
-    onLongPress
+    onLongPress,
+    onSwipeReply,
+    onSwipeEdit,
 }: any) => {
     const first = group[0];
 
@@ -180,7 +272,14 @@ const MessageGroupRenderer = React.memo(({
                         const isLast = mIdx === group.length - 1;
 
                         return (
-                            <motion.div key={msg.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={clsx("relative px-3 py-2 text-[15px] group/msg break-words shadow-sm transition-shadow hover:shadow-md",
+                            <SwipeableMessage
+                                key={msg.id}
+                                msg={msg}
+                                isMyMsg={isMyMsg}
+                                onSwipeReply={onSwipeReply}
+                                onSwipeEdit={onSwipeEdit}
+                            >
+                            <motion.div layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={clsx("relative px-3 py-2 text-[15px] group/msg break-words shadow-sm transition-shadow hover:shadow-md",
                                 isMyMsg
                                     ? `bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] ${isFirst ? 'rounded-tr-2xl' : 'rounded-tr-md'} ${isLast ? 'rounded-br-2xl' : 'rounded-br-md'} rounded-l-2xl`
                                     : `rounded-r-2xl text-[var(--md-sys-color-on-surface)] ${isFirst ? 'rounded-tl-2xl' : 'rounded-tl-md'} ${isLast ? 'rounded-bl-2xl' : 'rounded-bl-md'}`
@@ -190,7 +289,6 @@ const MessageGroupRenderer = React.memo(({
                                 onPointerDown={(e: any) => {
                                     if (e.pointerType === 'touch') {
                                         const t = setTimeout(() => onLongPress?.(msg), 400);
-                                        // Store per-message timer on the element dataset for cancel
                                         (e.currentTarget as any)._lpTimer = t;
                                     }
                                 }}
@@ -265,6 +363,7 @@ const MessageGroupRenderer = React.memo(({
                                 )}
                                 {!msg.isDeleted && renderReactions(msg)}
                             </motion.div>
+                            </SwipeableMessage>
                         );
                     })}
                 </div>
@@ -1083,6 +1182,14 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
                                                         renderReactions={renderReactions}
                                                         activeChannelId={activeChannelId}
                                                         onLongPress={setMobileActionMsg}
+                                                        onSwipeReply={(msg: any) => {
+                                                            setReplyToMsg(msg);
+                                                            setTimeout(() => textareaRef.current?.focus(), 80);
+                                                        }}
+                                                        onSwipeEdit={(msg: any) => {
+                                                            setEditingMsgId(msg.id);
+                                                            setEditContent(msg.content);
+                                                        }}
                                                     />
                                                 </React.Fragment>
                                             );
