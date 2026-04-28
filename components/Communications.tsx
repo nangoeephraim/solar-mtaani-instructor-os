@@ -250,6 +250,7 @@ const MessageGroupRenderer = React.memo(({
     onLongPress,
     onSwipeReply,
     onSwipeEdit,
+    channelLastReadBy,
 }: any) => {
     const first = group[0];
 
@@ -363,15 +364,27 @@ const MessageGroupRenderer = React.memo(({
                                     </>
                                 )}
                                 {!msg.isDeleted && renderReactions(msg)}
-                                {/* Inline timestamp + read tick — last bubble only, own messages */}
-                                {isLast && isMyMsg && !msg.isDeleted && (
-                                    <div className="flex items-center justify-end gap-0.5 mt-0.5 -mb-0.5">
-                                        <span className="text-[9px] font-medium opacity-60">
-                                            {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                        </span>
-                                        <CheckCheck size={12} className="opacity-70" />
-                                    </div>
-                                )}
+                                {/* WhatsApp-style read receipt — every own message shows timestamp + tick status */}
+                                {isMyMsg && !msg.isDeleted && (() => {
+                                    const msgTime = new Date(msg.timestamp).getTime();
+                                    const lastReadBy = channelLastReadBy || {};
+                                    // Check if any OTHER participant has read past this message
+                                    const otherReaders = Object.entries(lastReadBy)
+                                        .filter(([uid]) => uid !== userId)
+                                        .filter(([, ts]) => new Date(ts as string).getTime() >= msgTime);
+                                    const isRead = otherReaders.length > 0;
+                                    return (
+                                        <div className="flex items-center justify-end gap-0.5 mt-0.5 -mb-0.5">
+                                            <span className="text-[9px] font-medium opacity-60">
+                                                {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </span>
+                                            {isRead
+                                                ? <CheckCheck size={12} style={{ color: '#53bdeb' }} />
+                                                : <Check size={12} className="opacity-50" />
+                                            }
+                                        </div>
+                                    );
+                                })()}
                             </motion.div>
                             </SwipeableMessage>
                         );
@@ -414,6 +427,9 @@ const MessageGroupRenderer = React.memo(({
     );
     if (hasAvatarChange) return false;
 
+    // Re-render if read receipts changed (someone read the channel → ticks update)
+    if (prevProps.channelLastReadBy !== nextProps.channelLastReadBy) return false;
+
     return true;
 });
 
@@ -431,6 +447,10 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
     const { showToast } = useToast();
     const channels = data.communications?.channels || [];
     const messages = data.communications?.messages || {};
+
+    // Ref to latest data — used by effects that must not depend on `data` directly
+    const dataRef = useRef(data);
+    dataRef.current = data;
 
     const [activeChannelId, setActiveChannelId] = useState<string>(channels[0]?.id || '');
     const [messageInput, setMessageInput] = useState('');
@@ -640,6 +660,30 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
         return () => { supabase.removeChannel(channel); };
     }, []);
 
+    // Subscribe to channel read-receipt updates so ticks turn blue in real time
+    useEffect(() => {
+        const channel = supabase
+            .channel('channel-reads')
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'chat_channels' }, (payload) => {
+                const row = payload.new as any;
+                if (row?.id && row?.last_read_by) {
+                    const current = dataRef.current;
+                    const chIdx = current.communications?.channels?.findIndex((c: any) => c.id === row.id);
+                    if (chIdx === undefined || chIdx === -1) return;
+                    const existingCh = current.communications.channels[chIdx];
+                    if (JSON.stringify(existingCh.lastReadBy) === JSON.stringify(row.last_read_by)) return;
+                    const newChannels = [...current.communications.channels];
+                    newChannels[chIdx] = { ...existingCh, lastReadBy: row.last_read_by };
+                    onUpdateAppData({
+                        ...current,
+                        communications: { ...current.communications, channels: newChannels }
+                    });
+                }
+            })
+            .subscribe();
+        return () => { supabase.removeChannel(channel); };
+    }, [onUpdateAppData]);
+
     // ─── Typing Broadcast Channel ───
     // Subscribe to the typing broadcast channel for the active chat channel.
     // When another user types, we receive their event and show the indicator for 3 seconds.
@@ -700,12 +744,18 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
         return () => clearTimeout(timeout);
     }, [activeMessages.length, activeChannelId, scrollToBottom]);
 
+
+    // Mark channel as read whenever we are viewing it or when new messages arrive
     useEffect(() => {
-        if (activeChannelId && userId && allActiveMessages.length > 0) {
-            const newData = markChannelRead(data, activeChannelId, userId);
-            if (newData !== data) onUpdateAppData(newData);
+        if (!activeChannelId || !userId) return;
+        const msgs = dataRef.current.communications?.messages?.[activeChannelId] || [];
+        if (msgs.length === 0) return;
+
+        const newData = markChannelRead(dataRef.current, activeChannelId, userId);
+        if (newData !== dataRef.current) {
+            onUpdateAppData(newData);
         }
-    }, [activeChannelId, userId, allActiveMessages.length, data, onUpdateAppData]);
+    }, [activeChannelId, userId, allActiveMessages.length, onUpdateAppData]);
 
     // Duplicate auto-scroll removed — handled by scrollToBottom effect above (lines 153-156)
 
@@ -1310,6 +1360,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
                                                             setEditContent(msg.content);
                                                         }}
                                                         avatarMap={avatarMap}
+                                                        channelLastReadBy={activeChannel?.lastReadBy}
                                                     />
                                                 </React.Fragment>
                                             );
