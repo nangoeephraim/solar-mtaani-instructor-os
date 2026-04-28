@@ -67,6 +67,7 @@ export const fetchAppData = async (): Promise<AppData> => {
           channelId: msg.channel_id,
           senderId: msg.sender_id,
           senderName: msg.sender_name || 'Unknown', // Fallback — 'Unknown' signals a data issue
+          senderRole: msg.sender_role || 'viewer',
           content: msg.content,
           timestamp: msg.created_at,
           isPinned: msg.is_pinned,
@@ -323,6 +324,7 @@ export const addChatMessage = async (data: AppData, payload: Omit<ChatMessage, '
     content: payload.content,
     sender_id: payload.senderId,
     sender_name: payload.senderName,
+    sender_role: payload.senderRole || 'viewer',
     reply_to_id: payload.replyToId,
     attachments: payload.attachments || []
   }).then(({ error }) => {

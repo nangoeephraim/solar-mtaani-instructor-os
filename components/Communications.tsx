@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import {
     MessageSquare, Hash, Megaphone, Search, MoreVertical, Paperclip, Send,
     Image as ImageIcon, FileText, Smile, X, Edit2, Pencil, Trash2, Pin, CornerUpLeft,
-    Reply, ShieldAlert, Check, CheckCheck, Clock, Download, Bold, Italic, Code, Menu, Users, AtSign, UserPlus, User, Mic, Square
+    Reply, ShieldAlert, Check, CheckCheck, Clock, Download, Bold, Italic, Code, Menu, Users, AtSign, UserPlus, User, Mic, Square, Video
 } from 'lucide-react';
 import { useToast } from './Toast';
 import clsx from 'clsx';
@@ -55,6 +55,39 @@ const renderMarkdown = (text: string): React.ReactNode[] => {
             const mentionParts = processed.split(/(@\w+)/g);
             if (mentionParts.length > 1) processed = mentionParts.map((p, j) => p.startsWith('@') ? <span key={j} className="font-bold px-0.5 rounded" style={{ color: 'var(--md-sys-color-primary)', background: 'var(--md-sys-color-primary-container)' }}>{p}</span> : p);
         }
+        
+        // Meeting link detection
+        if (typeof processed === 'string') {
+            const meetLinkParts = processed.split(/(https:\/\/prism\.os\/meet\/[a-zA-Z0-9-]+)/g);
+            if (meetLinkParts.length > 1) {
+                processed = meetLinkParts.map((p, j) => {
+                    if (p.startsWith('https://prism.os/meet/')) {
+                        const mId = p.split('/').pop();
+                        return (
+                            <div key={j} className="my-2 bg-[var(--md-sys-color-primary-container)] border border-[var(--md-sys-color-primary)] rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm hover:shadow-md transition-shadow">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 bg-white/20 rounded-full flex items-center justify-center shrink-0">
+                                        <Video size={20} className="text-[var(--md-sys-color-primary)]" />
+                                    </div>
+                                    <div>
+                                        <p className="font-bold text-sm font-google" style={{ color: 'var(--md-sys-color-on-primary-container)' }}>Live Video Meeting</p>
+                                        <p className="text-xs opacity-80" style={{ color: 'var(--md-sys-color-on-primary-container)' }}>ID: {mId}</p>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={() => window.dispatchEvent(new CustomEvent('join-meeting', { detail: mId }))}
+                                    className="bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] px-4 py-2 rounded-lg text-sm font-bold shadow-md hover:scale-105 active:scale-95 transition-all whitespace-nowrap"
+                                >
+                                    Join Now
+                                </button>
+                            </div>
+                        );
+                    }
+                    return p;
+                });
+            }
+        }
+        
         return <React.Fragment key={i}>{Array.isArray(processed) ? processed : processed}{i < lines.length - 1 && <br />}</React.Fragment>;
     });
 };
@@ -122,7 +155,8 @@ const MessageGroupRenderer = React.memo(({
     renderEmojiPicker,
     renderReplyPreview,
     renderReactions,
-    activeChannelId
+    activeChannelId,
+    onLongPress
 }: any) => {
     const first = group[0];
 
@@ -151,7 +185,21 @@ const MessageGroupRenderer = React.memo(({
                                     ? `bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] ${isFirst ? 'rounded-tr-2xl' : 'rounded-tr-md'} ${isLast ? 'rounded-br-2xl' : 'rounded-br-md'} rounded-l-2xl`
                                     : `rounded-r-2xl text-[var(--md-sys-color-on-surface)] ${isFirst ? 'rounded-tl-2xl' : 'rounded-tl-md'} ${isLast ? 'rounded-bl-2xl' : 'rounded-bl-md'}`
                             )} style={!isMyMsg ? { background: 'var(--md-sys-color-surface)' } : {}}
-                                onMouseEnter={() => setHoveredMsgId(msg.id)} onMouseLeave={() => { setHoveredMsgId(null); setShowEmojiPicker(null); }} onClick={() => { if (window.innerWidth < 768) setHoveredMsgId(hoveredMsgId === msg.id ? null : msg.id); }}>
+                                onMouseEnter={() => setHoveredMsgId(msg.id)}
+                                onMouseLeave={() => { setHoveredMsgId(null); setShowEmojiPicker(null); }}
+                                onPointerDown={(e: any) => {
+                                    if (e.pointerType === 'touch') {
+                                        const t = setTimeout(() => onLongPress?.(msg), 400);
+                                        // Store per-message timer on the element dataset for cancel
+                                        (e.currentTarget as any)._lpTimer = t;
+                                    }
+                                }}
+                                onPointerUp={(e: any) => {
+                                    clearTimeout((e.currentTarget as any)._lpTimer);
+                                }}
+                                onPointerCancel={(e: any) => {
+                                    clearTimeout((e.currentTarget as any)._lpTimer);
+                                }}>
                                 {renderMsgActions(msg)}
                                 {renderEmojiPicker(msg.id)}
                                 {renderReplyPreview(msg)}
@@ -262,6 +310,8 @@ interface CommunicationsProps {
 
 export default function Communications({ data, onUpdateAppData }: CommunicationsProps) {
     const { user } = useAuth();
+    // Derive userId immediately so all effects below can reference it safely
+    const userId = user?.id || '';
     const { showToast } = useToast();
     const channels = data.communications?.channels || [];
     const messages = data.communications?.messages || {};
@@ -272,6 +322,38 @@ export default function Communications({ data, onUpdateAppData }: Communications
     const [showSearch, setShowSearch] = useState(false);
     const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
     const [editContent, setEditContent] = useState('');
+
+    // Global meeting listeners
+    useEffect(() => {
+        const handleJoin = (e: any) => {
+            setActiveChannelId('video_meetings');
+        };
+        const handleBroadcast = async (e: any) => {
+            const mId = e.detail;
+            const targetChannel = channels.find(c => c.type === 'announcement') || channels.find(c => c.type === 'chat');
+            if (targetChannel && user) {
+                const newData = await addChatMessage(data, {
+                    id: crypto.randomUUID(),
+                    channelId: targetChannel.id,
+                    senderId: userId,
+                    senderName: user.name,
+                    senderRole: user.role as any,
+                    content: `Join my live video meeting! 🚀\nhttps://prism.os/meet/${mId}`,
+                    timestamp: new Date().toISOString()
+                } as any);
+                onUpdateAppData(newData);
+                showToast('Meeting link broadcasted to ' + targetChannel.name, 'success');
+            }
+        };
+
+        window.addEventListener('join-meeting', handleJoin);
+        window.addEventListener('broadcast-meeting', handleBroadcast);
+        return () => {
+            window.removeEventListener('join-meeting', handleJoin);
+            window.removeEventListener('broadcast-meeting', handleBroadcast);
+        };
+    }, [channels, data, onUpdateAppData, showToast, user, userId]);
+
     const [replyToMsg, setReplyToMsg] = useState<ChatMessage | null>(null);
     const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
     const [showPinnedPanel, setShowPinnedPanel] = useState(false);
@@ -320,7 +402,9 @@ export default function Communications({ data, onUpdateAppData }: Communications
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
-    const userId = user?.id || 'sys-user';
+    // Mobile bottom-sheet state: which message ID has it open
+    const [mobileActionMsg, setMobileActionMsg] = useState<ChatMessage | null>(null);
+    const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Fetch users for DM directory (eagerly, so sidebar can display names)
     useEffect(() => {
@@ -378,14 +462,31 @@ export default function Communications({ data, onUpdateAppData }: Communications
 
     useEffect(() => { if (!activeChannelId && channels.length > 0) setActiveChannelId(channels[0].id); }, [channels, activeChannelId]);
 
-    // Fetch avatar map for all users who have sent messages
-    useEffect(() => {
+    // Collect ALL unique sender IDs across all channels
+    const allSenderIds = useMemo(() => {
         const allMsgs = Object.values(messages).flat();
-        const ids = [...new Set(allMsgs.map(m => m.senderId).filter(Boolean))];
-        if (ids.length > 0) {
-            fetchAvatarMap(ids).then(setAvatarMap).catch(() => { });
-        }
+        return [...new Set(allMsgs.map(m => m.senderId).filter(Boolean))];
     }, [messages]);
+
+    // Also include DM users so their avatars load in sidebar/DM header
+    const allRelevantIds = useMemo(() => {
+        const dmIds = dmUsers.map(u => u.id);
+        return [...new Set([...allSenderIds, ...dmIds])];
+    }, [allSenderIds, dmUsers]);
+
+    // Fetch avatar map — re-runs any time a new sender ID appears (new realtime messages)
+    useEffect(() => {
+        if (allRelevantIds.length === 0) return;
+        fetchAvatarMap(allRelevantIds).then(freshMap => {
+            setAvatarMap(prev => {
+                // Merge: keep existing entries, overlay with fresh ones (handles updates)
+                const merged = { ...prev, ...freshMap };
+                // Check if anything actually changed before triggering re-render
+                const changed = allRelevantIds.some(id => prev[id] !== merged[id]);
+                return changed ? merged : prev;
+            });
+        }).catch(() => { });
+    }, [allRelevantIds]);
 
     // ─── Typing Broadcast Channel ───
     // Subscribe to the typing broadcast channel for the active chat channel.
@@ -778,15 +879,16 @@ export default function Communications({ data, onUpdateAppData }: Communications
         if (msg.isDeleted) return null;
         const isOwn = msg.senderId === userId, isAdm = user?.role === 'admin';
         const showNudge = !isOwn && activeChannel?.type !== 'dm';
-        const isVisibleMobile = hoveredMsgId === msg.id;
+        // Desktop-only hover toolbar (hidden on mobile — mobile uses long-press bottom sheet)
         return (
-            <div className={clsx("absolute -top-3 right-2 flex items-center gap-0.5 glass-panel px-1 py-0.5 z-20 transition-opacity", isVisibleMobile ? "opacity-100" : "opacity-0 md:group-hover/msg:opacity-100")} style={{ boxShadow: 'var(--shadow-elevation-2)' }}>
-                <button onClick={() => { setReplyToMsg(msg); textareaRef.current?.focus(); }} className="p-2.5 md:p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors tap-target md:min-h-0 md:min-w-0" style={{ color: 'var(--md-sys-color-secondary)' }} title="Reply"><Reply size={16} className="md:w-3.5 md:h-3.5" /></button>
-                <button onClick={() => setShowEmojiPicker(showEmojiPicker === msg.id ? null : msg.id)} className="p-2.5 md:p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors tap-target md:min-h-0 md:min-w-0" style={{ color: 'var(--md-sys-color-secondary)' }} title="React"><Smile size={16} className="md:w-3.5 md:h-3.5" /></button>
-                {showNudge && <button onClick={() => handleStartDM(msg.senderId)} className="p-2.5 md:p-1.5 rounded-lg hover:bg-[var(--md-sys-color-primary-container)] transition-colors tap-target md:min-h-0 md:min-w-0" style={{ color: 'var(--md-sys-color-primary)' }} title={`DM ${msg.senderName}`}><UserPlus size={16} className="md:w-3.5 md:h-3.5" /></button>}
-                {(isOwn || isAdm) && <button onClick={() => handlePin(activeChannelId, msg.id)} className="p-2.5 md:p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors tap-target md:min-h-0 md:min-w-0" style={{ color: msg.isPinned ? 'var(--google-yellow)' : 'var(--md-sys-color-secondary)' }} title="Pin"><Pin size={16} className="md:w-3.5 md:h-3.5" /></button>}
-                {isOwn && <button onClick={() => { setEditingMsgId(msg.id); setEditContent(msg.content); }} className="p-2.5 md:p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors tap-target md:min-h-0 md:min-w-0" style={{ color: 'var(--md-sys-color-secondary)' }} title="Edit"><Pencil size={16} className="md:w-3.5 md:h-3.5" /></button>}
-                {(isOwn || isAdm) && <button onClick={() => handleDelete(activeChannelId, msg.id)} className="p-2.5 md:p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors tap-target md:min-h-0 md:min-w-0" style={{ color: 'var(--md-sys-color-error)' }} title="Delete"><Trash2 size={16} className="md:w-3.5 md:h-3.5" /></button>}
+            <div className={clsx("absolute -top-3 right-2 items-center gap-0.5 glass-panel px-1 py-0.5 z-20 transition-opacity",
+                "hidden md:flex opacity-0 md:group-hover/msg:opacity-100")} style={{ boxShadow: 'var(--shadow-elevation-2)' }}>
+                <button onClick={() => { setReplyToMsg(msg); textareaRef.current?.focus(); }} className="p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors" style={{ color: 'var(--md-sys-color-secondary)' }} title="Reply"><Reply size={14} /></button>
+                <button onClick={() => setShowEmojiPicker(showEmojiPicker === msg.id ? null : msg.id)} className="p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors" style={{ color: 'var(--md-sys-color-secondary)' }} title="React"><Smile size={14} /></button>
+                {showNudge && <button onClick={() => handleStartDM(msg.senderId)} className="p-1.5 rounded-lg hover:bg-[var(--md-sys-color-primary-container)] transition-colors" style={{ color: 'var(--md-sys-color-primary)' }} title={`DM ${msg.senderName}`}><UserPlus size={14} /></button>}
+                {(isOwn || isAdm) && <button onClick={() => handlePin(activeChannelId, msg.id)} className="p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors" style={{ color: msg.isPinned ? 'var(--google-yellow)' : 'var(--md-sys-color-secondary)' }} title="Pin"><Pin size={14} /></button>}
+                {isOwn && <button onClick={() => { setEditingMsgId(msg.id); setEditContent(msg.content); }} className="p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors" style={{ color: 'var(--md-sys-color-secondary)' }} title="Edit"><Pencil size={14} /></button>}
+                {(isOwn || isAdm) && <button onClick={() => handleDelete(activeChannelId, msg.id)} className="p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors" style={{ color: 'var(--md-sys-color-error)' }} title="Delete"><Trash2 size={14} /></button>}
             </div>
         );
     };
@@ -894,7 +996,12 @@ export default function Communications({ data, onUpdateAppData }: Communications
                                         {activeMessages.filter(m => !m.isDeleted).map((msg, i, arr) => (
                                             <React.Fragment key={msg.id}>
                                                 {(i === 0 || !isSameDay(msg.timestamp, arr[i - 1].timestamp)) && <DateSeparator date={msg.timestamp} />}
-                                                <motion.div layout initial={{ opacity: 0, y: 10, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} className="relative glass-card p-5 group/msg animate-fade-in break-words hover:shadow-lg transition-all duration-300" style={{ animationFillMode: 'both' }} onMouseEnter={() => setHoveredMsgId(msg.id)} onMouseLeave={() => { setHoveredMsgId(null); setShowEmojiPicker(null); }} onClick={() => { if (window.innerWidth < 768) setHoveredMsgId(hoveredMsgId === msg.id ? null : msg.id); }}>
+                                                <motion.div layout initial={{ opacity: 0, y: 10, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} className="relative glass-card p-5 group/msg animate-fade-in break-words hover:shadow-lg transition-all duration-300" style={{ animationFillMode: 'both' }}
+                                                    onMouseEnter={() => setHoveredMsgId(msg.id)}
+                                                    onMouseLeave={() => { setHoveredMsgId(null); setShowEmojiPicker(null); }}
+                                                    onPointerDown={(e) => { if (e.pointerType === 'touch') { longPressTimerRef.current = setTimeout(() => setMobileActionMsg(msg), 400); } }}
+                                                    onPointerUp={() => { if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; } }}
+                                                    onPointerCancel={() => { if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; } }}>
                                                     {renderMsgActions(msg)}
                                                     {renderEmojiPicker(msg.id)}
                                                     {msg.isPinned && <div className="absolute top-3 right-3"><Pin size={12} style={{ color: 'var(--google-yellow)' }} /></div>}
@@ -957,6 +1064,7 @@ export default function Communications({ data, onUpdateAppData }: Communications
                                                         renderReplyPreview={renderReplyPreview}
                                                         renderReactions={renderReactions}
                                                         activeChannelId={activeChannelId}
+                                                        onLongPress={setMobileActionMsg}
                                                     />
                                                 </React.Fragment>
                                             );
@@ -1231,6 +1339,161 @@ export default function Communications({ data, onUpdateAppData }: Communications
                                     );
                                 })()}
                             </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
+
+            {/* ═══ MOBILE MESSAGE ACTION BOTTOM-SHEET ═══
+                Opens via long-press (400ms) on any message on touch devices.
+                Clearly separates safe actions (emoji, reply) from destructive (delete).
+                Prevents the old accidental-delete UX bug.
+            */}
+            <AnimatePresence>
+                {mobileActionMsg && (
+                    <>
+                        {/* Backdrop */}
+                        <motion.div
+                            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                            className="fixed inset-0 bg-black/50 z-50 md:hidden"
+                            onClick={() => setMobileActionMsg(null)}
+                        />
+                        {/* Sheet */}
+                        <motion.div
+                            initial={{ y: '100%' }} animate={{ y: 0 }} exit={{ y: '100%' }}
+                            transition={{ type: 'spring', stiffness: 400, damping: 35 }}
+                            className="fixed bottom-0 left-0 right-0 z-50 md:hidden rounded-t-3xl overflow-hidden"
+                            style={{ background: 'var(--md-sys-color-surface)', boxShadow: '0 -8px 32px rgba(0,0,0,0.2)' }}
+                        >
+                            {/* Drag handle */}
+                            <div className="flex justify-center pt-3 pb-1">
+                                <div className="w-10 h-1 rounded-full" style={{ background: 'var(--md-sys-color-outline-variant)' }} />
+                            </div>
+
+                            {/* Message preview */}
+                            <div className="px-5 py-3 flex items-center gap-3" style={{ borderBottom: '1px solid var(--md-sys-color-outline-variant)' }}>
+                                <UserAvatar
+                                    name={mobileActionMsg.senderName}
+                                    avatarUrl={avatarMap[mobileActionMsg.senderId]}
+                                    size={36}
+                                    rounded="full"
+                                />
+                                <div className="flex-1 min-w-0">
+                                    <p className="font-bold text-sm font-google truncate" style={{ color: 'var(--md-sys-color-on-surface)' }}>
+                                        {mobileActionMsg.senderName}
+                                    </p>
+                                    <p className="text-xs truncate opacity-70" style={{ color: 'var(--md-sys-color-secondary)' }}>
+                                        {mobileActionMsg.isDeleted ? 'Deleted message' : mobileActionMsg.content.slice(0, 60)}
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Emoji Reactions — always safe, shown first */}
+                            <div className="px-5 py-4" style={{ borderBottom: '1px solid var(--md-sys-color-outline-variant)' }}>
+                                <p className="text-[10px] font-black uppercase tracking-widest mb-3" style={{ color: 'var(--md-sys-color-secondary)' }}>React</p>
+                                <div className="flex gap-3 justify-around">
+                                    {EMOJI_OPTIONS.map(emoji => (
+                                        <button
+                                            key={emoji}
+                                            onClick={() => {
+                                                handleReaction(activeChannelId, mobileActionMsg.id, emoji);
+                                                setMobileActionMsg(null);
+                                            }}
+                                            className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl transition-all active:scale-90 hover:scale-110"
+                                            style={{ background: 'var(--md-sys-color-surface-variant)' }}
+                                        >
+                                            {emoji}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="px-4 py-3 space-y-1">
+                                {/* Reply */}
+                                <button
+                                    onClick={() => {
+                                        setReplyToMsg(mobileActionMsg);
+                                        setMobileActionMsg(null);
+                                        setTimeout(() => textareaRef.current?.focus(), 100);
+                                    }}
+                                    className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-colors text-left"
+                                    style={{ background: 'var(--md-sys-color-surface-variant)' }}
+                                >
+                                    <Reply size={20} style={{ color: 'var(--md-sys-color-primary)' }} />
+                                    <span className="font-semibold font-google" style={{ color: 'var(--md-sys-color-on-surface)' }}>Reply</span>
+                                </button>
+
+                                {/* Pin — own or admin */}
+                                {(mobileActionMsg.senderId === userId || user?.role === 'admin') && (
+                                    <button
+                                        onClick={() => {
+                                            handlePin(activeChannelId, mobileActionMsg.id);
+                                            setMobileActionMsg(null);
+                                        }}
+                                        className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-colors text-left"
+                                        style={{ background: 'var(--md-sys-color-surface-variant)' }}
+                                    >
+                                        <Pin size={20} style={{ color: mobileActionMsg.isPinned ? 'var(--google-yellow)' : 'var(--md-sys-color-secondary)' }} />
+                                        <span className="font-semibold font-google" style={{ color: 'var(--md-sys-color-on-surface)' }}>
+                                            {mobileActionMsg.isPinned ? 'Unpin' : 'Pin'}
+                                        </span>
+                                    </button>
+                                )}
+
+                                {/* Edit — own messages only */}
+                                {mobileActionMsg.senderId === userId && !mobileActionMsg.isDeleted && (
+                                    <button
+                                        onClick={() => {
+                                            setEditingMsgId(mobileActionMsg.id);
+                                            setEditContent(mobileActionMsg.content);
+                                            setMobileActionMsg(null);
+                                        }}
+                                        className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-colors text-left"
+                                        style={{ background: 'var(--md-sys-color-surface-variant)' }}
+                                    >
+                                        <Pencil size={20} style={{ color: 'var(--md-sys-color-secondary)' }} />
+                                        <span className="font-semibold font-google" style={{ color: 'var(--md-sys-color-on-surface)' }}>Edit</span>
+                                    </button>
+                                )}
+
+                                {/* DM sender — others only */}
+                                {mobileActionMsg.senderId !== userId && activeChannel?.type !== 'dm' && (
+                                    <button
+                                        onClick={() => {
+                                            handleStartDM(mobileActionMsg.senderId);
+                                            setMobileActionMsg(null);
+                                        }}
+                                        className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-colors text-left"
+                                        style={{ background: 'var(--md-sys-color-surface-variant)' }}
+                                    >
+                                        <UserPlus size={20} style={{ color: 'var(--md-sys-color-primary)' }} />
+                                        <span className="font-semibold font-google" style={{ color: 'var(--md-sys-color-on-surface)' }}>
+                                            Message {mobileActionMsg.senderName}
+                                        </span>
+                                    </button>
+                                )}
+
+                                {/* ── DANGER ZONE — separated visually ── */}
+                                {(mobileActionMsg.senderId === userId || user?.role === 'admin') && !mobileActionMsg.isDeleted && (
+                                    <div className="pt-2" style={{ borderTop: '1px solid var(--md-sys-color-outline-variant)' }}>
+                                        <button
+                                            onClick={() => {
+                                                handleDelete(activeChannelId, mobileActionMsg.id);
+                                                setMobileActionMsg(null);
+                                            }}
+                                            className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-colors text-left"
+                                            style={{ background: 'rgba(var(--md-sys-color-error-rgb, 186,26,26), 0.08)' }}
+                                        >
+                                            <Trash2 size={20} style={{ color: 'var(--md-sys-color-error)' }} />
+                                            <span className="font-semibold font-google" style={{ color: 'var(--md-sys-color-error)' }}>Delete Message</span>
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Safe area bottom padding */}
+                            <div className="pb-6" />
                         </motion.div>
                     </>
                 )}

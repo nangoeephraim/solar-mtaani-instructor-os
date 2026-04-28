@@ -156,8 +156,13 @@ export function ChannelSidebar({ channels, activeChannelId, onSelectChannel, onC
             {/* User Footer */}
             <div className="p-3">
                 <div className="flex items-center gap-3 p-3 rounded-2xl" style={{ background: 'var(--md-sys-color-surface-variant)', border: '1px solid var(--md-sys-color-outline-variant)' }}>
-                    <div className="w-9 h-9 rounded-xl text-white flex items-center justify-center font-bold text-sm shadow-sm" style={getAvatarStyle(user?.name || 'U')}>
-                        {user?.name?.charAt(0).toUpperCase()}
+                    <div className="w-9 h-9 rounded-xl text-white flex items-center justify-center font-bold text-sm shadow-sm overflow-hidden flex-shrink-0"
+                        style={user?.avatarUrl ? { background: 'transparent' } : getAvatarStyle(user?.name || 'U')}>
+                        {user?.avatarUrl ? (
+                            <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover rounded-xl" />
+                        ) : (
+                            user?.name?.charAt(0).toUpperCase()
+                        )}
                     </div>
                     <div className="flex-1 min-w-0">
                         <div className="font-bold text-sm truncate font-google" style={{ color: 'var(--md-sys-color-on-surface)' }}>{user?.name}</div>

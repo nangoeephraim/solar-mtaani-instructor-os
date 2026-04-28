@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, MicOff, Video, VideoOff, MonitorUp, Settings, Maximize, Users, MessageSquare, Sparkles, LayoutGrid, AlertCircle, Copy, CheckCircle2, PhoneOff } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, MonitorUp, Settings, Maximize, Users, MessageSquare, Sparkles, LayoutGrid, AlertCircle, Copy, CheckCircle2, PhoneOff, Share2, Circle, Hand, Captions, Presentation } from 'lucide-react';
 import clsx from 'clsx';
 import UserAvatar from './UserAvatar';
 
@@ -16,8 +16,11 @@ export default function Meetings() {
     const [audioEnabled, setAudioEnabled] = useState(true);
     const [videoEnabled, setVideoEnabled] = useState(true);
     const [screenShared, setScreenShared] = useState(false);
-    const [showSidebar, setShowSidebar] = useState<'chat' | 'people' | 'effects' | null>(null);
+    const [showSidebar, setShowSidebar] = useState<'chat' | 'people' | 'effects' | 'whiteboard' | null>(null);
     const [layout, setLayout] = useState<'grid' | 'spotlight'>('grid');
+    const [isRecording, setIsRecording] = useState(false);
+    const [handRaised, setHandRaised] = useState(false);
+    const [captionsEnabled, setCaptionsEnabled] = useState(false);
     const [inMeeting, setInMeeting] = useState(false);
     const [meetingId, setMeetingId] = useState('');
     const [copied, setCopied] = useState(false);
@@ -149,6 +152,17 @@ export default function Meetings() {
         }
     }, [chatMessages, showSidebar]);
 
+    useEffect(() => {
+        const handleJoin = (e: any) => {
+            const mId = e.detail;
+            if (mId) {
+                setMeetingId(mId);
+            }
+        };
+        window.addEventListener('join-meeting', handleJoin);
+        return () => window.removeEventListener('join-meeting', handleJoin);
+    }, []);
+
     if (!inMeeting) {
         return (
             <div className="w-full h-full flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-[#0a0a0b] via-[#131416] to-[#0a0a0b] z-20">
@@ -237,6 +251,11 @@ export default function Meetings() {
                 {/* Header */}
                 <div className="absolute top-0 left-0 right-0 p-4 md:p-6 flex justify-between items-center bg-gradient-to-b from-black/80 to-transparent z-20">
                     <div className="flex items-center gap-3">
+                        {isRecording && (
+                            <div className="bg-red-500/10 border border-red-500/30 px-3 py-1.5 rounded-xl flex items-center gap-2 text-xs font-bold text-red-400 shadow-[0_0_10px_rgba(239,68,68,0.2)] animate-pulse">
+                                <Circle size={10} className="fill-red-400" /> REC
+                            </div>
+                        )}
                         <div className="bg-white/10 backdrop-blur-xl px-4 py-2 rounded-2xl border border-white/10 flex items-center gap-2.5 text-sm font-google font-bold shadow-lg cursor-pointer hover:bg-white/20 transition-colors group" onClick={copyMeetingLink}>
                             <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
                             {meetingId}
@@ -244,6 +263,12 @@ export default function Meetings() {
                                 {copied ? <CheckCircle2 size={14} className="text-green-400" /> : <Copy size={14} />}
                             </span>
                         </div>
+                        <button 
+                            onClick={() => window.dispatchEvent(new CustomEvent('broadcast-meeting', { detail: meetingId }))}
+                            className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-500/30 px-3 py-1.5 rounded-xl flex items-center gap-1.5 text-xs font-bold backdrop-blur-sm transition-colors shadow-[0_0_10px_rgba(37,99,235,0.2)]"
+                        >
+                            <Share2 size={12} /> Share to Chat
+                        </button>
                         <div className="bg-green-500/10 border border-green-500/20 text-green-400 px-2.5 py-1.5 rounded-xl flex items-center gap-1.5 text-xs font-bold backdrop-blur-sm hidden md:flex">
                             <AlertCircle size={12} /> Encrypted
                         </div>
@@ -309,10 +334,16 @@ export default function Meetings() {
                                 />
                             )}
 
-                            {/* Overlay UI */}
                             <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end opacity-0 group-hover:opacity-100 transition-opacity">
-                                <div className="bg-black/50 backdrop-blur-xl px-3.5 py-2 rounded-xl border border-white/10 flex items-center gap-2.5 shadow-lg">
-                                    <span className="text-sm font-bold font-google">You</span>
+                                <div className="flex gap-2">
+                                    <div className="bg-black/50 backdrop-blur-xl px-3.5 py-2 rounded-xl border border-white/10 flex items-center gap-2.5 shadow-lg">
+                                        <span className="text-sm font-bold font-google">You</span>
+                                    </div>
+                                    {handRaised && (
+                                        <div className="bg-yellow-500/90 backdrop-blur-xl p-2 rounded-xl border border-yellow-400/20 shadow-lg animate-bounce">
+                                            <Hand size={16} className="text-white" />
+                                        </div>
+                                    )}
                                 </div>
                                 <div className="flex gap-2">
                                     {!audioEnabled ? (
@@ -330,45 +361,87 @@ export default function Meetings() {
                     </div>
                 </div>
 
+                {/* Closed Captions Overlay */}
+                <AnimatePresence>
+                    {captionsEnabled && (
+                        <motion.div 
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 20 }}
+                            className="absolute bottom-28 md:bottom-32 left-1/2 -translate-x-1/2 z-20 w-full max-w-2xl px-4 pointer-events-none"
+                        >
+                            <div className="bg-black/60 backdrop-blur-md border border-white/10 rounded-2xl p-4 text-center shadow-lg">
+                                <p className="text-white font-medium text-lg lg:text-xl drop-shadow-md">
+                                    <span className="text-white/60 text-sm font-bold block mb-1">System</span>
+                                    This is a simulated live caption to demonstrate the productivity enhancement features in PRISM OS Meetings.
+                                </p>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
                 {/* Bottom Controls Bar */}
-                <div className="absolute bottom-6 md:bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-2 md:gap-3 bg-white/10 backdrop-blur-2xl border border-white/10 px-4 md:px-6 py-3 rounded-[2rem] shadow-[0_8px_32px_rgba(0,0,0,0.4)] z-30 w-max max-w-[90vw] overflow-x-auto">
+                <div className="absolute bottom-6 md:bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-1.5 md:gap-2 bg-white/10 backdrop-blur-2xl border border-white/10 px-4 md:px-6 py-3 rounded-[2rem] shadow-[0_8px_32px_rgba(0,0,0,0.4)] z-30 w-max max-w-[95vw] overflow-x-auto custom-scrollbar">
                     
-                    <button onClick={() => setAudioEnabled(!audioEnabled)} className={clsx("p-3.5 md:p-4 rounded-2xl transition-all duration-300 relative group flex-shrink-0", audioEnabled ? "bg-white/10 hover:bg-white/20 text-white" : "bg-red-500 text-white hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.4)]")}>
-                        {audioEnabled ? <Mic size={22} /> : <MicOff size={22} />}
-                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">Toggle Mic</span>
+                    <button aria-label={audioEnabled ? "Mute microphone" : "Unmute microphone"} onClick={() => setAudioEnabled(!audioEnabled)} className={clsx("p-3 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", audioEnabled ? "bg-white/10 hover:bg-white/20 text-white" : "bg-red-500 text-white hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.4)]")}>
+                        {audioEnabled ? <Mic size={20} /> : <MicOff size={20} />}
+                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">{audioEnabled ? 'Mute' : 'Unmute'}</span>
                     </button>
                     
-                    <button onClick={() => setVideoEnabled(!videoEnabled)} className={clsx("p-3.5 md:p-4 rounded-2xl transition-all duration-300 relative group flex-shrink-0", videoEnabled ? "bg-white/10 hover:bg-white/20 text-white" : "bg-red-500 text-white hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.4)]")}>
-                        {videoEnabled ? <Video size={22} /> : <VideoOff size={22} />}
-                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">Toggle Video</span>
+                    <button aria-label={videoEnabled ? "Turn off camera" : "Turn on camera"} onClick={() => setVideoEnabled(!videoEnabled)} className={clsx("p-3 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", videoEnabled ? "bg-white/10 hover:bg-white/20 text-white" : "bg-red-500 text-white hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.4)]")}>
+                        {videoEnabled ? <Video size={20} /> : <VideoOff size={20} />}
+                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">{videoEnabled ? 'Stop Video' : 'Start Video'}</span>
                     </button>
+
+                    <div className="w-px h-8 bg-white/20 mx-1 md:mx-2 flex-shrink-0" />
                     
-                    <button onClick={handleScreenShare} className={clsx("p-3.5 md:p-4 rounded-2xl transition-all duration-300 relative group flex-shrink-0", screenShared ? "bg-blue-500 text-white shadow-[0_0_15px_rgba(59,130,246,0.4)]" : "bg-white/10 hover:bg-white/20 text-white")}>
-                        <MonitorUp size={22} />
+                    <button aria-label={screenShared ? "Stop screen sharing" : "Share screen"} onClick={handleScreenShare} className={clsx("p-3 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", screenShared ? "bg-blue-500 text-white shadow-[0_0_15px_rgba(59,130,246,0.4)]" : "bg-white/10 hover:bg-white/20 text-white")}>
+                        <MonitorUp size={20} />
                         <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">{screenShared ? 'Stop Sharing' : 'Share Screen'}</span>
                     </button>
 
+                    {/* Productivity Features */}
+                    <button aria-label={handRaised ? "Lower hand" : "Raise hand"} onClick={() => setHandRaised(!handRaised)} className={clsx("p-3 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", handRaised ? "bg-yellow-500 text-white shadow-[0_0_15px_rgba(234,179,8,0.4)]" : "bg-white/10 hover:bg-white/20 text-white")}>
+                        <Hand size={20} />
+                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">{handRaised ? 'Lower Hand' : 'Raise Hand'}</span>
+                    </button>
+
+                    <button aria-label={captionsEnabled ? "Disable captions" : "Enable captions"} onClick={() => setCaptionsEnabled(!captionsEnabled)} className={clsx("p-3 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", captionsEnabled ? "bg-blue-500 text-white shadow-[0_0_15px_rgba(59,130,246,0.4)]" : "bg-white/10 hover:bg-white/20 text-white")}>
+                        <Captions size={20} />
+                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">{captionsEnabled ? 'Turn Off CC' : 'Turn On CC'}</span>
+                    </button>
+                    
+                    <button aria-label={isRecording ? "Stop recording" : "Start recording"} onClick={() => setIsRecording(!isRecording)} className={clsx("p-3 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", isRecording ? "bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.4)] animate-pulse" : "bg-white/10 hover:bg-white/20 text-white")}>
+                        <Circle size={20} className={clsx(isRecording ? "fill-white" : "")} />
+                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">{isRecording ? 'Stop Recording' : 'Record'}</span>
+                    </button>
+
                     <div className="w-px h-8 bg-white/20 mx-1 md:mx-2 flex-shrink-0" />
                     
-                    <button onClick={() => setShowSidebar(showSidebar === 'effects' ? null : 'effects')} className={clsx("p-3.5 md:p-4 rounded-2xl transition-all duration-300 relative group flex-shrink-0", showSidebar === 'effects' ? "bg-purple-500 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]" : "bg-white/10 hover:bg-white/20 text-white")}>
-                        <Sparkles size={22} />
-                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">Visual Effects</span>
+                    <button aria-label="Whiteboard" onClick={() => setShowSidebar(showSidebar === 'whiteboard' ? null : 'whiteboard')} className={clsx("p-3 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0 hidden sm:block", showSidebar === 'whiteboard' ? "bg-orange-500 text-white shadow-[0_0_15px_rgba(249,115,22,0.4)]" : "bg-white/10 hover:bg-white/20 text-white")}>
+                        <Presentation size={20} />
+                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">Whiteboard</span>
                     </button>
 
-                    <button onClick={() => setShowSidebar(showSidebar === 'people' ? null : 'people')} className={clsx("p-3.5 md:p-4 rounded-2xl transition-all duration-300 relative group flex-shrink-0", showSidebar === 'people' ? "bg-white/20 text-white" : "bg-white/10 hover:bg-white/20 text-white")}>
-                        <Users size={22} />
-                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">Participants</span>
+                    <button aria-label="Visual effects" onClick={() => setShowSidebar(showSidebar === 'effects' ? null : 'effects')} className={clsx("p-3 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0 hidden sm:block", showSidebar === 'effects' ? "bg-purple-500 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]" : "bg-white/10 hover:bg-white/20 text-white")}>
+                        <Sparkles size={20} />
+                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">Effects</span>
                     </button>
 
-                    <button onClick={() => setShowSidebar(showSidebar === 'chat' ? null : 'chat')} className={clsx("p-3.5 md:p-4 rounded-2xl transition-all duration-300 relative group flex-shrink-0", showSidebar === 'chat' ? "bg-white/20 text-white" : "bg-white/10 hover:bg-white/20 text-white")}>
-                        <MessageSquare size={22} />
-                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">Meeting Chat</span>
+                    <button aria-label="Participants list" onClick={() => setShowSidebar(showSidebar === 'people' ? null : 'people')} className={clsx("p-3 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", showSidebar === 'people' ? "bg-white/20 text-white" : "bg-white/10 hover:bg-white/20 text-white")}>
+                        <Users size={20} />
+                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">People</span>
+                    </button>
+
+                    <button aria-label="Meeting chat" onClick={() => setShowSidebar(showSidebar === 'chat' ? null : 'chat')} className={clsx("p-3 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", showSidebar === 'chat' ? "bg-white/20 text-white" : "bg-white/10 hover:bg-white/20 text-white")}>
+                        <MessageSquare size={20} />
+                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">Chat</span>
                     </button>
 
                     <div className="w-px h-8 bg-white/20 mx-1 md:mx-2 flex-shrink-0" />
 
-                    <button onClick={handleLeaveMeeting} className="px-5 md:px-6 py-3.5 md:py-4 rounded-2xl bg-red-500 text-white font-bold transition-all duration-300 hover:bg-red-600 hover:scale-105 shadow-[0_0_20px_rgba(239,68,68,0.4)] flex items-center gap-2 flex-shrink-0">
-                        <PhoneOff size={22} />
+                    <button aria-label="Leave meeting" onClick={handleLeaveMeeting} className="px-4 md:px-5 py-3 md:py-3.5 rounded-2xl bg-red-500 text-white font-bold transition-all duration-300 hover:bg-red-600 hover:scale-105 shadow-[0_0_20px_rgba(239,68,68,0.4)] flex items-center gap-2 flex-shrink-0">
+                        <PhoneOff size={20} />
                         <span className="hidden sm:inline">Leave</span>
                     </button>
                 </div>
@@ -389,6 +462,7 @@ export default function Meetings() {
                             <h3 className="font-google font-bold text-lg flex items-center gap-2">
                                 {showSidebar === 'effects' ? <><Sparkles size={18} className="text-purple-400" /> Visual Effects</> : 
                                  showSidebar === 'chat' ? <><MessageSquare size={18} className="text-blue-400" /> Meeting Chat</> : 
+                                 showSidebar === 'whiteboard' ? <><Presentation size={18} className="text-orange-400" /> Whiteboard</> : 
                                  <><Users size={18} className="text-teal-400" /> Participants</>}
                             </h3>
                             <button onClick={() => setShowSidebar(null)} className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-colors text-white/70 hover:text-white">
@@ -451,6 +525,37 @@ export default function Meetings() {
                                             </label>
                                         </div>
                                     </div>
+                                </div>
+                            )}
+
+                            {showSidebar === 'whiteboard' && (
+                                <div className="flex flex-col h-full animate-fade-in space-y-4">
+                                    <div className="text-center p-4">
+                                        <div className="w-16 h-16 bg-orange-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-orange-500/30">
+                                            <Presentation size={28} className="text-orange-400" />
+                                        </div>
+                                        <h4 className="font-bold text-lg mb-2">Collaborative Whiteboard</h4>
+                                        <p className="text-xs text-white/50">Start a new whiteboard to brainstorm with your team in real-time.</p>
+                                    </div>
+                                    <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                                        <h5 className="text-xs font-bold uppercase tracking-widest text-white/50 mb-3">Recent Boards</h5>
+                                        <div className="space-y-2">
+                                            {[1, 2].map(i => (
+                                                <button key={i} className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-white/10 transition-colors text-left border border-transparent hover:border-white/10">
+                                                    <div className="bg-blue-500/20 p-2 rounded-lg">
+                                                        <Presentation size={16} className="text-blue-400" />
+                                                    </div>
+                                                    <div>
+                                                        <div className="text-sm font-bold text-white">Project Brainstorm {i}</div>
+                                                        <div className="text-[10px] text-white/50">Modified {i} days ago</div>
+                                                    </div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <button className="w-full py-3.5 bg-orange-500 hover:bg-orange-600 rounded-xl text-sm font-bold shadow-lg shadow-orange-500/20 transition-all flex items-center justify-center gap-2 text-white">
+                                        <Presentation size={18} /> Start New Whiteboard
+                                    </button>
                                 </div>
                             )}
 
