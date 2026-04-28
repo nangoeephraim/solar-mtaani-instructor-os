@@ -266,6 +266,7 @@ const AppContent: React.FC = () => {
                 channelId: msg.channel_id,
                 senderId: msg.sender_id,
                 senderName: msg.sender_name || 'Unknown',
+                senderRole: msg.sender_role || 'viewer',
                 content: msg.content,
                 timestamp: msg.created_at,
                 isPinned: msg.is_pinned || false,
@@ -384,9 +385,18 @@ const AppContent: React.FC = () => {
                 ...prevData,
                 communications: {
                   ...prevData.communications,
-                  channels: prevData.communications.channels.map(c =>
-                    c.id === updatedChannel.id ? updatedChannel : c
-                  )
+                  channels: prevData.communications.channels.map(c => {
+                    if (c.id !== updatedChannel.id) return c;
+                    // MERGE lastReadBy: keep our local read timestamps if they're newer
+                    const mergedLastReadBy = { ...(updatedChannel.lastReadBy || {}) };
+                    const localReadBy = c.lastReadBy || {};
+                    for (const [uid, ts] of Object.entries(localReadBy)) {
+                      if (!mergedLastReadBy[uid] || new Date(ts) > new Date(mergedLastReadBy[uid])) {
+                        mergedLastReadBy[uid] = ts;
+                      }
+                    }
+                    return { ...updatedChannel, lastReadBy: mergedLastReadBy };
+                  })
                 }
               };
             });
