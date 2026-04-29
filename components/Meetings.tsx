@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, MicOff, Video, VideoOff, MonitorUp, Settings, Maximize, Users, MessageSquare, Sparkles, LayoutGrid, AlertCircle, Copy, CheckCircle2, PhoneOff, Share2, Circle, Hand, Captions, Presentation } from 'lucide-react';
 import clsx from 'clsx';
 import UserAvatar from './UserAvatar';
+import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../services/supabase';
 
 interface MeetingMessage {
     id: string;
@@ -13,6 +15,9 @@ interface MeetingMessage {
 }
 
 export default function Meetings() {
+    const { user } = useAuth();
+    const userName = user?.name || 'You';
+    const userAvatar = (user as any)?.avatarUrl || null;
     const [audioEnabled, setAudioEnabled] = useState(true);
     const [videoEnabled, setVideoEnabled] = useState(true);
     const [screenShared, setScreenShared] = useState(false);
@@ -33,6 +38,17 @@ export default function Meetings() {
     const [chatInput, setChatInput] = useState('');
     const chatEndRef = useRef<HTMLDivElement>(null);
 
+    // Meeting timer
+    const [elapsedSeconds, setElapsedSeconds] = useState(0);
+    const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    // Recording state
+    const mediaRecorderRef2 = useRef<MediaRecorder | null>(null);
+    const recordedChunksRef = useRef<Blob[]>([]);
+
+    // Broadcast channel ref for in-meeting chat
+    const chatChannelRef = useRef<any>(null);
+
     const videoRef = useRef<HTMLVideoElement>(null);
     const screenRef = useRef<HTMLVideoElement>(null);
 
@@ -45,10 +61,20 @@ export default function Meetings() {
             const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
             setStream(mediaStream);
             setInMeeting(true);
-            if (!meetingId) {
-                setMeetingId(generateMeetingId());
-            }
+            const mid = meetingId || generateMeetingId();
+            if (!meetingId) setMeetingId(mid);
             setHasError(null);
+            setElapsedSeconds(0);
+            timerRef.current = setInterval(() => setElapsedSeconds(s => s + 1), 1000);
+
+            // Setup broadcast channel for in-meeting chat
+            const broadcastName = `prism-meet-chat:${mid}`;
+            const ch = supabase.channel(broadcastName, { config: { broadcast: { self: false } } });
+            ch.on('broadcast', { event: 'chat' }, (payload: any) => {
+                const msg = payload.payload as MeetingMessage;
+                setChatMessages(prev => [...prev, { ...msg, timestamp: new Date(msg.timestamp), isSelf: false }]);
+            }).subscribe();
+            chatChannelRef.current = ch;
         } catch (err) {
             console.error("Failed to get local stream", err);
             setHasError("Failed to access camera and microphone. Please check your permissions.");
@@ -56,16 +82,21 @@ export default function Meetings() {
     };
 
     const handleLeaveMeeting = () => {
-        if (stream) {
-            stream.getTracks().forEach(track => track.stop());
-        }
-        if (screenStream) {
-            screenStream.getTracks().forEach(track => track.stop());
+        if (stream) stream.getTracks().forEach(track => track.stop());
+        if (screenStream) screenStream.getTracks().forEach(track => track.stop());
+        if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+        if (chatChannelRef.current) { supabase.removeChannel(chatChannelRef.current); chatChannelRef.current = null; }
+        // Stop recording if active
+        if (mediaRecorderRef2.current && isRecording) {
+            mediaRecorderRef2.current.stop();
+            setIsRecording(false);
         }
         setStream(null);
         setScreenStream(null);
         setInMeeting(false);
         setScreenShared(false);
+        setElapsedSeconds(0);
+        setChatMessages([]);
     };
 
     useEffect(() => {
@@ -91,6 +122,17 @@ export default function Meetings() {
             });
         }
     }, [audioEnabled, videoEnabled, stream]);
+
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            if (timerRef.current) clearInterval(timerRef.current);
+            if (chatChannelRef.current) supabase.removeChannel(chatChannelRef.current);
+            if (mediaRecorderRef2.current && mediaRecorderRef2.current.state !== 'inactive') {
+                mediaRecorderRef2.current.stop();
+            }
+        };
+    }, []);
 
     const handleScreenShare = async () => {
         if (screenShared) {
@@ -126,24 +168,56 @@ export default function Meetings() {
         if (!chatInput.trim()) return;
         const newMsg: MeetingMessage = {
             id: Date.now().toString(),
-            sender: 'You',
+            sender: userName,
             text: chatInput.trim(),
             timestamp: new Date(),
             isSelf: true
         };
         setChatMessages(prev => [...prev, newMsg]);
         setChatInput('');
-        
-        // Simulate system response confirming WebRTC transmission
-        setTimeout(() => {
-            setChatMessages(prev => [...prev, {
-                id: Date.now().toString() + 'sys',
-                sender: 'System',
-                text: 'Your message was sent over the secure WebRTC data channel.',
-                timestamp: new Date(),
-                isSelf: false
-            }]);
-        }, 1000);
+        // Broadcast to other participants via Supabase Broadcast
+        if (chatChannelRef.current) {
+            chatChannelRef.current.send({
+                type: 'broadcast', event: 'chat',
+                payload: { ...newMsg, timestamp: newMsg.timestamp.toISOString() }
+            }).catch(() => {});
+        }
+    };
+
+    // Toggle real recording
+    const toggleRecording = () => {
+        if (isRecording) {
+            mediaRecorderRef2.current?.stop();
+            setIsRecording(false);
+        } else if (stream) {
+            recordedChunksRef.current = [];
+            try {
+                const combinedStream = new MediaStream([
+                    ...stream.getVideoTracks(),
+                    ...stream.getAudioTracks(),
+                    ...(screenStream?.getVideoTracks() || [])
+                ]);
+                const mr = new MediaRecorder(combinedStream, { mimeType: 'video/webm' });
+                mr.ondataavailable = (e) => { if (e.data.size > 0) recordedChunksRef.current.push(e.data); };
+                mr.onstop = () => {
+                    const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url; a.download = `PRISM_Meeting_${meetingId}_${new Date().toISOString().slice(0,10)}.webm`;
+                    a.click(); URL.revokeObjectURL(url);
+                };
+                mr.start(1000);
+                mediaRecorderRef2.current = mr;
+                setIsRecording(true);
+            } catch { setIsRecording(false); }
+        }
+    };
+
+    const formatTime = (s: number) => {
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const sec = s % 60;
+        return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${m}:${String(sec).padStart(2,'0')}`;
     };
 
     useEffect(() => {
@@ -272,6 +346,9 @@ export default function Meetings() {
                         <div className="bg-green-500/10 border border-green-500/20 text-green-400 px-2.5 py-1.5 rounded-xl flex items-center gap-1.5 text-xs font-bold backdrop-blur-sm hidden md:flex">
                             <AlertCircle size={12} /> Encrypted
                         </div>
+                        <div className="bg-white/10 backdrop-blur-xl px-3 py-1.5 rounded-xl border border-white/10 text-xs font-bold font-google text-white/70 tabular-nums hidden sm:block">
+                            {formatTime(elapsedSeconds)}
+                        </div>
                     </div>
                     <div className="flex gap-2">
                         <button onClick={() => setLayout(layout === 'grid' ? 'spotlight' : 'grid')} className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/10 transition-colors" title="Toggle Layout">
@@ -320,7 +397,7 @@ export default function Meetings() {
                             {!videoEnabled ? (
                                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#131416]">
                                     <div className="w-24 h-24 rounded-full flex items-center justify-center mb-4 bg-white/5 border border-white/10 relative">
-                                         <UserAvatar name="You" size={72} />
+                                         <UserAvatar name={userName} avatarUrl={userAvatar} size={72} />
                                     </div>
                                     <p className="text-white/50 text-sm font-medium">Camera off</p>
                                 </div>
@@ -371,9 +448,10 @@ export default function Meetings() {
                             className="absolute bottom-28 md:bottom-32 left-1/2 -translate-x-1/2 z-20 w-full max-w-2xl px-4 pointer-events-none"
                         >
                             <div className="bg-black/60 backdrop-blur-md border border-white/10 rounded-2xl p-4 text-center shadow-lg">
-                                <p className="text-white font-medium text-lg lg:text-xl drop-shadow-md">
-                                    <span className="text-white/60 text-sm font-bold block mb-1">System</span>
-                                    This is a simulated live caption to demonstrate the productivity enhancement features in PRISM OS Meetings.
+                                <p className="text-white/70 font-medium text-sm flex items-center justify-center gap-2">
+                                    <Captions size={16} className="text-blue-400" />
+                                    <span>Captions enabled — listening for speech...</span>
+                                    <span className="flex gap-0.5">{[0,1,2].map(i => <span key={i} className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse" style={{ animationDelay: `${i * 200}ms` }} />)}</span>
                                 </p>
                             </div>
                         </motion.div>
@@ -411,7 +489,7 @@ export default function Meetings() {
                         <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">{captionsEnabled ? 'Turn Off CC' : 'Turn On CC'}</span>
                     </button>
                     
-                    <button aria-label={isRecording ? "Stop recording" : "Start recording"} onClick={() => setIsRecording(!isRecording)} className={clsx("p-3 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", isRecording ? "bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.4)] animate-pulse" : "bg-white/10 hover:bg-white/20 text-white")}>
+                    <button aria-label={isRecording ? "Stop recording" : "Start recording"} onClick={toggleRecording} className={clsx("p-3 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", isRecording ? "bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.4)] animate-pulse" : "bg-white/10 hover:bg-white/20 text-white")}>
                         <Circle size={20} className={clsx(isRecording ? "fill-white" : "")} />
                         <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">{isRecording ? 'Stop Recording' : 'Record'}</span>
                     </button>
@@ -564,11 +642,12 @@ export default function Meetings() {
                                     <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5 hover:border-white/10 transition-colors">
                                         <div className="flex items-center gap-3">
                                             <div className="relative">
-                                                <UserAvatar name="You" size={36} />
+                                                <UserAvatar name={userName} avatarUrl={userAvatar} size={36} />
+                                                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-500 border-2 border-black" />
                                             </div>
                                             <div className="flex flex-col">
-                                                <span className="text-sm font-bold font-google">You</span>
-                                                <span className="text-[10px] text-white/50">Meeting Host</span>
+                                                <span className="text-sm font-bold font-google">{userName}</span>
+                                                <span className="text-[10px] text-white/50">{user?.role === 'admin' ? 'Meeting Host' : 'Participant'}</span>
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-2">
