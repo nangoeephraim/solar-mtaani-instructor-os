@@ -1172,7 +1172,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
                             )}
                         </AnimatePresence>
                         {/* Header */}
-                        <div className="h-14 px-4 flex items-center justify-between flex-shrink-0 z-10 sidebar-glass" style={{ borderBottom: '1px solid var(--md-sys-color-outline-variant)' }}>
+                        <div className="h-14 px-4 flex items-center justify-between flex-shrink-0 z-10 bg-[var(--md-sys-color-surface)]" style={{ borderBottom: '1px solid var(--md-sys-color-outline-variant)' }}>
                             <div className="flex items-center gap-2">
                                 {/* Mobile: back-to-app arrow (replaces hamburger trap) */}
                                 {onNavigate && (
@@ -1504,7 +1504,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
                                         )}
                                     </AnimatePresence>
 
-                                    <div className={clsx("flex items-end rounded-[32px] transition-all duration-300 backdrop-blur-md", isInputFocused || isRecording ? "shadow-lg bg-[var(--md-sys-color-surface-variant)] scale-[1.01]" : "bg-[var(--md-sys-color-surface)] hover:bg-[var(--md-sys-color-surface-variant)] shadow-sm")} style={{ border: '1px solid', borderColor: isInputFocused || isRecording ? 'var(--md-sys-color-primary)' : 'var(--md-sys-color-outline-variant)' }}>
+                                    <div className={clsx("flex items-end rounded-[32px] transition-all duration-300", isInputFocused || isRecording ? "shadow-lg bg-[var(--md-sys-color-surface-variant)] scale-[1.01]" : "bg-[var(--md-sys-color-surface)] hover:bg-[var(--md-sys-color-surface-variant)] shadow-sm")} style={{ border: '1px solid', borderColor: isInputFocused || isRecording ? 'var(--md-sys-color-primary)' : 'var(--md-sys-color-outline-variant)' }}>
                                         <div className="pl-2 pb-2 pt-2 flex items-center h-full gap-0.5">
                                             {/* Mobile: '+' opens the attach sheet */}
                                             <button type="button" onClick={() => setShowMobileAttachSheet(p => !p)} className="md:hidden p-2.5 rounded-full hover:bg-[var(--md-sys-color-surface-2)] transition-all active:scale-90" style={{ color: 'var(--md-sys-color-secondary)' }} title="Attach">

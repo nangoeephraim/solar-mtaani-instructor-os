@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mic, MicOff, Video, VideoOff, MonitorUp, Settings, Maximize, Users, MessageSquare, Sparkles, LayoutGrid, AlertCircle, Copy, CheckCircle2, PhoneOff, Share2, Circle, Hand, Captions, Presentation } from 'lucide-react';
 import clsx from 'clsx';
@@ -239,20 +239,16 @@ export default function Meetings() {
 
     if (!inMeeting) {
         return (
-            <div className="w-full h-full flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-[#0a0a0b] via-[#131416] to-[#0a0a0b] z-20">
-                <div className="absolute inset-0 pointer-events-none">
-                    <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-[120px]" />
-                    <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-[120px]" />
-                </div>
+            <div className="w-full h-full flex items-center justify-center relative overflow-hidden z-20" style={{ background: 'radial-gradient(ellipse at 30% 30%, rgba(59,130,246,0.08) 0%, transparent 60%), radial-gradient(ellipse at 70% 70%, rgba(168,85,247,0.08) 0%, transparent 60%), #0a0a0b' }}>
                 
-                <div className="relative z-10 p-8 max-w-4xl w-full grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+                <div className="relative z-10 p-4 sm:p-8 max-w-4xl w-full grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-12 items-center">
                     <div className="space-y-8">
                         <div>
-                            <h1 className="text-4xl md:text-5xl font-google font-bold text-white mb-4 tracking-tight">
+                            <h1 className="text-3xl sm:text-4xl md:text-5xl font-google font-bold text-white mb-3 md:mb-4 tracking-tight">
                                 Premium Video <br className="hidden md:block"/>Meetings
                             </h1>
-                            <p className="text-[var(--md-sys-color-on-surface-variant)] text-lg leading-relaxed">
-                                Connect, collaborate, and celebrate from anywhere with PRISM Video Meetings. Built for high-performance and flawless reliability.
+                            <p className="text-[var(--md-sys-color-on-surface-variant)] text-base md:text-lg leading-relaxed">
+                                Connect, collaborate, and celebrate from anywhere with PRISM Video Meetings.
                             </p>
                         </div>
 
@@ -282,7 +278,7 @@ export default function Meetings() {
                                     placeholder="Enter meeting code"
                                     value={meetingId}
                                     onChange={(e) => setMeetingId(e.target.value)}
-                                    className="w-full bg-[var(--glass-bg)] backdrop-blur-md border border-[var(--md-sys-color-outline-variant)] rounded-2xl py-4 pl-12 pr-24 text-[var(--md-sys-color-on-surface)] outline-none focus:border-blue-500 transition-colors"
+                                    className="w-full bg-[var(--glass-bg)] border border-[var(--md-sys-color-outline-variant)] rounded-2xl py-3 sm:py-4 pl-12 pr-20 sm:pr-24 text-[var(--md-sys-color-on-surface)] outline-none focus:border-blue-500 transition-colors"
                                 />
                                 <button 
                                     onClick={() => meetingId && handleJoinMeeting()}
@@ -297,8 +293,7 @@ export default function Meetings() {
 
                     {/* Preview Area */}
                     <div className="hidden md:flex items-center justify-center relative">
-                         <div className="absolute inset-0 bg-gradient-to-tr from-blue-500/20 to-purple-500/20 rounded-[3rem] blur-3xl transform rotate-6" />
-                         <div className="w-full aspect-[4/3] bg-[var(--glass-bg)] backdrop-blur-xl border border-[var(--md-sys-color-outline-variant)] rounded-[3rem] shadow-2xl overflow-hidden relative flex flex-col items-center justify-center z-10">
+                         <div className="w-full aspect-[4/3] bg-[var(--glass-bg)] border border-[var(--md-sys-color-outline-variant)] rounded-[2rem] md:rounded-[3rem] shadow-2xl overflow-hidden relative flex flex-col items-center justify-center z-10" style={{ boxShadow: '0 0 80px rgba(59,130,246,0.1)' }}>
                              <div className="w-24 h-24 bg-blue-500/20 rounded-full flex items-center justify-center mb-6 border border-blue-500/30 shadow-[0_0_40px_rgba(59,130,246,0.3)] animate-pulse">
                                  <Video size={40} className="text-blue-400" />
                              </div>
@@ -312,18 +307,13 @@ export default function Meetings() {
     }
 
     return (
-        <div className="flex w-full h-full relative overflow-hidden bg-[#0a0a0b] text-white z-20">
-            {/* Background elements for premium look */}
-            <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-                <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-blue-600/10 blur-[120px]" />
-                <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-purple-600/10 blur-[120px]" />
-            </div>
+        <div className="flex w-full h-full relative overflow-hidden text-white z-20" style={{ background: 'radial-gradient(ellipse at 20% 20%, rgba(37,99,235,0.06) 0%, transparent 50%), radial-gradient(ellipse at 80% 80%, rgba(147,51,234,0.06) 0%, transparent 50%), #0a0a0b' }}>
             
             {/* Main Content */}
             <div className={clsx("flex-1 flex flex-col relative z-10 transition-all duration-300", showSidebar ? "lg:pr-80" : "")}>
                 
                 {/* Header */}
-                <div className="absolute top-0 left-0 right-0 p-4 md:p-6 flex justify-between items-center bg-gradient-to-b from-black/80 to-transparent z-20">
+                <div className="absolute top-0 left-0 right-0 p-3 sm:p-4 md:p-6 flex justify-between items-center bg-gradient-to-b from-black/80 to-transparent z-20">
                     <div className="flex items-center gap-3">
                         {isRecording && (
                             <div className="bg-red-500/10 border border-red-500/30 px-3 py-1.5 rounded-xl flex items-center gap-2 text-xs font-bold text-red-400 shadow-[0_0_10px_rgba(239,68,68,0.2)] animate-pulse">
@@ -358,10 +348,10 @@ export default function Meetings() {
                 </div>
 
                 {/* Video Grid */}
-                <div className="flex-1 p-4 md:p-6 flex items-center justify-center pt-24 pb-28">
+                <div className="flex-1 p-2 sm:p-4 md:p-6 flex items-center justify-center pt-20 sm:pt-24 pb-24 sm:pb-28">
                     <div className={clsx(
-                        "w-full h-full grid gap-4 md:gap-6 transition-all duration-500 max-w-7xl mx-auto",
-                        screenShared ? "grid-cols-3 grid-rows-3" : "grid-cols-1 grid-rows-1"
+                        "w-full h-full grid gap-2 sm:gap-4 md:gap-6 transition-all duration-300 max-w-7xl mx-auto",
+                        screenShared ? "grid-cols-1 md:grid-cols-3 grid-rows-[2fr_1fr] md:grid-rows-3" : "grid-cols-1 grid-rows-1"
                     )}>
                         {/* Screen Share Spot */}
                         {screenShared && (
@@ -369,12 +359,13 @@ export default function Meetings() {
                                 layout
                                 initial={{ opacity: 0, scale: 0.9 }}
                                 animate={{ opacity: 1, scale: 1 }}
-                                className="col-span-3 row-span-2 md:col-span-2 md:row-span-3 relative rounded-3xl overflow-hidden shadow-2xl bg-[#131416] border border-white/5 flex items-center justify-center"
+                                className="col-span-1 md:col-span-2 md:row-span-3 relative rounded-2xl sm:rounded-3xl overflow-hidden shadow-2xl bg-[#131416] border border-white/5 flex items-center justify-center"
                             >
                                 <video 
                                     ref={screenRef} 
                                     autoPlay 
                                     playsInline 
+                                    style={{ willChange: 'transform' }}
                                     className="w-full h-full object-contain"
                                 />
                                 <div className="absolute bottom-4 left-4 bg-blue-500/90 backdrop-blur-xl px-3.5 py-2 rounded-xl border border-blue-400/20 flex items-center gap-2.5 shadow-lg">
@@ -391,7 +382,7 @@ export default function Meetings() {
                             animate={{ opacity: 1, scale: 1 }}
                             className={clsx(
                                 "relative rounded-3xl overflow-hidden shadow-2xl bg-[#131416] transition-all duration-300 border border-white/5 flex items-center justify-center group",
-                                screenShared ? "col-span-3 row-span-1 md:col-span-1 md:row-span-3 aspect-video md:aspect-auto" : "w-full h-full"
+                                screenShared ? "col-span-1 md:col-span-1 md:row-span-3 aspect-video md:aspect-auto" : "w-full h-full"
                             )}
                         >
                             {!videoEnabled ? (
@@ -407,6 +398,7 @@ export default function Meetings() {
                                     autoPlay 
                                     playsInline 
                                     muted 
+                                    style={{ willChange: 'transform' }}
                                     className="w-full h-full object-cover transform -scale-x-100"
                                 />
                             )}
@@ -414,7 +406,7 @@ export default function Meetings() {
                             <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end opacity-0 group-hover:opacity-100 transition-opacity">
                                 <div className="flex gap-2">
                                     <div className="bg-black/50 backdrop-blur-xl px-3.5 py-2 rounded-xl border border-white/10 flex items-center gap-2.5 shadow-lg">
-                                        <span className="text-sm font-bold font-google">You</span>
+                                        <span className="text-sm font-bold font-google">{userName}</span>
                                     </div>
                                     {handRaised && (
                                         <div className="bg-yellow-500/90 backdrop-blur-xl p-2 rounded-xl border border-yellow-400/20 shadow-lg animate-bounce">
@@ -447,7 +439,7 @@ export default function Meetings() {
                             exit={{ opacity: 0, y: 20 }}
                             className="absolute bottom-28 md:bottom-32 left-1/2 -translate-x-1/2 z-20 w-full max-w-2xl px-4 pointer-events-none"
                         >
-                            <div className="bg-black/60 backdrop-blur-md border border-white/10 rounded-2xl p-4 text-center shadow-lg">
+                            <div className="bg-black/70 border border-white/10 rounded-2xl p-3 sm:p-4 text-center shadow-lg">
                                 <p className="text-white/70 font-medium text-sm flex items-center justify-center gap-2">
                                     <Captions size={16} className="text-blue-400" />
                                     <span>Captions enabled — listening for speech...</span>
@@ -459,7 +451,7 @@ export default function Meetings() {
                 </AnimatePresence>
 
                 {/* Bottom Controls Bar */}
-                <div className="absolute bottom-6 md:bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-1.5 md:gap-2 bg-white/10 backdrop-blur-2xl border border-white/10 px-4 md:px-6 py-3 rounded-[2rem] shadow-[0_8px_32px_rgba(0,0,0,0.4)] z-30 w-max max-w-[95vw] overflow-x-auto custom-scrollbar">
+                <div className="absolute bottom-3 sm:bottom-6 md:bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-1 sm:gap-1.5 md:gap-2 bg-black/60 sm:bg-white/10 backdrop-blur-xl border border-white/10 px-3 sm:px-4 md:px-6 py-2.5 sm:py-3 rounded-[2rem] shadow-[0_8px_32px_rgba(0,0,0,0.4)] z-30 w-max max-w-[98vw] sm:max-w-[95vw] overflow-x-auto custom-scrollbar" style={{ WebkitOverflowScrolling: 'touch' }}>
                     
                     <button aria-label={audioEnabled ? "Mute microphone" : "Unmute microphone"} onClick={() => setAudioEnabled(!audioEnabled)} className={clsx("p-3 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", audioEnabled ? "bg-white/10 hover:bg-white/20 text-white" : "bg-red-500 text-white hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.4)]")}>
                         {audioEnabled ? <Mic size={20} /> : <MicOff size={20} />}
@@ -526,7 +518,7 @@ export default function Meetings() {
 
             </div>
 
-            {/* Sidebar (Settings/Chat/People) */}
+            {/* Sidebar (Settings/Chat/People) — bottom sheet on mobile, right panel on desktop */}
             <AnimatePresence>
                 {showSidebar && (
                     <motion.div 
@@ -534,7 +526,7 @@ export default function Meetings() {
                         animate={{ x: 0, opacity: 1 }}
                         exit={{ x: 360, opacity: 0 }}
                         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-                        className="absolute right-0 top-0 bottom-0 w-80 lg:w-80 bg-black/70 backdrop-blur-3xl border-l border-white/10 z-40 flex flex-col shadow-[-10px_0_30px_rgba(0,0,0,0.5)]"
+                        className="absolute right-0 top-0 bottom-0 w-full sm:w-80 lg:w-80 bg-black/80 backdrop-blur-xl border-l border-white/10 z-40 flex flex-col shadow-[-10px_0_30px_rgba(0,0,0,0.5)]"
                     >
                         <div className="p-5 border-b border-white/10 flex justify-between items-center bg-white/5">
                             <h3 className="font-google font-bold text-lg flex items-center gap-2">
