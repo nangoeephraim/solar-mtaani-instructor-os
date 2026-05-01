@@ -760,7 +760,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
             mediaRecorder.onstop = () => {
                 const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
                 const file = new File([audioBlob], `Voice_Message_${new Date().toLocaleTimeString().replace(/:/g, '-')}.webm`, { type: 'audio/webm' });
-                setPendingAttachment(file);
+                setPendingAttachments(prev => [...prev, file].slice(0, 5));
                 stream.getTracks().forEach(track => track.stop());
             };
 

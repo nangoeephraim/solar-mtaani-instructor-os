@@ -120,12 +120,22 @@ export default function Meetings() {
             mediaRecorderRef2.current.stop();
             setIsRecording(false);
         }
+        // Stop speech recognition
+        if (recognitionRef.current) {
+            try { recognitionRef.current.stop(); } catch {}
+            recognitionRef.current = null;
+        }
         setStream(null);
         setScreenStream(null);
         setInMeeting(false);
         setScreenShared(false);
         setElapsedSeconds(0);
         setChatMessages([]);
+        setCaptionsEnabled(false);
+        setCaptionText('');
+        setCaptionInterim('');
+        setHandRaised(false);
+        setConnectionQuality('good');
     };
 
     useEffect(() => {
