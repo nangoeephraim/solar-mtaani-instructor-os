@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, MicOff, Video, VideoOff, MonitorUp, Settings, Maximize, Minimize, Users, MessageSquare, Sparkles, LayoutGrid, AlertCircle, Copy, CheckCircle2, PhoneOff, Share2, Circle, Hand, Captions, Presentation, PictureInPicture2, Wifi, WifiOff, SmilePlus, X, Clock, FileText } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, MonitorUp, Settings, Maximize, Minimize, Users, MessageSquare, Sparkles, LayoutGrid, AlertCircle, Copy, CheckCircle2, PhoneOff, Share2, Circle, Hand, Captions, Presentation, PictureInPicture2, Wifi, WifiOff, SmilePlus, X, Clock, FileText, Paperclip, Upload, Download, File, MoreHorizontal, ChevronUp, Image } from 'lucide-react';
 import clsx from 'clsx';
 import UserAvatar from './UserAvatar';
 import { useAuth } from '../contexts/AuthContext';
@@ -27,6 +27,20 @@ interface MeetingMessage {
     text: string;
     timestamp: Date;
     isSelf: boolean;
+    fileUrl?: string;
+    fileName?: string;
+    fileType?: string;
+    fileSize?: number;
+}
+
+interface MeetingFile {
+    id: string;
+    name: string;
+    url: string;
+    type: string;
+    size: number;
+    sender: string;
+    timestamp: Date;
 }
 
 interface FloatingReaction {
@@ -51,7 +65,8 @@ export default function Meetings() {
     const [audioEnabled, setAudioEnabled] = useState(true);
     const [videoEnabled, setVideoEnabled] = useState(true);
     const [screenShared, setScreenShared] = useState(false);
-    const [showSidebar, setShowSidebar] = useState<'chat' | 'people' | 'effects' | 'notes' | null>(null);
+    const [showSidebar, setShowSidebar] = useState<'chat' | 'people' | 'effects' | 'notes' | 'files' | null>(null);
+    const [showMobileMore, setShowMobileMore] = useState(false);
     const [layout, setLayout] = useState<'grid' | 'spotlight'>('grid');
     const [isRecording, setIsRecording] = useState(false);
     const [handRaised, setHandRaised] = useState(false);
@@ -109,6 +124,12 @@ export default function Meetings() {
     const videoRef = useRef<HTMLVideoElement>(null);
     const screenRef = useRef<HTMLVideoElement>(null);
 
+    // File sharing state
+    const [meetingFiles, setMeetingFiles] = useState<MeetingFile[]>([]);
+    const [isUploading, setIsUploading] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const chatFileInputRef = useRef<HTMLInputElement>(null);
+
     const generateMeetingId = () => {
         return Math.random().toString(36).substring(2, 6) + '-' + Math.random().toString(36).substring(2, 6) + '-' + Math.random().toString(36).substring(2, 6);
     };
@@ -130,6 +151,9 @@ export default function Meetings() {
             ch.on('broadcast', { event: 'chat' }, (payload: any) => {
                 const msg = payload.payload as MeetingMessage;
                 setChatMessages(prev => [...prev, { ...msg, timestamp: new Date(msg.timestamp), isSelf: false }]);
+            }).on('broadcast', { event: 'file-share' }, (payload: any) => {
+                const f = payload.payload;
+                setMeetingFiles(prev => [...prev, { ...f, timestamp: new Date(f.timestamp) }]);
             }).subscribe();
             chatChannelRef.current = ch;
         } catch (err) {
@@ -168,6 +192,8 @@ export default function Meetings() {
         setFloatingReactions([]);
         setShowReactionTray(false);
         setToasts([]);
+        setMeetingFiles([]);
+        setShowMobileMore(false);
     };
 
     useEffect(() => {
@@ -350,6 +376,109 @@ export default function Meetings() {
         setToasts(prev => [...prev, { id, text, icon }]);
         setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
     }, []);
+
+    // Format file size helper
+    const formatFileSize = (bytes: number) => {
+        if (bytes < 1024) return `${bytes} B`;
+        if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} KB`;
+        return `${(bytes / 1048576).toFixed(1)} MB`;
+    };
+
+    // Get file icon based on type
+    const getFileIcon = (type: string) => {
+        if (type.startsWith('image/')) return '🖼️';
+        if (type === 'application/pdf') return '📄';
+        if (type.includes('word') || type.includes('document')) return '📝';
+        if (type.includes('sheet') || type.includes('excel')) return '📊';
+        if (type.includes('presentation') || type.includes('powerpoint')) return '📽️';
+        if (type.startsWith('video/')) return '🎬';
+        if (type.startsWith('audio/')) return '🎵';
+        return '📎';
+    };
+
+    // Handle file upload to Supabase + broadcast
+    const handleFileUpload = async (files: FileList | null) => {
+        if (!files || files.length === 0 || !meetingId) return;
+        setIsUploading(true);
+        try {
+            for (const file of Array.from(files)) {
+                const filePath = `${meetingId}/${Date.now()}_${file.name}`;
+                const { error } = await supabase.storage.from('meeting_files').upload(filePath, file);
+                if (error) { console.error('Upload error:', error); continue; }
+                const { data: urlData } = supabase.storage.from('meeting_files').getPublicUrl(filePath);
+                const fileRecord: MeetingFile = {
+                    id: Date.now().toString() + Math.random().toString(36).slice(2),
+                    name: file.name,
+                    url: urlData.publicUrl,
+                    type: file.type,
+                    size: file.size,
+                    sender: userName,
+                    timestamp: new Date(),
+                };
+                setMeetingFiles(prev => [...prev, fileRecord]);
+                addToast(`${userName} shared ${file.name}`, getFileIcon(file.type));
+                // Broadcast file to other participants
+                if (chatChannelRef.current) {
+                    chatChannelRef.current.send({
+                        type: 'broadcast', event: 'file-share',
+                        payload: { ...fileRecord, timestamp: fileRecord.timestamp.toISOString() }
+                    }).catch(() => {});
+                }
+            }
+        } catch (err) { console.error('File upload failed:', err); }
+        setIsUploading(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        if (chatFileInputRef.current) chatFileInputRef.current.value = '';
+    };
+
+    // Handle file attachment in chat (sends as message with file)
+    const handleChatFileAttach = async (files: FileList | null) => {
+        if (!files || files.length === 0 || !meetingId) return;
+        setIsUploading(true);
+        try {
+            for (const file of Array.from(files)) {
+                const filePath = `${meetingId}/${Date.now()}_${file.name}`;
+                const { error } = await supabase.storage.from('meeting_files').upload(filePath, file);
+                if (error) { console.error('Upload error:', error); continue; }
+                const { data: urlData } = supabase.storage.from('meeting_files').getPublicUrl(filePath);
+                const fileMsg: MeetingMessage = {
+                    id: Date.now().toString(),
+                    sender: userName,
+                    text: '',
+                    timestamp: new Date(),
+                    isSelf: true,
+                    fileUrl: urlData.publicUrl,
+                    fileName: file.name,
+                    fileType: file.type,
+                    fileSize: file.size,
+                };
+                setChatMessages(prev => [...prev, fileMsg]);
+                // Also add to files list
+                const fileRecord: MeetingFile = {
+                    id: fileMsg.id,
+                    name: file.name,
+                    url: urlData.publicUrl,
+                    type: file.type,
+                    size: file.size,
+                    sender: userName,
+                    timestamp: new Date(),
+                };
+                setMeetingFiles(prev => [...prev, fileRecord]);
+                if (chatChannelRef.current) {
+                    chatChannelRef.current.send({
+                        type: 'broadcast', event: 'chat',
+                        payload: { ...fileMsg, timestamp: fileMsg.timestamp.toISOString() }
+                    }).catch(() => {});
+                    chatChannelRef.current.send({
+                        type: 'broadcast', event: 'file-share',
+                        payload: { ...fileRecord, timestamp: fileRecord.timestamp.toISOString() }
+                    }).catch(() => {});
+                }
+            }
+        } catch (err) { console.error('Chat file attach failed:', err); }
+        setIsUploading(false);
+        if (chatFileInputRef.current) chatFileInputRef.current.value = '';
+    };
 
     const handleScreenShare = async () => {
         if (screenShared) {
@@ -874,98 +1003,144 @@ export default function Meetings() {
                     )}
                 </AnimatePresence>
 
+                {/* Mobile More Menu Overlay */}
+                <AnimatePresence>
+                    {showMobileMore && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 20 }}
+                            className="absolute bottom-24 left-1/2 -translate-x-1/2 z-30 md:hidden"
+                        >
+                            <div className="bg-black/80 backdrop-blur-2xl border border-white/10 rounded-3xl p-3 shadow-[0_8px_32px_rgba(0,0,0,0.6)] grid grid-cols-4 gap-2 min-w-[280px]">
+                                {[
+                                    { icon: <MonitorUp size={18} />, label: screenShared ? 'Stop Share' : 'Share', onClick: handleScreenShare, active: screenShared, color: 'blue' },
+                                    { icon: <Hand size={18} />, label: handRaised ? 'Lower' : 'Raise', onClick: toggleHandRaise, active: handRaised, color: 'yellow' },
+                                    { icon: <Captions size={18} />, label: captionsEnabled ? 'CC Off' : 'CC On', onClick: () => setCaptionsEnabled(!captionsEnabled), active: captionsEnabled, color: 'blue' },
+                                    { icon: <Circle size={18} className={clsx(isRecording && "fill-white")} />, label: isRecording ? 'Stop Rec' : 'Record', onClick: toggleRecording, active: isRecording, color: 'red' },
+                                    { icon: <SmilePlus size={18} />, label: 'React', onClick: () => { setShowReactionTray(!showReactionTray); setShowMobileMore(false); }, active: showReactionTray, color: 'yellow' },
+                                    { icon: <FileText size={18} />, label: 'Notes', onClick: () => { setShowSidebar(showSidebar === 'notes' ? null : 'notes'); setShowMobileMore(false); }, active: showSidebar === 'notes', color: 'emerald' },
+                                    { icon: <Sparkles size={18} />, label: 'Effects', onClick: () => { setShowSidebar(showSidebar === 'effects' ? null : 'effects'); setShowMobileMore(false); }, active: showSidebar === 'effects', color: 'purple' },
+                                    { icon: <Paperclip size={18} />, label: 'Files', onClick: () => { setShowSidebar(showSidebar === 'files' ? null : 'files'); setShowMobileMore(false); }, active: showSidebar === 'files', color: 'amber' },
+                                ].map((item, i) => (
+                                    <button
+                                        key={i}
+                                        onClick={item.onClick}
+                                        className={clsx(
+                                            "flex flex-col items-center gap-1 py-2.5 px-1 rounded-2xl transition-all text-[10px] font-bold",
+                                            item.active
+                                                ? item.color === 'red' ? "bg-red-500/20 text-red-400"
+                                                : item.color === 'yellow' ? "bg-yellow-500/20 text-yellow-400"
+                                                : item.color === 'emerald' ? "bg-emerald-500/20 text-emerald-400"
+                                                : item.color === 'purple' ? "bg-purple-500/20 text-purple-400"
+                                                : item.color === 'amber' ? "bg-amber-500/20 text-amber-400"
+                                                : "bg-blue-500/20 text-blue-400"
+                                                : "text-white/70 hover:bg-white/10 hover:text-white"
+                                        )}
+                                    >
+                                        {item.icon}
+                                        {item.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
                 {/* Bottom Controls Bar */}
-                <div className="absolute bottom-6 md:bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-1.5 md:gap-2 bg-white/10 backdrop-blur-2xl border border-white/10 px-4 md:px-6 py-3 rounded-[2rem] shadow-[0_8px_32px_rgba(0,0,0,0.4)] z-30 w-max max-w-[95vw] overflow-x-auto custom-scrollbar">
-                    
-                    <button aria-label={audioEnabled ? "Mute microphone" : "Unmute microphone"} onClick={() => setAudioEnabled(!audioEnabled)} className={clsx("p-3 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", audioEnabled ? "bg-white/10 hover:bg-white/20 text-white" : "bg-red-500 text-white hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.4)]")}>
-                        {audioEnabled ? <Mic size={20} /> : <MicOff size={20} />}
-                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">{audioEnabled ? 'Mute' : 'Unmute'}</span>
-                    </button>
-                    
-                    <button aria-label={videoEnabled ? "Turn off camera" : "Turn on camera"} onClick={() => setVideoEnabled(!videoEnabled)} className={clsx("p-3 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", videoEnabled ? "bg-white/10 hover:bg-white/20 text-white" : "bg-red-500 text-white hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.4)]")}>
-                        {videoEnabled ? <Video size={20} /> : <VideoOff size={20} />}
-                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">{videoEnabled ? 'Stop Video' : 'Start Video'}</span>
-                    </button>
-
-                    <div className="w-px h-8 bg-white/20 mx-1 md:mx-2 flex-shrink-0" />
-                    
-                    <button aria-label={screenShared ? "Stop screen sharing" : "Share screen"} onClick={handleScreenShare} className={clsx("p-3 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", screenShared ? "bg-blue-500 text-white shadow-[0_0_15px_rgba(59,130,246,0.4)]" : "bg-white/10 hover:bg-white/20 text-white")}>
-                        <MonitorUp size={20} />
-                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">{screenShared ? 'Stop Sharing' : 'Share Screen'}</span>
-                    </button>
-
-                    {/* Productivity Features */}
-                    <button aria-label={handRaised ? "Lower hand" : "Raise hand"} onClick={toggleHandRaise} className={clsx("p-3 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", handRaised ? "bg-yellow-500 text-white shadow-[0_0_15px_rgba(234,179,8,0.4)]" : "bg-white/10 hover:bg-white/20 text-white")}>
-                        <Hand size={20} />
-                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">{handRaised ? 'Lower Hand' : 'Raise Hand'}</span>
-                    </button>
-
-                    <button aria-label={captionsEnabled ? "Disable captions" : "Enable captions"} onClick={() => setCaptionsEnabled(!captionsEnabled)} className={clsx("p-3 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", captionsEnabled ? "bg-blue-500 text-white shadow-[0_0_15px_rgba(59,130,246,0.4)]" : "bg-white/10 hover:bg-white/20 text-white")}>
-                        <Captions size={20} />
-                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">{captionsEnabled ? 'Turn Off CC' : 'Turn On CC'}</span>
-                    </button>
-                    
-                    <button aria-label={isRecording ? "Stop recording" : "Start recording"} onClick={toggleRecording} className={clsx("p-3 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", isRecording ? "bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.4)] animate-pulse" : "bg-white/10 hover:bg-white/20 text-white")}>
-                        <Circle size={20} className={clsx(isRecording ? "fill-white" : "")} />
-                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">{isRecording ? 'Stop Recording' : 'Record'}</span>
-                    </button>
-
-                    {/* Emoji Reaction Tray */}
-                    <div className="relative flex-shrink-0">
-                        <button aria-label="React" onClick={() => setShowReactionTray(!showReactionTray)} className={clsx("p-3 md:p-3.5 rounded-2xl transition-all duration-300 group", showReactionTray ? "bg-yellow-500/20 text-yellow-400" : "bg-white/10 hover:bg-white/20 text-white")}>
-                            <SmilePlus size={20} />
-                            <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">React</span>
+                <div className="absolute bottom-3 md:bottom-8 left-1/2 -translate-x-1/2 z-30 w-[calc(100%-1.5rem)] md:w-auto max-w-[95vw]">
+                    <div className="flex items-center justify-center gap-1.5 md:gap-2 bg-white/10 backdrop-blur-2xl border border-white/10 px-3 md:px-6 py-2.5 md:py-3 rounded-[2rem] shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+                        
+                        <button aria-label={audioEnabled ? "Mute" : "Unmute"} onClick={() => setAudioEnabled(!audioEnabled)} className={clsx("p-2.5 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", audioEnabled ? "bg-white/10 hover:bg-white/20 text-white" : "bg-red-500 text-white hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.4)]")}>
+                            {audioEnabled ? <Mic size={18} /> : <MicOff size={18} />}
                         </button>
-                        <AnimatePresence>
-                            {showReactionTray && (
-                                <motion.div
-                                    initial={{ opacity: 0, y: 10, scale: 0.9 }}
-                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                    exit={{ opacity: 0, y: 10, scale: 0.9 }}
-                                    className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 bg-black/80 backdrop-blur-2xl border border-white/10 rounded-2xl p-2 flex gap-1 shadow-[0_8px_32px_rgba(0,0,0,0.5)]"
-                                >
-                                    {REACTION_EMOJIS.map(emoji => (
-                                        <button
-                                            key={emoji}
-                                            onClick={() => sendReaction(emoji)}
-                                            className="text-2xl p-2 hover:bg-white/10 rounded-xl transition-all hover:scale-125 active:scale-95"
-                                        >
-                                            {emoji}
-                                        </button>
-                                    ))}
-                                </motion.div>
-                            )}
-                        </AnimatePresence>
+                        
+                        <button aria-label={videoEnabled ? "Camera off" : "Camera on"} onClick={() => setVideoEnabled(!videoEnabled)} className={clsx("p-2.5 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", videoEnabled ? "bg-white/10 hover:bg-white/20 text-white" : "bg-red-500 text-white hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.4)]")}>
+                            {videoEnabled ? <Video size={18} /> : <VideoOff size={18} />}
+                        </button>
+
+                        <div className="w-px h-7 bg-white/20 mx-0.5 md:mx-2 flex-shrink-0" />
+
+                        {/* Desktop-only inline buttons */}
+                        <button aria-label="Share screen" onClick={handleScreenShare} className={clsx("hidden md:flex p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", screenShared ? "bg-blue-500 text-white" : "bg-white/10 hover:bg-white/20 text-white")}>
+                            <MonitorUp size={18} />
+                        </button>
+                        <button aria-label="Raise hand" onClick={toggleHandRaise} className={clsx("hidden md:flex p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", handRaised ? "bg-yellow-500 text-white" : "bg-white/10 hover:bg-white/20 text-white")}>
+                            <Hand size={18} />
+                        </button>
+                        <button aria-label="Captions" onClick={() => setCaptionsEnabled(!captionsEnabled)} className={clsx("hidden md:flex p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", captionsEnabled ? "bg-blue-500 text-white" : "bg-white/10 hover:bg-white/20 text-white")}>
+                            <Captions size={18} />
+                        </button>
+                        <button aria-label="Record" onClick={toggleRecording} className={clsx("hidden md:flex p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", isRecording ? "bg-red-500 text-white animate-pulse" : "bg-white/10 hover:bg-white/20 text-white")}>
+                            <Circle size={18} className={clsx(isRecording && "fill-white")} />
+                        </button>
+
+                        {/* Desktop reactions */}
+                        <div className="relative flex-shrink-0 hidden md:block">
+                            <button aria-label="React" onClick={() => setShowReactionTray(!showReactionTray)} className={clsx("p-3.5 rounded-2xl transition-all duration-300 group", showReactionTray ? "bg-yellow-500/20 text-yellow-400" : "bg-white/10 hover:bg-white/20 text-white")}>
+                                <SmilePlus size={18} />
+                            </button>
+                            <AnimatePresence>
+                                {showReactionTray && (
+                                    <motion.div initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.9 }}
+                                        className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 bg-black/80 backdrop-blur-2xl border border-white/10 rounded-2xl p-2 flex gap-1 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
+                                        {REACTION_EMOJIS.map(emoji => (
+                                            <button key={emoji} onClick={() => sendReaction(emoji)} className="text-2xl p-2 hover:bg-white/10 rounded-xl transition-all hover:scale-125 active:scale-95">
+                                                {emoji}
+                                            </button>
+                                        ))}
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
+                        </div>
+
+                        <div className="w-px h-7 bg-white/20 mx-0.5 md:mx-2 flex-shrink-0 hidden md:block" />
+
+                        {/* Desktop sidebar buttons */}
+                        <button aria-label="Notes" onClick={() => setShowSidebar(showSidebar === 'notes' ? null : 'notes')} className={clsx("hidden md:flex p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", showSidebar === 'notes' ? "bg-emerald-500 text-white" : "bg-white/10 hover:bg-white/20 text-white")}>
+                            <FileText size={18} />
+                        </button>
+                        <button aria-label="Effects" onClick={() => setShowSidebar(showSidebar === 'effects' ? null : 'effects')} className={clsx("hidden md:flex p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", showSidebar === 'effects' ? "bg-purple-500 text-white" : "bg-white/10 hover:bg-white/20 text-white")}>
+                            <Sparkles size={18} />
+                        </button>
+                        <button aria-label="Files" onClick={() => setShowSidebar(showSidebar === 'files' ? null : 'files')} className={clsx("hidden md:flex p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", showSidebar === 'files' ? "bg-amber-500 text-white" : "bg-white/10 hover:bg-white/20 text-white")}>
+                            <Paperclip size={18} />
+                        </button>
+
+                        {/* Both mobile+desktop: People & Chat */}
+                        <button aria-label="People" onClick={() => setShowSidebar(showSidebar === 'people' ? null : 'people')} className={clsx("p-2.5 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", showSidebar === 'people' ? "bg-white/20 text-white" : "bg-white/10 hover:bg-white/20 text-white")}>
+                            <Users size={18} />
+                        </button>
+                        <button aria-label="Chat" onClick={() => setShowSidebar(showSidebar === 'chat' ? null : 'chat')} className={clsx("p-2.5 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", showSidebar === 'chat' ? "bg-white/20 text-white" : "bg-white/10 hover:bg-white/20 text-white")}>
+                            <MessageSquare size={18} />
+                        </button>
+
+                        {/* Mobile More button */}
+                        <button aria-label="More options" onClick={() => setShowMobileMore(!showMobileMore)} className={clsx("md:hidden p-2.5 rounded-2xl transition-all duration-300 flex-shrink-0", showMobileMore ? "bg-white/20 text-white" : "bg-white/10 hover:bg-white/20 text-white")}>
+                            <MoreHorizontal size={18} />
+                        </button>
+
+                        <div className="w-px h-7 bg-white/20 mx-0.5 md:mx-2 flex-shrink-0" />
+
+                        <button aria-label="Leave meeting" onClick={handleLeaveMeeting} className="px-3 md:px-5 py-2.5 md:py-3.5 rounded-2xl bg-red-500 text-white font-bold transition-all duration-300 hover:bg-red-600 hover:scale-105 shadow-[0_0_20px_rgba(239,68,68,0.4)] flex items-center gap-2 flex-shrink-0 text-sm">
+                            <PhoneOff size={16} />
+                            <span className="hidden sm:inline">Leave</span>
+                        </button>
                     </div>
 
-                    <div className="w-px h-8 bg-white/20 mx-1 md:mx-2 flex-shrink-0" />
-                    
-                    <button aria-label="Quick Notes" onClick={() => setShowSidebar(showSidebar === 'notes' ? null : 'notes')} className={clsx("p-3 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0 hidden sm:block", showSidebar === 'notes' ? "bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]" : "bg-white/10 hover:bg-white/20 text-white")}>
-                        <FileText size={20} />
-                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">Quick Notes</span>
-                    </button>
-
-                    <button aria-label="Visual effects" onClick={() => setShowSidebar(showSidebar === 'effects' ? null : 'effects')} className={clsx("p-3 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0 hidden sm:block", showSidebar === 'effects' ? "bg-purple-500 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]" : "bg-white/10 hover:bg-white/20 text-white")}>
-                        <Sparkles size={20} />
-                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">Effects</span>
-                    </button>
-
-                    <button aria-label="Participants list" onClick={() => setShowSidebar(showSidebar === 'people' ? null : 'people')} className={clsx("p-3 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", showSidebar === 'people' ? "bg-white/20 text-white" : "bg-white/10 hover:bg-white/20 text-white")}>
-                        <Users size={20} />
-                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">People</span>
-                    </button>
-
-                    <button aria-label="Meeting chat" onClick={() => setShowSidebar(showSidebar === 'chat' ? null : 'chat')} className={clsx("p-3 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", showSidebar === 'chat' ? "bg-white/20 text-white" : "bg-white/10 hover:bg-white/20 text-white")}>
-                        <MessageSquare size={20} />
-                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">Chat</span>
-                    </button>
-
-                    <div className="w-px h-8 bg-white/20 mx-1 md:mx-2 flex-shrink-0" />
-
-                    <button aria-label="Leave meeting" onClick={handleLeaveMeeting} className="px-4 md:px-5 py-3 md:py-3.5 rounded-2xl bg-red-500 text-white font-bold transition-all duration-300 hover:bg-red-600 hover:scale-105 shadow-[0_0_20px_rgba(239,68,68,0.4)] flex items-center gap-2 flex-shrink-0">
-                        <PhoneOff size={20} />
-                        <span className="hidden sm:inline">Leave</span>
-                    </button>
+                    {/* Mobile reaction tray */}
+                    <AnimatePresence>
+                        {showReactionTray && (
+                            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
+                                className="md:hidden absolute bottom-full left-1/2 -translate-x-1/2 mb-3 bg-black/80 backdrop-blur-2xl border border-white/10 rounded-2xl p-2 flex gap-1 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
+                                {REACTION_EMOJIS.map(emoji => (
+                                    <button key={emoji} onClick={() => sendReaction(emoji)} className="text-xl p-1.5 hover:bg-white/10 rounded-xl transition-all hover:scale-125 active:scale-95">
+                                        {emoji}
+                                    </button>
+                                ))}
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                 </div>
 
             </div>
@@ -978,17 +1153,18 @@ export default function Meetings() {
                         animate={{ x: 0, opacity: 1 }}
                         exit={{ x: 360, opacity: 0 }}
                         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-                        className="absolute right-0 top-0 bottom-0 w-80 lg:w-80 bg-black/70 backdrop-blur-3xl border-l border-white/10 z-40 flex flex-col shadow-[-10px_0_30px_rgba(0,0,0,0.5)]"
+                        className="absolute inset-0 md:inset-auto md:right-0 md:top-0 md:bottom-0 md:w-80 lg:w-96 bg-black/90 md:bg-black/70 backdrop-blur-3xl md:border-l border-white/10 z-40 flex flex-col shadow-[-10px_0_30px_rgba(0,0,0,0.5)]"
                     >
-                        <div className="p-5 border-b border-white/10 flex justify-between items-center bg-white/5">
-                            <h3 className="font-google font-bold text-lg flex items-center gap-2">
+                        <div className="p-4 md:p-5 border-b border-white/10 flex justify-between items-center bg-white/5">
+                            <h3 className="font-google font-bold text-base md:text-lg flex items-center gap-2">
                                 {showSidebar === 'effects' ? <><Sparkles size={18} className="text-purple-400" /> Visual Effects</> : 
                                  showSidebar === 'chat' ? <><MessageSquare size={18} className="text-blue-400" /> Meeting Chat</> : 
                                  showSidebar === 'notes' ? <><FileText size={18} className="text-emerald-400" /> Quick Notes</> : 
+                                 showSidebar === 'files' ? <><Paperclip size={18} className="text-amber-400" /> Shared Files</> :
                                  <><Users size={18} className="text-teal-400" /> Participants</>}
                             </h3>
                             <button onClick={() => setShowSidebar(null)} className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-colors text-white/70 hover:text-white">
-                                <Maximize size={16} />
+                                <X size={16} />
                             </button>
                         </div>
                         
@@ -1082,6 +1258,73 @@ export default function Meetings() {
                                 </div>
                             )}
 
+                            {showSidebar === 'files' && (
+                                <div className="flex flex-col h-full animate-fade-in space-y-4">
+                                    {/* Upload area */}
+                                    <div 
+                                        className="border-2 border-dashed border-white/15 hover:border-amber-500/50 rounded-2xl p-6 text-center cursor-pointer transition-all hover:bg-amber-500/5 group"
+                                        onClick={() => fileInputRef.current?.click()}
+                                    >
+                                        <div className="w-12 h-12 mx-auto bg-amber-500/10 rounded-2xl flex items-center justify-center mb-3 group-hover:bg-amber-500/20 transition-colors">
+                                            {isUploading ? (
+                                                <div className="w-5 h-5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                                            ) : (
+                                                <Upload size={20} className="text-amber-400" />
+                                            )}
+                                        </div>
+                                        <p className="text-sm font-bold text-white/80 mb-1">
+                                            {isUploading ? 'Uploading...' : 'Share files'}
+                                        </p>
+                                        <p className="text-[10px] text-white/40">
+                                            PDFs, Documents, Images, Videos — up to 50MB
+                                        </p>
+                                    </div>
+                                    <input 
+                                        ref={fileInputRef} 
+                                        type="file" 
+                                        className="hidden" 
+                                        multiple 
+                                        accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv"
+                                        onChange={e => handleFileUpload(e.target.files)} 
+                                    />
+
+                                    {/* File list */}
+                                    <div className="flex-1 overflow-y-auto space-y-2 custom-scrollbar">
+                                        {meetingFiles.length === 0 ? (
+                                            <div className="h-full flex flex-col items-center justify-center text-center opacity-50 py-12">
+                                                <Paperclip size={28} className="text-white mb-3" />
+                                                <p className="text-sm font-bold mb-1">No files shared yet</p>
+                                                <p className="text-xs text-white/50 max-w-[200px]">Files shared during the meeting will appear here.</p>
+                                            </div>
+                                        ) : (
+                                            meetingFiles.map(f => (
+                                                <div key={f.id} className="bg-white/5 border border-white/10 rounded-2xl p-3 hover:bg-white/10 transition-colors group">
+                                                    {f.type.startsWith('image/') && (
+                                                        <img src={f.url} alt={f.name} className="w-full h-32 object-cover rounded-xl mb-2" />
+                                                    )}
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="text-xl flex-shrink-0">{getFileIcon(f.type)}</span>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-xs font-bold text-white truncate">{f.name}</p>
+                                                            <p className="text-[10px] text-white/40">{f.sender} · {formatFileSize(f.size)}</p>
+                                                        </div>
+                                                        <a 
+                                                            href={f.url} 
+                                                            target="_blank" 
+                                                            rel="noopener noreferrer" 
+                                                            download={f.name}
+                                                            className="p-2 rounded-xl bg-white/5 hover:bg-amber-500/20 text-white/50 hover:text-amber-400 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
+                                                        >
+                                                            <Download size={14} />
+                                                        </a>
+                                                    </div>
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
                             {showSidebar === 'people' && (
                                 <div className="space-y-2 animate-fade-in">
                                     <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5 hover:border-white/10 transition-colors">
@@ -1125,7 +1368,7 @@ export default function Meetings() {
                                                     <MessageSquare size={28} className="text-white" />
                                                 </div>
                                                 <h4 className="font-bold mb-1">No messages yet</h4>
-                                                <p className="text-xs max-w-[200px] mx-auto">Messages sent here are visible to everyone in the call.</p>
+                                                <p className="text-xs max-w-[200px] mx-auto">Messages and files shared here are visible to everyone.</p>
                                             </div>
                                         ) : (
                                             chatMessages.map(msg => (
@@ -1134,20 +1377,42 @@ export default function Meetings() {
                                                         <span className="text-[10px] font-bold text-white/50">{msg.sender}</span>
                                                         <span className="text-[9px] text-white/30">{msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                                     </div>
-                                                    <div className={clsx("px-3 py-2 rounded-2xl text-sm max-w-[85%] break-words shadow-sm", msg.isSelf ? "bg-blue-600 text-white rounded-tr-sm" : "bg-white/10 text-white rounded-tl-sm")}>
-                                                        {msg.text}
-                                                    </div>
+                                                    {msg.fileUrl ? (
+                                                        <div className={clsx("rounded-2xl max-w-[85%] overflow-hidden shadow-sm", msg.isSelf ? "bg-blue-600/20 border border-blue-500/20 rounded-tr-sm" : "bg-white/10 border border-white/10 rounded-tl-sm")}>
+                                                            {msg.fileType?.startsWith('image/') && (
+                                                                <img src={msg.fileUrl} alt={msg.fileName} className="w-full max-h-48 object-cover" />
+                                                            )}
+                                                            <a href={msg.fileUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5 p-3 hover:bg-white/5 transition-colors">
+                                                                <span className="text-lg">{getFileIcon(msg.fileType || '')}</span>
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="text-xs font-bold text-white truncate">{msg.fileName}</p>
+                                                                    {msg.fileSize && <p className="text-[10px] text-white/40">{formatFileSize(msg.fileSize)}</p>}
+                                                                </div>
+                                                                <Download size={14} className="text-white/40 flex-shrink-0" />
+                                                            </a>
+                                                        </div>
+                                                    ) : (
+                                                        <div className={clsx("px-3 py-2 rounded-2xl text-sm max-w-[85%] break-words shadow-sm", msg.isSelf ? "bg-blue-600 text-white rounded-tr-sm" : "bg-white/10 text-white rounded-tl-sm")}>
+                                                            {msg.text}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             ))
                                         )}
                                         <div ref={chatEndRef} />
                                     </div>
                                     <div className="mt-4 pt-4 border-t border-white/10 shrink-0">
-                                        <form onSubmit={(e) => { e.preventDefault(); handleSendChat(); }} className="relative">
-                                            <input type="text" value={chatInput} onChange={e => setChatInput(e.target.value)} placeholder="Send a message..." className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-4 pr-10 text-sm font-google outline-none focus:border-white/30 transition-colors text-white" />
-                                            <button type="submit" disabled={!chatInput.trim()} className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-blue-400 hover:bg-blue-400/10 disabled:opacity-50 transition-colors cursor-pointer">
-                                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                                        <form onSubmit={(e) => { e.preventDefault(); handleSendChat(); }} className="flex items-center gap-2">
+                                            <button type="button" onClick={() => chatFileInputRef.current?.click()} className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/50 hover:text-amber-400 transition-colors flex-shrink-0" title="Attach file">
+                                                <Paperclip size={16} />
                                             </button>
+                                            <input ref={chatFileInputRef} type="file" className="hidden" multiple accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv" onChange={e => handleChatFileAttach(e.target.files)} />
+                                            <div className="relative flex-1">
+                                                <input type="text" value={chatInput} onChange={e => setChatInput(e.target.value)} placeholder="Send a message..." className="w-full bg-white/5 border border-white/10 rounded-xl py-2.5 pl-4 pr-10 text-sm font-google outline-none focus:border-white/30 transition-colors text-white" />
+                                                <button type="submit" disabled={!chatInput.trim()} className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg text-blue-400 hover:bg-blue-400/10 disabled:opacity-50 transition-colors cursor-pointer">
+                                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                                                </button>
+                                            </div>
                                         </form>
                                     </div>
                                 </div>
