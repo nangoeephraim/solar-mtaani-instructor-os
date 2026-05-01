@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, MicOff, Video, VideoOff, MonitorUp, Settings, Maximize, Minimize, Users, MessageSquare, Sparkles, LayoutGrid, AlertCircle, Copy, CheckCircle2, PhoneOff, Share2, Circle, Hand, Captions, Presentation, PictureInPicture2, Wifi, WifiOff, SmilePlus, X, Clock } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, MonitorUp, Settings, Maximize, Minimize, Users, MessageSquare, Sparkles, LayoutGrid, AlertCircle, Copy, CheckCircle2, PhoneOff, Share2, Circle, Hand, Captions, Presentation, PictureInPicture2, Wifi, WifiOff, SmilePlus, X, Clock, FileText } from 'lucide-react';
 import clsx from 'clsx';
 import UserAvatar from './UserAvatar';
 import { useAuth } from '../contexts/AuthContext';
@@ -51,7 +51,7 @@ export default function Meetings() {
     const [audioEnabled, setAudioEnabled] = useState(true);
     const [videoEnabled, setVideoEnabled] = useState(true);
     const [screenShared, setScreenShared] = useState(false);
-    const [showSidebar, setShowSidebar] = useState<'chat' | 'people' | 'effects' | 'whiteboard' | null>(null);
+    const [showSidebar, setShowSidebar] = useState<'chat' | 'people' | 'effects' | 'notes' | null>(null);
     const [layout, setLayout] = useState<'grid' | 'spotlight'>('grid');
     const [isRecording, setIsRecording] = useState(false);
     const [handRaised, setHandRaised] = useState(false);
