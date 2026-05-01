@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, MicOff, Video, VideoOff, MonitorUp, Settings, Maximize, Minimize, Users, MessageSquare, Sparkles, LayoutGrid, AlertCircle, Copy, CheckCircle2, PhoneOff, Share2, Circle, Hand, Captions, Presentation, PictureInPicture2, Wifi, WifiOff } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, MonitorUp, Settings, Maximize, Minimize, Users, MessageSquare, Sparkles, LayoutGrid, AlertCircle, Copy, CheckCircle2, PhoneOff, Share2, Circle, Hand, Captions, Presentation, PictureInPicture2, Wifi, WifiOff, SmilePlus, X, Clock } from 'lucide-react';
 import clsx from 'clsx';
 import UserAvatar from './UserAvatar';
 import { useAuth } from '../contexts/AuthContext';
@@ -28,6 +28,21 @@ interface MeetingMessage {
     timestamp: Date;
     isSelf: boolean;
 }
+
+interface FloatingReaction {
+    id: string;
+    emoji: string;
+    x: number;
+}
+
+const REACTION_EMOJIS = ['👏', '🎉', '❤️', '👍', '😂', '🔥'];
+
+const getTimeGreeting = (name: string) => {
+    const h = new Date().getHours();
+    const icon = h < 12 ? '☀️' : h < 17 ? '🌤️' : h < 20 ? '🌅' : '🌙';
+    const greeting = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : h < 20 ? 'Good evening' : 'Good night';
+    return { greeting: `${greeting}, ${name}`, icon };
+};
 
 export default function Meetings() {
     const { user } = useAuth();
@@ -61,6 +76,19 @@ export default function Meetings() {
 
     // Connection quality
     const [connectionQuality, setConnectionQuality] = useState<'good' | 'fair' | 'poor'>('good');
+
+    // Floating reactions
+    const [floatingReactions, setFloatingReactions] = useState<FloatingReaction[]>([]);
+    const [showReactionTray, setShowReactionTray] = useState(false);
+
+    // Audio level for voice activity ring
+    const [audioLevel, setAudioLevel] = useState(0);
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const analyserRef = useRef<AnalyserNode | null>(null);
+    const audioAnimRef = useRef<number | null>(null);
+
+    // Toast notifications
+    const [toasts, setToasts] = useState<{id: string; text: string; icon: string}[]>([]);
     
     // Chat state
     const [chatMessages, setChatMessages] = useState<MeetingMessage[]>([]);
@@ -136,6 +164,10 @@ export default function Meetings() {
         setCaptionInterim('');
         setHandRaised(false);
         setConnectionQuality('good');
+        setAudioLevel(0);
+        setFloatingReactions([]);
+        setShowReactionTray(false);
+        setToasts([]);
     };
 
     useEffect(() => {
@@ -273,6 +305,51 @@ export default function Meetings() {
             if (conn) conn.removeEventListener?.('change', checkConnection);
         };
     }, [inMeeting]);
+
+    // Audio level analyzer for voice activity ring
+    useEffect(() => {
+        if (!inMeeting || !stream) return;
+        try {
+            const ctx = new AudioContext();
+            const source = ctx.createMediaStreamSource(stream);
+            const analyser = ctx.createAnalyser();
+            analyser.fftSize = 256;
+            analyser.smoothingTimeConstant = 0.8;
+            source.connect(analyser);
+            audioContextRef.current = ctx;
+            analyserRef.current = analyser;
+            const dataArr = new Uint8Array(analyser.frequencyBinCount);
+            const tick = () => {
+                analyser.getByteFrequencyData(dataArr);
+                const avg = dataArr.reduce((a, b) => a + b, 0) / dataArr.length;
+                setAudioLevel(Math.min(avg / 128, 1));
+                audioAnimRef.current = requestAnimationFrame(tick);
+            };
+            tick();
+        } catch {}
+        return () => {
+            if (audioAnimRef.current) cancelAnimationFrame(audioAnimRef.current);
+            if (audioContextRef.current) audioContextRef.current.close().catch(() => {});
+        };
+    }, [inMeeting, stream]);
+
+    // Floating reaction system
+    const sendReaction = useCallback((emoji: string) => {
+        const reaction: FloatingReaction = { id: Date.now().toString(), emoji, x: 20 + Math.random() * 60 };
+        setFloatingReactions(prev => [...prev, reaction]);
+        if (chatChannelRef.current) {
+            chatChannelRef.current.send({ type: 'broadcast', event: 'reaction', payload: { emoji, userName } }).catch(() => {});
+        }
+        setTimeout(() => setFloatingReactions(prev => prev.filter(r => r.id !== reaction.id)), 3000);
+        setShowReactionTray(false);
+    }, [userName]);
+
+    // Toast helper
+    const addToast = useCallback((text: string, icon: string = '\ud83d\udd14') => {
+        const id = Date.now().toString();
+        setToasts(prev => [...prev, { id, text, icon }]);
+        setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000);
+    }, []);
 
     const handleScreenShare = async () => {
         if (screenShared) {
@@ -452,96 +529,166 @@ export default function Meetings() {
     }, []);
 
     if (!inMeeting) {
+        const { greeting, icon } = getTimeGreeting(userName);
         return (
-            <div className="w-full h-full flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-[#0a0a0b] via-[#131416] to-[#0a0a0b] z-20">
-                <div className="absolute inset-0 pointer-events-none">
-                    <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-[120px]" />
-                    <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-[120px]" />
+            <div className="w-full h-full flex items-center justify-center relative overflow-hidden bg-[#08090a] z-20">
+                {/* Animated aurora background */}
+                <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                    <div className="absolute top-[-30%] left-[-20%] w-[70%] h-[70%] bg-blue-600/8 rounded-full blur-[150px] animate-pulse" style={{ animationDuration: '8s' }} />
+                    <div className="absolute bottom-[-20%] right-[-15%] w-[60%] h-[60%] bg-purple-600/8 rounded-full blur-[150px] animate-pulse" style={{ animationDuration: '12s' }} />
+                    <div className="absolute top-[50%] left-[50%] -translate-x-1/2 -translate-y-1/2 w-[40%] h-[40%] bg-indigo-500/5 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '10s' }} />
                 </div>
                 
-                <div className="relative z-10 p-8 max-w-4xl w-full grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
-                    <div className="space-y-8">
-                        <div>
-                            <h1 className="text-4xl md:text-5xl font-google font-bold text-white mb-4 tracking-tight">
-                                Premium Video <br className="hidden md:block"/>Meetings
-                            </h1>
-                            <p className="text-[var(--md-sys-color-on-surface-variant)] text-lg leading-relaxed">
-                                Connect, collaborate, and celebrate from anywhere with PRISM Video Meetings. Built for high-performance and flawless reliability.
-                            </p>
-                        </div>
+                <div className="relative z-10 p-6 md:p-8 max-w-5xl w-full flex flex-col items-center gap-8">
+                    {/* Time-aware greeting */}
+                    <motion.div 
+                        initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+                        className="text-center"
+                    >
+                        <span className="text-3xl mb-2 block">{icon}</span>
+                        <h1 className="text-3xl md:text-4xl font-google font-bold text-white tracking-tight">{greeting}</h1>
+                        <p className="text-white/40 text-sm mt-2 font-medium">Ready to start or join a meeting?</p>
+                    </motion.div>
 
-                        {hasError && (
-                            <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 rounded-2xl flex items-center gap-3">
-                                <AlertCircle size={20} />
-                                <span className="text-sm font-medium">{hasError}</span>
+                    {/* Camera preview card */}
+                    <motion.div 
+                        initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2 }}
+                        className="w-full max-w-2xl"
+                    >
+                        <div className="relative rounded-3xl overflow-hidden shadow-2xl shadow-black/50 border border-white/10 bg-[#111214]">
+                            {/* Video preview */}
+                            <div className="aspect-video relative flex items-center justify-center">
+                                {previewStream ? (
+                                    <>
+                                        <video ref={previewVideoRef} autoPlay playsInline muted className="w-full h-full object-cover transform -scale-x-100 absolute inset-0" />
+                                        {/* Self label */}
+                                        <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-xl px-3 py-1.5 rounded-xl border border-white/10 z-10 flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-full bg-green-400" />
+                                            <span className="text-white/90 text-xs font-bold font-google">{userName}</span>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="flex flex-col items-center justify-center py-12">
+                                        <div className="w-28 h-28 rounded-full flex items-center justify-center mb-5 bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-white/10 shadow-[0_0_60px_rgba(59,130,246,0.15)]">
+                                            <UserAvatar name={userName} avatarUrl={userAvatar} size={88} rounded="full" />
+                                        </div>
+                                        <h3 className="text-lg font-bold text-white mb-1 font-google">Camera is off</h3>
+                                        <p className="text-white/40 text-xs">Click the camera button below to preview</p>
+                                    </div>
+                                )}
                             </div>
-                        )}
 
-                        <div className="flex flex-col sm:flex-row gap-4">
-                            <button 
-                                onClick={handleJoinWithPreviewCleanup}
-                                className="px-6 py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-2xl transition-all shadow-[0_0_20px_rgba(37,99,235,0.3)] hover:shadow-[0_0_30px_rgba(37,99,235,0.5)] hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2"
-                            >
-                                <Video size={20} />
-                                New Meeting
-                            </button>
-                            <div className="relative flex-1 group">
-                                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                                    <span className="text-[var(--md-sys-color-on-surface-variant)]">
-                                        <MonitorUp size={20} />
-                                    </span>
-                                </div>
-                                <input
-                                    type="text"
-                                    placeholder="Enter meeting code"
-                                    value={meetingId}
-                                    onChange={(e) => setMeetingId(e.target.value)}
-                                    className="w-full bg-[var(--glass-bg)] backdrop-blur-md border border-[var(--md-sys-color-outline-variant)] rounded-2xl py-4 pl-12 pr-24 text-[var(--md-sys-color-on-surface)] outline-none focus:border-blue-500 transition-colors"
-                                />
+                            {/* Device controls row */}
+                            <div className="flex items-center justify-center gap-3 p-4 bg-white/5 border-t border-white/5">
                                 <button 
-                                    onClick={() => meetingId && handleJoinWithPreviewCleanup()}
-                                    disabled={!meetingId}
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 px-4 py-2 bg-[var(--md-sys-color-surface-variant)] text-[var(--md-sys-color-on-surface)] font-bold rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:bg-[var(--md-sys-color-primary)] hover:text-white"
+                                    onClick={() => { setAudioEnabled(!audioEnabled); }}
+                                    className={clsx("p-3 rounded-2xl transition-all duration-200", audioEnabled ? "bg-white/10 hover:bg-white/15 text-white" : "bg-red-500/90 text-white")}
                                 >
-                                    Join
+                                    {audioEnabled ? <Mic size={18} /> : <MicOff size={18} />}
+                                </button>
+                                <button 
+                                    onClick={() => { setVideoEnabled(!videoEnabled); }}
+                                    className={clsx("p-3 rounded-2xl transition-all duration-200", videoEnabled ? "bg-white/10 hover:bg-white/15 text-white" : "bg-red-500/90 text-white")}
+                                >
+                                    {videoEnabled ? <Video size={18} /> : <VideoOff size={18} />}
                                 </button>
                             </div>
                         </div>
-                    </div>
+                    </motion.div>
 
-                    {/* Preview Area — live camera feed */}
-                    <div className="hidden md:flex items-center justify-center relative">
-                         <div className="absolute inset-0 bg-gradient-to-tr from-blue-500/20 to-purple-500/20 rounded-[3rem] blur-3xl transform rotate-6" />
-                         <div className="w-full aspect-[4/3] bg-[#131416] backdrop-blur-xl border border-[var(--md-sys-color-outline-variant)] rounded-[3rem] shadow-2xl overflow-hidden relative flex flex-col items-center justify-center z-10">
-                             {previewStream ? (
-                                 <>
-                                     <video ref={previewVideoRef} autoPlay playsInline muted className="w-full h-full object-cover transform -scale-x-100 absolute inset-0" />
-                                     <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/50 backdrop-blur-xl px-4 py-2 rounded-2xl border border-white/10 z-10">
-                                         <p className="text-white/80 text-sm font-bold font-google">{userName}</p>
-                                     </div>
-                                 </>
-                             ) : (
-                                 <>
-                                     <div className="w-24 h-24 bg-blue-500/20 rounded-full flex items-center justify-center mb-6 border border-blue-500/30 shadow-[0_0_40px_rgba(59,130,246,0.3)]">
-                                         <UserAvatar name={userName} avatarUrl={userAvatar} size={72} />
-                                     </div>
-                                     <h3 className="text-xl font-bold text-white mb-2 font-google">Ready to join?</h3>
-                                     <p className="text-white/50 text-sm">Allow camera and microphone access</p>
-                                 </>
-                             )}
-                         </div>
-                    </div>
+                    {/* Action buttons */}
+                    <motion.div 
+                        initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
+                        className="flex flex-col sm:flex-row gap-3 w-full max-w-md"
+                    >
+                        <button 
+                            onClick={handleJoinWithPreviewCleanup}
+                            className="flex-1 px-6 py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-2xl transition-all shadow-[0_4px_24px_rgba(37,99,235,0.3)] hover:shadow-[0_4px_32px_rgba(37,99,235,0.5)] hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 text-sm"
+                        >
+                            <Video size={18} />
+                            New Meeting
+                        </button>
+                        <div className="relative flex-1">
+                            <input
+                                type="text"
+                                placeholder="Enter code to join"
+                                value={meetingId}
+                                onChange={(e) => setMeetingId(e.target.value)}
+                                onKeyDown={(e) => e.key === 'Enter' && meetingId && handleJoinWithPreviewCleanup()}
+                                className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-4 pr-16 text-sm font-google outline-none focus:border-blue-500/50 transition-colors text-white placeholder:text-white/30"
+                            />
+                            <button 
+                                onClick={() => meetingId && handleJoinWithPreviewCleanup()}
+                                disabled={!meetingId}
+                                className="absolute right-1.5 top-1/2 -translate-y-1/2 px-3.5 py-1.5 bg-white/10 text-white text-xs font-bold rounded-xl transition-all disabled:opacity-30 disabled:cursor-not-allowed hover:bg-blue-600"
+                            >
+                                Join
+                            </button>
+                        </div>
+                    </motion.div>
+
+                    {hasError && (
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-red-500/10 border border-red-500/20 text-red-400 p-3 rounded-2xl flex items-center gap-2 text-sm max-w-md w-full">
+                            <AlertCircle size={16} />
+                            <span className="font-medium text-xs">{hasError}</span>
+                        </motion.div>
+                    )}
                 </div>
             </div>
         );
     }
 
     return (
-        <div ref={containerRef} className="flex w-full h-full relative overflow-hidden bg-[#0a0a0b] text-white z-20">
-            {/* Background elements for premium look */}
+        <div ref={containerRef} className="flex w-full h-full relative overflow-hidden bg-[#08090a] text-white z-20">
+            {/* Meeting Pulse Bar */}
+            <div className={clsx(
+                "absolute top-0 left-0 right-0 h-1 z-50 transition-colors duration-1000",
+                isRecording ? "bg-gradient-to-r from-red-500 via-red-400 to-red-500 animate-pulse" :
+                connectionQuality === 'poor' ? "bg-gradient-to-r from-red-500/60 to-orange-500/60" :
+                connectionQuality === 'fair' ? "bg-gradient-to-r from-yellow-500/40 to-amber-500/40" :
+                "bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-blue-500/20"
+            )} />
+
+            {/* Background aurora */}
             <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-                <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-blue-600/10 blur-[120px]" />
-                <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-purple-600/10 blur-[120px]" />
+                <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-blue-600/6 blur-[150px]" />
+                <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-purple-600/6 blur-[150px]" />
+            </div>
+
+            {/* Floating Reactions Layer */}
+            <div className="absolute inset-0 z-40 pointer-events-none overflow-hidden">
+                <AnimatePresence>
+                    {floatingReactions.map(r => (
+                        <motion.div
+                            key={r.id}
+                            initial={{ opacity: 1, y: '80vh', x: `${r.x}%`, scale: 1 }}
+                            animate={{ opacity: 0, y: '10vh', scale: 1.5 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 2.5, ease: 'easeOut' }}
+                            className="absolute text-4xl"
+                        >
+                            {r.emoji}
+                        </motion.div>
+                    ))}
+                </AnimatePresence>
+            </div>
+
+            {/* Toast Notifications */}
+            <div className="absolute top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
+                <AnimatePresence>
+                    {toasts.map(t => (
+                        <motion.div
+                            key={t.id}
+                            initial={{ opacity: 0, x: 100, scale: 0.8 }}
+                            animate={{ opacity: 1, x: 0, scale: 1 }}
+                            exit={{ opacity: 0, x: 100, scale: 0.8 }}
+                            className="bg-black/70 backdrop-blur-xl border border-white/10 rounded-2xl px-4 py-2.5 flex items-center gap-2.5 shadow-lg"
+                        >
+                            <span className="text-lg">{t.icon}</span>
+                            <span className="text-xs font-bold text-white/80">{t.text}</span>
+                        </motion.div>
+                    ))}
+                </AnimatePresence>
             </div>
             
             {/* Main Content */}
@@ -624,22 +771,30 @@ export default function Meetings() {
                              </motion.div>
                         )}
 
-                        {/* Local Camera */}
+                        {/* Local Camera — with voice activity ring */}
                         <motion.div 
                             layout
                             initial={{ opacity: 0, scale: 0.9 }}
                             animate={{ opacity: 1, scale: 1 }}
                             className={clsx(
-                                "relative rounded-3xl overflow-hidden shadow-2xl bg-[#131416] transition-all duration-300 border border-white/5 flex items-center justify-center group",
+                                "relative rounded-3xl overflow-hidden shadow-2xl bg-[#111214] transition-all duration-300 flex items-center justify-center group",
                                 screenShared ? "col-span-3 row-span-1 md:col-span-1 md:row-span-3 aspect-video md:aspect-auto" : "w-full h-full"
                             )}
+                            style={{
+                                boxShadow: audioEnabled && audioLevel > 0.05 
+                                    ? `0 0 ${20 + audioLevel * 40}px rgba(59,130,246,${0.1 + audioLevel * 0.3}), inset 0 0 ${audioLevel * 20}px rgba(59,130,246,${audioLevel * 0.1})`
+                                    : undefined,
+                                border: audioEnabled && audioLevel > 0.05 
+                                    ? `2px solid rgba(59,130,246,${0.2 + audioLevel * 0.5})`
+                                    : '1px solid rgba(255,255,255,0.05)'
+                            }}
                         >
                             {!videoEnabled ? (
-                                <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#131416]">
-                                    <div className="w-24 h-24 rounded-full flex items-center justify-center mb-4 bg-white/5 border border-white/10 relative">
-                                         <UserAvatar name={userName} avatarUrl={userAvatar} size={72} />
+                                <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#111214]">
+                                    <div className="w-28 h-28 rounded-full flex items-center justify-center mb-4 bg-gradient-to-br from-blue-500/15 to-purple-500/15 border border-white/10 shadow-[0_0_40px_rgba(59,130,246,0.1)]">
+                                         <UserAvatar name={userName} avatarUrl={userAvatar} size={88} rounded="full" />
                                     </div>
-                                    <p className="text-white/50 text-sm font-medium">Camera off</p>
+                                    <p className="text-white/40 text-xs font-medium">{userName} · Camera off</p>
                                 </div>
                             ) : (
                                 <video 
@@ -651,25 +806,34 @@ export default function Meetings() {
                                 />
                             )}
 
-                            <div className="absolute bottom-4 left-4 right-4 flex justify-between items-end opacity-0 group-hover:opacity-100 transition-opacity">
-                                <div className="flex gap-2">
-                                    <div className="bg-black/50 backdrop-blur-xl px-3.5 py-2 rounded-xl border border-white/10 flex items-center gap-2.5 shadow-lg">
-                                        <span className="text-sm font-bold font-google">{userName}</span>
+                            {/* Always-visible bottom overlay */}
+                            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent p-4 flex justify-between items-end">
+                                <div className="flex gap-2 items-center">
+                                    <div className="bg-black/40 backdrop-blur-xl px-3 py-1.5 rounded-xl border border-white/10 flex items-center gap-2 shadow-lg">
+                                        {audioEnabled && audioLevel > 0.05 && (
+                                            <div className="flex gap-0.5 items-end h-3">
+                                                {[0, 1, 2].map(i => (
+                                                    <div key={i} className="w-0.5 bg-blue-400 rounded-full transition-all duration-75" style={{ height: `${Math.max(3, audioLevel * 12 * (i === 1 ? 1 : 0.6))}px` }} />
+                                                ))}
+                                            </div>
+                                        )}
+                                        <span className="text-xs font-bold font-google text-white/90">{userName}</span>
                                     </div>
                                     {handRaised && (
-                                        <div className="bg-yellow-500/90 backdrop-blur-xl p-2 rounded-xl border border-yellow-400/20 shadow-lg animate-bounce">
-                                            <Hand size={16} className="text-white" />
+                                        <div className="bg-yellow-500/90 backdrop-blur-xl p-1.5 rounded-xl border border-yellow-400/20 shadow-lg animate-bounce">
+                                            <Hand size={14} className="text-white" />
                                         </div>
                                     )}
                                 </div>
-                                <div className="flex gap-2">
-                                    {!audioEnabled ? (
-                                        <div className="bg-red-500/90 backdrop-blur-md p-2 rounded-xl shadow-lg border border-red-400/20">
-                                            <MicOff size={16} className="text-white" />
+                                <div className="flex gap-1.5">
+                                    {!audioEnabled && (
+                                        <div className="bg-red-500/80 backdrop-blur-md p-1.5 rounded-lg shadow-lg">
+                                            <MicOff size={12} className="text-white" />
                                         </div>
-                                    ) : (
-                                        <div className="bg-black/50 backdrop-blur-md p-2 rounded-xl shadow-lg border border-white/10">
-                                            <Mic size={16} className="text-white" />
+                                    )}
+                                    {!videoEnabled && (
+                                        <div className="bg-red-500/80 backdrop-blur-md p-1.5 rounded-lg shadow-lg">
+                                            <VideoOff size={12} className="text-white" />
                                         </div>
                                     )}
                                 </div>
@@ -746,11 +910,39 @@ export default function Meetings() {
                         <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">{isRecording ? 'Stop Recording' : 'Record'}</span>
                     </button>
 
+                    {/* Emoji Reaction Tray */}
+                    <div className="relative flex-shrink-0">
+                        <button aria-label="React" onClick={() => setShowReactionTray(!showReactionTray)} className={clsx("p-3 md:p-3.5 rounded-2xl transition-all duration-300 group", showReactionTray ? "bg-yellow-500/20 text-yellow-400" : "bg-white/10 hover:bg-white/20 text-white")}>
+                            <SmilePlus size={20} />
+                            <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">React</span>
+                        </button>
+                        <AnimatePresence>
+                            {showReactionTray && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: 10, scale: 0.9 }}
+                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                    exit={{ opacity: 0, y: 10, scale: 0.9 }}
+                                    className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 bg-black/80 backdrop-blur-2xl border border-white/10 rounded-2xl p-2 flex gap-1 shadow-[0_8px_32px_rgba(0,0,0,0.5)]"
+                                >
+                                    {REACTION_EMOJIS.map(emoji => (
+                                        <button
+                                            key={emoji}
+                                            onClick={() => sendReaction(emoji)}
+                                            className="text-2xl p-2 hover:bg-white/10 rounded-xl transition-all hover:scale-125 active:scale-95"
+                                        >
+                                            {emoji}
+                                        </button>
+                                    ))}
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+
                     <div className="w-px h-8 bg-white/20 mx-1 md:mx-2 flex-shrink-0" />
                     
-                    <button aria-label="Whiteboard" onClick={() => setShowSidebar(showSidebar === 'whiteboard' ? null : 'whiteboard')} className={clsx("p-3 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0 hidden sm:block", showSidebar === 'whiteboard' ? "bg-orange-500 text-white shadow-[0_0_15px_rgba(249,115,22,0.4)]" : "bg-white/10 hover:bg-white/20 text-white")}>
-                        <Presentation size={20} />
-                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">Whiteboard</span>
+                    <button aria-label="Quick Notes" onClick={() => setShowSidebar(showSidebar === 'notes' ? null : 'notes')} className={clsx("p-3 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0 hidden sm:block", showSidebar === 'notes' ? "bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]" : "bg-white/10 hover:bg-white/20 text-white")}>
+                        <FileText size={20} />
+                        <span className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black/80 px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap backdrop-blur-md border border-white/10">Quick Notes</span>
                     </button>
 
                     <button aria-label="Visual effects" onClick={() => setShowSidebar(showSidebar === 'effects' ? null : 'effects')} className={clsx("p-3 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0 hidden sm:block", showSidebar === 'effects' ? "bg-purple-500 text-white shadow-[0_0_15px_rgba(168,85,247,0.4)]" : "bg-white/10 hover:bg-white/20 text-white")}>
@@ -792,7 +984,7 @@ export default function Meetings() {
                             <h3 className="font-google font-bold text-lg flex items-center gap-2">
                                 {showSidebar === 'effects' ? <><Sparkles size={18} className="text-purple-400" /> Visual Effects</> : 
                                  showSidebar === 'chat' ? <><MessageSquare size={18} className="text-blue-400" /> Meeting Chat</> : 
-                                 showSidebar === 'whiteboard' ? <><Presentation size={18} className="text-orange-400" /> Whiteboard</> : 
+                                 showSidebar === 'notes' ? <><FileText size={18} className="text-emerald-400" /> Quick Notes</> : 
                                  <><Users size={18} className="text-teal-400" /> Participants</>}
                             </h3>
                             <button onClick={() => setShowSidebar(null)} className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-colors text-white/70 hover:text-white">
@@ -858,34 +1050,35 @@ export default function Meetings() {
                                 </div>
                             )}
 
-                            {showSidebar === 'whiteboard' && (
+                            {showSidebar === 'notes' && (
                                 <div className="flex flex-col h-full animate-fade-in space-y-4">
-                                    <div className="text-center p-4">
-                                        <div className="w-16 h-16 bg-orange-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-orange-500/30">
-                                            <Presentation size={28} className="text-orange-400" />
+                                    <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4 mb-2 flex items-start gap-3">
+                                        <div className="bg-emerald-500/20 p-2 rounded-xl text-emerald-400 mt-1">
+                                            <FileText size={20} />
                                         </div>
-                                        <h4 className="font-bold text-lg mb-2">Collaborative Whiteboard</h4>
-                                        <p className="text-xs text-white/50">Start a new whiteboard to brainstorm with your team in real-time.</p>
-                                    </div>
-                                    <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
-                                        <h5 className="text-xs font-bold uppercase tracking-widest text-white/50 mb-3">Recent Boards</h5>
-                                        <div className="space-y-2">
-                                            {[1, 2].map(i => (
-                                                <button key={i} className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-white/10 transition-colors text-left border border-transparent hover:border-white/10">
-                                                    <div className="bg-blue-500/20 p-2 rounded-lg">
-                                                        <Presentation size={16} className="text-blue-400" />
-                                                    </div>
-                                                    <div>
-                                                        <div className="text-sm font-bold text-white">Project Brainstorm {i}</div>
-                                                        <div className="text-[10px] text-white/50">Modified {i} days ago</div>
-                                                    </div>
-                                                </button>
-                                            ))}
+                                        <div>
+                                            <h4 className="font-bold text-white text-sm mb-1">Meeting Notes</h4>
+                                            <p className="text-xs text-emerald-100/60 leading-relaxed">
+                                                Jot down key takeaways. Notes are saved automatically to your workspace.
+                                            </p>
                                         </div>
                                     </div>
-                                    <button className="w-full py-3.5 bg-orange-500 hover:bg-orange-600 rounded-xl text-sm font-bold shadow-lg shadow-orange-500/20 transition-all flex items-center justify-center gap-2 text-white">
-                                        <Presentation size={18} /> Start New Whiteboard
-                                    </button>
+                                    
+                                    <div className="flex-1 flex flex-col relative group">
+                                        <textarea 
+                                            className="w-full h-full bg-white/5 border border-white/10 rounded-2xl p-4 text-sm text-white resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all custom-scrollbar placeholder:text-white/30"
+                                            placeholder="Type your notes here... (Markdown supported)"
+                                            defaultValue={`# Meeting Notes\n*${new Date().toLocaleDateString()}*\n\n## Action Items\n- [ ] \n- [ ] \n\n## Discussion`}
+                                        />
+                                        <div className="absolute bottom-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button className="bg-black/50 backdrop-blur-md p-1.5 rounded-lg border border-white/10 hover:bg-white/10 text-white/70 hover:text-white transition-colors" title="Copy Notes">
+                                                <Copy size={14} />
+                                            </button>
+                                            <button className="bg-emerald-500/80 backdrop-blur-md p-1.5 rounded-lg border border-emerald-400/20 text-white hover:bg-emerald-500 transition-colors" title="Save to PRISM Docs">
+                                                <CheckCircle2 size={14} />
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                             )}
 
@@ -894,8 +1087,13 @@ export default function Meetings() {
                                     <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/5 hover:border-white/10 transition-colors">
                                         <div className="flex items-center gap-3">
                                             <div className="relative">
-                                                <UserAvatar name={userName} avatarUrl={userAvatar} size={36} />
-                                                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-500 border-2 border-black" />
+                                                <div className={clsx(
+                                                    "rounded-full transition-all duration-75",
+                                                    audioEnabled && audioLevel > 0.05 ? "p-0.5 bg-gradient-to-r from-blue-500 to-blue-400" : "p-0"
+                                                )}>
+                                                    <UserAvatar name={userName} avatarUrl={userAvatar} size={36} />
+                                                </div>
+                                                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-500 border-2 border-[#1c1d1f]" />
                                             </div>
                                             <div className="flex flex-col">
                                                 <span className="text-sm font-bold font-google">{userName}</span>
