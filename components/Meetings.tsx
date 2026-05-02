@@ -58,6 +58,31 @@ const getTimeGreeting = (name: string) => {
     return { greeting: `${greeting}, ${name}`, icon };
 };
 
+// Isolated timer to prevent full component re-renders every second
+const MeetingTimer = React.memo(({ active }: { active: boolean }) => {
+    const [seconds, setSeconds] = useState(0);
+    const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    useEffect(() => {
+        if (active) {
+            setSeconds(0);
+            timerRef.current = setInterval(() => setSeconds(s => s + 1), 1000);
+        } else {
+            if (timerRef.current) clearInterval(timerRef.current);
+            setSeconds(0);
+        }
+        return () => { if (timerRef.current) clearInterval(timerRef.current); };
+    }, [active]);
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const sec = seconds % 60;
+    const display = h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${m}:${String(sec).padStart(2,'0')}`;
+    return (
+        <div className="bg-[#1a1b1e] px-3 py-1.5 rounded-xl border border-white/10 text-xs font-bold font-google text-white/70 tabular-nums">
+            {display}
+        </div>
+    );
+});
+
 export default function Meetings() {
     const { user } = useAuth();
     const userName = user?.name || 'You';
@@ -110,9 +135,7 @@ export default function Meetings() {
     const [chatInput, setChatInput] = useState('');
     const chatEndRef = useRef<HTMLDivElement>(null);
 
-    // Meeting timer
-    const [elapsedSeconds, setElapsedSeconds] = useState(0);
-    const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    // Recording state (timer is now isolated in MeetingTimer sub-component)
 
     // Recording state
     const mediaRecorderRef2 = useRef<MediaRecorder | null>(null);
@@ -142,8 +165,7 @@ export default function Meetings() {
             const mid = meetingId || generateMeetingId();
             if (!meetingId) setMeetingId(mid);
             setHasError(null);
-            setElapsedSeconds(0);
-            timerRef.current = setInterval(() => setElapsedSeconds(s => s + 1), 1000);
+            // Timer is handled by isolated MeetingTimer component
 
             // Setup broadcast channel for in-meeting chat
             const broadcastName = `prism-meet-chat:${mid}`;
@@ -165,7 +187,7 @@ export default function Meetings() {
     const handleLeaveMeeting = () => {
         if (stream) stream.getTracks().forEach(track => track.stop());
         if (screenStream) screenStream.getTracks().forEach(track => track.stop());
-        if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+        // Timer cleanup is handled by MeetingTimer component
         if (chatChannelRef.current) { supabase.removeChannel(chatChannelRef.current); chatChannelRef.current = null; }
         // Stop recording if active
         if (mediaRecorderRef2.current && isRecording) {
@@ -181,7 +203,6 @@ export default function Meetings() {
         setScreenStream(null);
         setInMeeting(false);
         setScreenShared(false);
-        setElapsedSeconds(0);
         setChatMessages([]);
         setCaptionsEnabled(false);
         setCaptionText('');
@@ -223,7 +244,6 @@ export default function Meetings() {
     // Cleanup on unmount
     useEffect(() => {
         return () => {
-            if (timerRef.current) clearInterval(timerRef.current);
             if (chatChannelRef.current) supabase.removeChannel(chatChannelRef.current);
             if (mediaRecorderRef2.current && mediaRecorderRef2.current.state !== 'inactive') {
                 mediaRecorderRef2.current.stop();
@@ -332,7 +352,7 @@ export default function Meetings() {
         };
     }, [inMeeting]);
 
-    // Audio level analyzer for voice activity ring
+    // Audio level analyzer for voice activity ring — THROTTLED to ~10fps
     useEffect(() => {
         if (!inMeeting || !stream) return;
         try {
@@ -340,15 +360,26 @@ export default function Meetings() {
             const source = ctx.createMediaStreamSource(stream);
             const analyser = ctx.createAnalyser();
             analyser.fftSize = 256;
-            analyser.smoothingTimeConstant = 0.8;
+            analyser.smoothingTimeConstant = 0.85;
             source.connect(analyser);
             audioContextRef.current = ctx;
             analyserRef.current = analyser;
             const dataArr = new Uint8Array(analyser.frequencyBinCount);
+            let frameCount = 0;
+            let lastLevel = 0;
             const tick = () => {
-                analyser.getByteFrequencyData(dataArr);
-                const avg = dataArr.reduce((a, b) => a + b, 0) / dataArr.length;
-                setAudioLevel(Math.min(avg / 128, 1));
+                frameCount++;
+                // Only process every 6th frame (~10fps instead of 60fps)
+                if (frameCount % 6 === 0) {
+                    analyser.getByteFrequencyData(dataArr);
+                    const avg = dataArr.reduce((a, b) => a + b, 0) / dataArr.length;
+                    const level = Math.min(avg / 128, 1);
+                    // Only trigger re-render if level changed meaningfully
+                    if (Math.abs(level - lastLevel) > 0.03) {
+                        lastLevel = level;
+                        setAudioLevel(level);
+                    }
+                }
                 audioAnimRef.current = requestAnimationFrame(tick);
             };
             tick();
@@ -559,12 +590,7 @@ export default function Meetings() {
         }
     };
 
-    const formatTime = (s: number) => {
-        const h = Math.floor(s / 3600);
-        const m = Math.floor((s % 3600) / 60);
-        const sec = s % 60;
-        return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${m}:${String(sec).padStart(2,'0')}`;
-    };
+    // formatTime is now handled inside MeetingTimer sub-component
 
     // Fullscreen toggle
     const toggleFullscreen = async () => {
@@ -661,11 +687,10 @@ export default function Meetings() {
         const { greeting, icon } = getTimeGreeting(userName);
         return (
             <div className="w-full h-full flex items-center justify-center relative overflow-hidden bg-[#08090a] z-20">
-                {/* Animated aurora background */}
+                {/* Optimized static aurora background — no animate-pulse, reduced blur */}
                 <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                    <div className="absolute top-[-30%] left-[-20%] w-[70%] h-[70%] bg-blue-600/8 rounded-full blur-[150px] animate-pulse" style={{ animationDuration: '8s' }} />
-                    <div className="absolute bottom-[-20%] right-[-15%] w-[60%] h-[60%] bg-purple-600/8 rounded-full blur-[150px] animate-pulse" style={{ animationDuration: '12s' }} />
-                    <div className="absolute top-[50%] left-[50%] -translate-x-1/2 -translate-y-1/2 w-[40%] h-[40%] bg-indigo-500/5 rounded-full blur-[120px] animate-pulse" style={{ animationDuration: '10s' }} />
+                    <div className="absolute top-[-30%] left-[-20%] w-[70%] h-[70%] bg-blue-600/8 rounded-full blur-[80px]" />
+                    <div className="absolute bottom-[-20%] right-[-15%] w-[60%] h-[60%] bg-purple-600/8 rounded-full blur-[80px]" />
                 </div>
                 
                 <div className="relative z-10 p-6 md:p-8 max-w-5xl w-full flex flex-col items-center gap-8">
@@ -691,7 +716,7 @@ export default function Meetings() {
                                     <>
                                         <video ref={previewVideoRef} autoPlay playsInline muted className="w-full h-full object-cover transform -scale-x-100 absolute inset-0" />
                                         {/* Self label */}
-                                        <div className="absolute bottom-4 left-4 bg-black/60 backdrop-blur-xl px-3 py-1.5 rounded-xl border border-white/10 z-10 flex items-center gap-2">
+                                        <div className="absolute bottom-3 left-3 md:bottom-4 md:left-4 bg-black/60 px-2.5 py-1 md:px-3 md:py-1.5 rounded-lg md:rounded-xl border border-white/10 z-10 flex items-center gap-1.5 md:gap-2">
                                             <div className="w-2 h-2 rounded-full bg-green-400" />
                                             <span className="text-white/90 text-xs font-bold font-google">{userName}</span>
                                         </div>
@@ -778,10 +803,10 @@ export default function Meetings() {
                 "bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-blue-500/20"
             )} />
 
-            {/* Background aurora */}
+            {/* Optimized static aurora — reduced blur for performance */}
             <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-                <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-blue-600/6 blur-[150px]" />
-                <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-purple-600/6 blur-[150px]" />
+                <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-blue-600/6 blur-[80px]" />
+                <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-purple-600/6 blur-[80px]" />
             </div>
 
             {/* Floating Reactions Layer */}
@@ -811,7 +836,7 @@ export default function Meetings() {
                             initial={{ opacity: 0, x: 100, scale: 0.8 }}
                             animate={{ opacity: 1, x: 0, scale: 1 }}
                             exit={{ opacity: 0, x: 100, scale: 0.8 }}
-                            className="bg-black/70 backdrop-blur-xl border border-white/10 rounded-2xl px-4 py-2.5 flex items-center gap-2.5 shadow-lg"
+                            className="bg-[#1a1b1e] border border-white/10 rounded-2xl px-4 py-2.5 flex items-center gap-2.5 shadow-lg"
                         >
                             <span className="text-lg">{t.icon}</span>
                             <span className="text-xs font-bold text-white/80">{t.text}</span>
@@ -821,31 +846,31 @@ export default function Meetings() {
             </div>
             
             {/* Main Content */}
-            <div className={clsx("flex-1 flex flex-col relative z-10 transition-all duration-300", showSidebar ? "lg:pr-80" : "")}>
+            <div className={clsx("flex-1 flex flex-col relative z-10 transition-all duration-300", showSidebar ? "lg:mr-96" : "")}>
                 
-                {/* Header */}
-                <div className="absolute top-0 left-0 right-0 p-4 md:p-6 flex justify-between items-center bg-gradient-to-b from-black/80 to-transparent z-20">
-                    <div className="flex items-center gap-3">
+                {/* Header — compact on mobile */}
+                <div className="absolute top-0 left-0 right-0 p-2.5 md:p-4 flex justify-between items-center bg-[#08090a]/90 z-20">
+                    <div className="flex items-center gap-2 md:gap-3 min-w-0">
                         {isRecording && (
-                            <div className="bg-red-500/10 border border-red-500/30 px-3 py-1.5 rounded-xl flex items-center gap-2 text-xs font-bold text-red-400 shadow-[0_0_10px_rgba(239,68,68,0.2)] animate-pulse">
-                                <Circle size={10} className="fill-red-400" /> REC
+                            <div className="bg-red-500/10 border border-red-500/30 px-2 md:px-3 py-1 md:py-1.5 rounded-xl flex items-center gap-1.5 text-[10px] md:text-xs font-bold text-red-400 animate-pulse flex-shrink-0">
+                                <Circle size={8} className="fill-red-400" /> REC
                             </div>
                         )}
-                        <div className="bg-white/10 backdrop-blur-xl px-4 py-2 rounded-2xl border border-white/10 flex items-center gap-2.5 text-sm font-google font-bold shadow-lg cursor-pointer hover:bg-white/20 transition-colors group" onClick={copyMeetingLink}>
-                            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
-                            {meetingId}
-                            <span className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 text-white/50">
-                                {copied ? <CheckCircle2 size={14} className="text-green-400" /> : <Copy size={14} />}
+                        <div className="bg-white/10 px-2.5 md:px-4 py-1.5 md:py-2 rounded-xl md:rounded-2xl border border-white/10 flex items-center gap-1.5 md:gap-2.5 text-xs md:text-sm font-google font-bold cursor-pointer hover:bg-white/20 transition-colors group min-w-0 flex-shrink" onClick={copyMeetingLink}>
+                            <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-red-500 flex-shrink-0" />
+                            <span className="truncate">{meetingId}</span>
+                            <span className="opacity-0 group-hover:opacity-100 transition-opacity text-white/50 flex-shrink-0">
+                                {copied ? <CheckCircle2 size={12} className="text-green-400" /> : <Copy size={12} />}
                             </span>
                         </div>
                         <button 
                             onClick={() => window.dispatchEvent(new CustomEvent('broadcast-meeting', { detail: meetingId }))}
-                            className="bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-500/30 px-3 py-1.5 rounded-xl flex items-center gap-1.5 text-xs font-bold backdrop-blur-sm transition-colors shadow-[0_0_10px_rgba(37,99,235,0.2)]"
+                            className="hidden md:flex bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-500/30 px-3 py-1.5 rounded-xl items-center gap-1.5 text-xs font-bold transition-colors flex-shrink-0"
                         >
                             <Share2 size={12} /> Share to Chat
                         </button>
                         <div className={clsx(
-                            "px-2.5 py-1.5 rounded-xl flex items-center gap-1.5 text-xs font-bold backdrop-blur-sm hidden md:flex border",
+                            "px-2.5 py-1.5 rounded-xl flex items-center gap-1.5 text-xs font-bold hidden lg:flex border flex-shrink-0",
                             connectionQuality === 'good' ? "bg-green-500/10 border-green-500/20 text-green-400" :
                             connectionQuality === 'fair' ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-400" :
                             "bg-red-500/10 border-red-500/20 text-red-400"
@@ -853,39 +878,37 @@ export default function Meetings() {
                             {connectionQuality === 'poor' ? <WifiOff size={12} /> : <Wifi size={12} />}
                             {connectionQuality === 'good' ? 'Good' : connectionQuality === 'fair' ? 'Fair' : 'Poor'}
                         </div>
-                        <div className="bg-green-500/10 border border-green-500/20 text-green-400 px-2.5 py-1.5 rounded-xl flex items-center gap-1.5 text-xs font-bold backdrop-blur-sm hidden md:flex">
+                        <div className="hidden lg:flex bg-green-500/10 border border-green-500/20 text-green-400 px-2.5 py-1.5 rounded-xl items-center gap-1.5 text-xs font-bold flex-shrink-0">
                             <AlertCircle size={12} /> Encrypted
                         </div>
-                        <div className="bg-white/10 backdrop-blur-xl px-3 py-1.5 rounded-xl border border-white/10 text-xs font-bold font-google text-white/70 tabular-nums hidden sm:block">
-                            {formatTime(elapsedSeconds)}
-                        </div>
+                        <div className="hidden sm:block flex-shrink-0"><MeetingTimer active={inMeeting} /></div>
                     </div>
-                    <div className="flex gap-2">
-                        <button onClick={togglePiP} className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/10 transition-colors hidden md:block" title="Picture-in-Picture">
-                            <PictureInPicture2 size={18} />
+                    <div className="flex gap-1.5 md:gap-2 flex-shrink-0">
+                        <button onClick={togglePiP} className="p-2 md:p-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 transition-colors hidden md:block" title="Picture-in-Picture">
+                            <PictureInPicture2 size={16} />
                         </button>
-                        <button onClick={() => setLayout(layout === 'grid' ? 'spotlight' : 'grid')} className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/10 transition-colors" title="Toggle Layout">
-                            <LayoutGrid size={18} />
+                        <button onClick={() => setLayout(layout === 'grid' ? 'spotlight' : 'grid')} className="p-2 md:p-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 transition-colors" title="Toggle Layout">
+                            <LayoutGrid size={16} />
                         </button>
-                        <button onClick={toggleFullscreen} className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-md border border-white/10 transition-colors hidden sm:block" title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}>
-                            {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
+                        <button onClick={toggleFullscreen} className="p-2 md:p-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 transition-colors hidden sm:block" title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}>
+                            {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
                         </button>
                     </div>
                 </div>
 
-                {/* Video Grid */}
-                <div className="flex-1 p-4 md:p-6 flex items-center justify-center pt-24 pb-28">
+                {/* Video Grid — optimized padding for mobile */}
+                <div className="flex-1 p-2 md:p-6 flex items-center justify-center pt-14 md:pt-20 pb-20 md:pb-28">
                     <div className={clsx(
-                        "w-full h-full grid gap-4 md:gap-6 transition-all duration-500 max-w-7xl mx-auto",
+                        "w-full h-full grid gap-2 md:gap-6 max-w-7xl mx-auto",
                         screenShared ? "grid-cols-3 grid-rows-3" : "grid-cols-1 grid-rows-1"
                     )}>
                         {/* Screen Share Spot */}
                         {screenShared && (
                              <motion.div 
-                                layout
-                                initial={{ opacity: 0, scale: 0.9 }}
+                                initial={{ opacity: 0, scale: 0.95 }}
                                 animate={{ opacity: 1, scale: 1 }}
-                                className="col-span-3 row-span-2 md:col-span-2 md:row-span-3 relative rounded-3xl overflow-hidden shadow-2xl bg-[#131416] border border-white/5 flex items-center justify-center"
+                                transition={{ duration: 0.3 }}
+                                className="col-span-3 row-span-2 md:col-span-2 md:row-span-3 relative rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl bg-[#131416] border border-white/5 flex items-center justify-center"
                             >
                                 <video 
                                     ref={screenRef} 
@@ -893,7 +916,7 @@ export default function Meetings() {
                                     playsInline 
                                     className="w-full h-full object-contain"
                                 />
-                                <div className="absolute bottom-4 left-4 bg-blue-500/90 backdrop-blur-xl px-3.5 py-2 rounded-xl border border-blue-400/20 flex items-center gap-2.5 shadow-lg">
+                                <div className="absolute bottom-2 md:bottom-4 left-2 md:left-4 bg-blue-500/90 px-2.5 md:px-3.5 py-1.5 md:py-2 rounded-lg md:rounded-xl border border-blue-400/20 flex items-center gap-1.5 md:gap-2.5 shadow-lg">
                                     <MonitorUp size={16} />
                                     <span className="text-sm font-bold font-google">Screen Sharing</span>
                                 </div>
@@ -902,11 +925,11 @@ export default function Meetings() {
 
                         {/* Local Camera — with voice activity ring */}
                         <motion.div 
-                            layout
-                            initial={{ opacity: 0, scale: 0.9 }}
+                            initial={{ opacity: 0, scale: 0.95 }}
                             animate={{ opacity: 1, scale: 1 }}
+                            transition={{ duration: 0.3 }}
                             className={clsx(
-                                "relative rounded-3xl overflow-hidden shadow-2xl bg-[#111214] transition-all duration-300 flex items-center justify-center group",
+                                "relative rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl bg-[#111214] flex items-center justify-center group",
                                 screenShared ? "col-span-3 row-span-1 md:col-span-1 md:row-span-3 aspect-video md:aspect-auto" : "w-full h-full"
                             )}
                             style={{
@@ -936,9 +959,9 @@ export default function Meetings() {
                             )}
 
                             {/* Always-visible bottom overlay */}
-                            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent p-4 flex justify-between items-end">
-                                <div className="flex gap-2 items-center">
-                                    <div className="bg-black/40 backdrop-blur-xl px-3 py-1.5 rounded-xl border border-white/10 flex items-center gap-2 shadow-lg">
+                            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent p-2.5 md:p-4 flex justify-between items-end">
+                                <div className="flex gap-1.5 items-center">
+                                    <div className="bg-black/60 px-2.5 py-1 md:px-3 md:py-1.5 rounded-lg md:rounded-xl border border-white/10 flex items-center gap-1.5 md:gap-2">
                                         {audioEnabled && audioLevel > 0.05 && (
                                             <div className="flex gap-0.5 items-end h-3">
                                                 {[0, 1, 2].map(i => (
@@ -946,23 +969,23 @@ export default function Meetings() {
                                                 ))}
                                             </div>
                                         )}
-                                        <span className="text-xs font-bold font-google text-white/90">{userName}</span>
+                                        <span className="text-[10px] md:text-xs font-bold font-google text-white/90">{userName}</span>
                                     </div>
                                     {handRaised && (
-                                        <div className="bg-yellow-500/90 backdrop-blur-xl p-1.5 rounded-xl border border-yellow-400/20 shadow-lg animate-bounce">
+                                        <div className="bg-yellow-500/90 p-1 md:p-1.5 rounded-lg md:rounded-xl border border-yellow-400/20 animate-bounce">
                                             <Hand size={14} className="text-white" />
                                         </div>
                                     )}
                                 </div>
-                                <div className="flex gap-1.5">
+                                <div className="flex gap-1">
                                     {!audioEnabled && (
-                                        <div className="bg-red-500/80 backdrop-blur-md p-1.5 rounded-lg shadow-lg">
-                                            <MicOff size={12} className="text-white" />
+                                        <div className="bg-red-500/80 p-1 md:p-1.5 rounded-lg">
+                                            <MicOff size={10} className="text-white" />
                                         </div>
                                     )}
                                     {!videoEnabled && (
-                                        <div className="bg-red-500/80 backdrop-blur-md p-1.5 rounded-lg shadow-lg">
-                                            <VideoOff size={12} className="text-white" />
+                                        <div className="bg-red-500/80 p-1 md:p-1.5 rounded-lg">
+                                            <VideoOff size={10} className="text-white" />
                                         </div>
                                     )}
                                 </div>
@@ -978,9 +1001,9 @@ export default function Meetings() {
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: 20 }}
-                            className="absolute bottom-28 md:bottom-32 left-1/2 -translate-x-1/2 z-20 w-full max-w-2xl px-4 pointer-events-none"
+                            className="absolute bottom-20 md:bottom-32 left-1/2 -translate-x-1/2 z-20 w-full max-w-2xl px-4 pointer-events-none"
                         >
-                            <div className="bg-black/70 backdrop-blur-xl border border-white/10 rounded-2xl p-4 text-center shadow-lg">
+                            <div className="bg-[#1a1b1e]/95 border border-white/10 rounded-2xl p-3 md:p-4 text-center shadow-lg">
                                 {!speechSupported ? (
                                     <p className="text-yellow-400/80 font-medium text-sm flex items-center justify-center gap-2">
                                         <Captions size={16} />
@@ -1012,7 +1035,7 @@ export default function Meetings() {
                             exit={{ opacity: 0, y: 20 }}
                             className="absolute bottom-24 left-1/2 -translate-x-1/2 z-30 md:hidden"
                         >
-                            <div className="bg-black/80 backdrop-blur-2xl border border-white/10 rounded-3xl p-3 shadow-[0_8px_32px_rgba(0,0,0,0.6)] grid grid-cols-4 gap-2 min-w-[280px]">
+                            <div className="bg-[#1a1b1e] border border-white/10 rounded-3xl p-3 shadow-[0_8px_32px_rgba(0,0,0,0.6)] grid grid-cols-4 gap-2 min-w-[280px]">
                                 {[
                                     { icon: <MonitorUp size={18} />, label: screenShared ? 'Stop Share' : 'Share', onClick: handleScreenShare, active: screenShared, color: 'blue' },
                                     { icon: <Hand size={18} />, label: handRaised ? 'Lower' : 'Raise', onClick: toggleHandRaise, active: handRaised, color: 'yellow' },
@@ -1048,8 +1071,8 @@ export default function Meetings() {
                 </AnimatePresence>
 
                 {/* Bottom Controls Bar */}
-                <div className="absolute bottom-3 md:bottom-8 left-1/2 -translate-x-1/2 z-30 w-[calc(100%-1.5rem)] md:w-auto max-w-[95vw]">
-                    <div className="flex items-center justify-center gap-1.5 md:gap-2 bg-white/10 backdrop-blur-2xl border border-white/10 px-3 md:px-6 py-2.5 md:py-3 rounded-[2rem] shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+                <div className="absolute bottom-2 md:bottom-6 left-1/2 -translate-x-1/2 z-30 w-[calc(100%-1rem)] md:w-auto max-w-[95vw]">
+                    <div className="flex items-center justify-center gap-1 md:gap-2 bg-[#1a1b1e]/95 border border-white/10 px-2.5 md:px-5 py-2 md:py-3 rounded-[2rem] shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
                         
                         <button aria-label={audioEnabled ? "Mute" : "Unmute"} onClick={() => setAudioEnabled(!audioEnabled)} className={clsx("p-2.5 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", audioEnabled ? "bg-white/10 hover:bg-white/20 text-white" : "bg-red-500 text-white hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.4)]")}>
                             {audioEnabled ? <Mic size={18} /> : <MicOff size={18} />}
@@ -1083,7 +1106,7 @@ export default function Meetings() {
                             <AnimatePresence>
                                 {showReactionTray && (
                                     <motion.div initial={{ opacity: 0, y: 10, scale: 0.9 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.9 }}
-                                        className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 bg-black/80 backdrop-blur-2xl border border-white/10 rounded-2xl p-2 flex gap-1 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
+                                        className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 bg-[#1a1b1e] border border-white/10 rounded-2xl p-2 flex gap-1 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
                                         {REACTION_EMOJIS.map(emoji => (
                                             <button key={emoji} onClick={() => sendReaction(emoji)} className="text-2xl p-2 hover:bg-white/10 rounded-xl transition-all hover:scale-125 active:scale-95">
                                                 {emoji}
@@ -1132,7 +1155,7 @@ export default function Meetings() {
                     <AnimatePresence>
                         {showReactionTray && (
                             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
-                                className="md:hidden absolute bottom-full left-1/2 -translate-x-1/2 mb-3 bg-black/80 backdrop-blur-2xl border border-white/10 rounded-2xl p-2 flex gap-1 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
+                                className="md:hidden absolute bottom-full left-1/2 -translate-x-1/2 mb-3 bg-[#1a1b1e] border border-white/10 rounded-2xl p-2 flex gap-1 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
                                 {REACTION_EMOJIS.map(emoji => (
                                     <button key={emoji} onClick={() => sendReaction(emoji)} className="text-xl p-1.5 hover:bg-white/10 rounded-xl transition-all hover:scale-125 active:scale-95">
                                         {emoji}
@@ -1149,11 +1172,11 @@ export default function Meetings() {
             <AnimatePresence>
                 {showSidebar && (
                     <motion.div 
-                        initial={{ x: 360, opacity: 0 }}
-                        animate={{ x: 0, opacity: 1 }}
-                        exit={{ x: 360, opacity: 0 }}
-                        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-                        className="absolute inset-0 md:inset-auto md:right-0 md:top-0 md:bottom-0 md:w-80 lg:w-96 bg-black/90 md:bg-black/70 backdrop-blur-3xl md:border-l border-white/10 z-40 flex flex-col shadow-[-10px_0_30px_rgba(0,0,0,0.5)]"
+                        initial={{ y: '100%', opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        exit={{ y: '100%', opacity: 0 }}
+                        transition={{ type: 'spring', damping: 35, stiffness: 400 }}
+                        className="absolute inset-0 md:inset-auto md:right-0 md:top-0 md:bottom-0 md:w-80 lg:w-96 bg-[#0c0d0f] md:bg-[#0c0d0f]/98 md:border-l border-white/10 z-40 flex flex-col shadow-[-10px_0_30px_rgba(0,0,0,0.5)]"
                     >
                         <div className="p-4 md:p-5 border-b border-white/10 flex justify-between items-center bg-white/5">
                             <h3 className="font-google font-bold text-base md:text-lg flex items-center gap-2">
@@ -1168,7 +1191,7 @@ export default function Meetings() {
                             </button>
                         </div>
                         
-                        <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
+                        <div className="flex-1 overflow-y-auto p-3 md:p-4 custom-scrollbar">
                             {showSidebar === 'effects' && (
                                 <div className="space-y-8 animate-fade-in">
                                     <div>
