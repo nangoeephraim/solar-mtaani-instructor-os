@@ -129,6 +129,15 @@ export default function Meetings() {
 
     // Toast notifications
     const [toasts, setToasts] = useState<{id: string; text: string; icon: string}[]>([]);
+
+    // Visual Effects state
+    const [backgroundBlur, setBackgroundBlur] = useState<'None' | 'Light' | 'Heavy'>('None');
+    const [selectedBg, setSelectedBg] = useState<number | null>(null);
+    const [lowLightMode, setLowLightMode] = useState(true);
+    const [studioLighting, setStudioLighting] = useState(false);
+
+    // Notes state
+    const [notesContent, setNotesContent] = useState(`# Meeting Notes\n*${new Date().toLocaleDateString()}*\n\n## Action Items\n- [ ] \n- [ ] \n\n## Discussion`);
     
     // Chat state
     const [chatMessages, setChatMessages] = useState<MeetingMessage[]>([]);
@@ -1033,7 +1042,7 @@ export default function Meetings() {
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: 20 }}
-                            className="absolute bottom-24 left-1/2 -translate-x-1/2 z-30 md:hidden"
+                            className="absolute bottom-16 left-1/2 -translate-x-1/2 z-30 md:hidden"
                         >
                             <div className="bg-[#1a1b1e] border border-white/10 rounded-3xl p-3 shadow-[0_8px_32px_rgba(0,0,0,0.6)] grid grid-cols-4 gap-2 min-w-[280px]">
                                 {[
@@ -1176,7 +1185,7 @@ export default function Meetings() {
                         animate={{ y: 0, opacity: 1 }}
                         exit={{ y: '100%', opacity: 0 }}
                         transition={{ type: 'spring', damping: 35, stiffness: 400 }}
-                        className="absolute inset-0 md:inset-auto md:right-0 md:top-0 md:bottom-0 md:w-80 lg:w-96 bg-[#0c0d0f] md:bg-[#0c0d0f]/98 md:border-l border-white/10 z-40 flex flex-col shadow-[-10px_0_30px_rgba(0,0,0,0.5)]"
+                        className="fixed inset-0 md:absolute md:inset-auto md:right-0 md:top-0 md:bottom-0 md:w-80 lg:w-96 bg-[#0c0d0f] md:bg-[#0c0d0f]/98 md:border-l border-white/10 z-40 flex flex-col shadow-[-10px_0_30px_rgba(0,0,0,0.5)]"
                     >
                         <div className="p-4 md:p-5 border-b border-white/10 flex justify-between items-center bg-white/5">
                             <h3 className="font-google font-bold text-base md:text-lg flex items-center gap-2">
@@ -1191,16 +1200,25 @@ export default function Meetings() {
                             </button>
                         </div>
                         
-                        <div className="flex-1 overflow-y-auto p-3 md:p-4 custom-scrollbar">
+                        <div className="flex-1 overflow-y-auto p-3 md:p-4 pb-6 md:pb-4 custom-scrollbar">
                             {showSidebar === 'effects' && (
-                                <div className="space-y-8 animate-fade-in">
+                                <div className="space-y-6 animate-fade-in">
                                     <div>
                                         <h4 className="text-[10px] font-black uppercase tracking-widest text-white/50 mb-3 flex items-center gap-2">
                                             <div className="h-px bg-white/10 flex-1" /> Background Blur <div className="h-px bg-white/10 flex-1" />
                                         </h4>
                                         <div className="flex gap-2 bg-white/5 p-1 rounded-xl">
-                                            {['None', 'Light', 'Heavy'].map(level => (
-                                                <button key={level} className={clsx("flex-1 py-2.5 rounded-lg text-xs font-bold transition-all", level === 'Light' ? "bg-white/20 shadow-md" : "hover:bg-white/10 text-white/70 hover:text-white")}>
+                                            {(['None', 'Light', 'Heavy'] as const).map(level => (
+                                                <button 
+                                                    key={level} 
+                                                    onClick={() => { setBackgroundBlur(level); addToast(`Background blur: ${level}`, '🔮'); }}
+                                                    className={clsx(
+                                                        "flex-1 py-2.5 rounded-lg text-xs font-bold transition-all",
+                                                        backgroundBlur === level 
+                                                            ? "bg-purple-500/30 text-purple-300 shadow-md border border-purple-500/30" 
+                                                            : "hover:bg-white/10 text-white/60 hover:text-white"
+                                                    )}
+                                                >
                                                     {level}
                                                 </button>
                                             ))}
@@ -1210,14 +1228,36 @@ export default function Meetings() {
                                         <h4 className="text-[10px] font-black uppercase tracking-widest text-white/50 mb-3 flex items-center gap-2">
                                             <div className="h-px bg-white/10 flex-1" /> Virtual Backgrounds <div className="h-px bg-white/10 flex-1" />
                                         </h4>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <div className="aspect-video bg-white/5 border border-white/20 rounded-xl flex items-center justify-center text-xs font-bold text-white/50 hover:bg-white/10 hover:text-white transition-colors cursor-pointer">
+                                        <div className="grid grid-cols-3 gap-2">
+                                            <button 
+                                                onClick={() => { setSelectedBg(null); addToast('Background removed', '🚫'); }}
+                                                className={clsx(
+                                                    "aspect-video rounded-xl flex items-center justify-center text-xs font-bold transition-all cursor-pointer border-2",
+                                                    selectedBg === null 
+                                                        ? "bg-purple-500/15 border-purple-500 text-purple-300 shadow-[0_0_12px_rgba(168,85,247,0.3)]" 
+                                                        : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white"
+                                                )}
+                                            >
                                                 None
-                                            </div>
+                                            </button>
                                             {[1,2,3,4,5].map(i => (
-                                                <div key={i} className="aspect-video bg-black/50 border border-white/10 rounded-xl overflow-hidden hover:border-purple-500 cursor-pointer transition-all hover:shadow-[0_0_15px_rgba(168,85,247,0.4)] relative group">
-                                                    <img src={`https://picsum.photos/seed/${i * 42}/300/170`} alt="bg" className="w-full h-full object-cover opacity-70 group-hover:opacity-100 transition-opacity" />
-                                                </div>
+                                                <button 
+                                                    key={i}
+                                                    onClick={() => { setSelectedBg(i); addToast(`Background ${i} applied`, '🖼️'); }}
+                                                    className={clsx(
+                                                        "aspect-video rounded-xl overflow-hidden cursor-pointer transition-all relative border-2",
+                                                        selectedBg === i 
+                                                            ? "border-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.4)]" 
+                                                            : "border-white/10 hover:border-purple-500/50"
+                                                    )}
+                                                >
+                                                    <img src={`https://picsum.photos/seed/${i * 42}/300/170`} alt={`Background ${i}`} className={clsx("w-full h-full object-cover transition-opacity", selectedBg === i ? "opacity-100" : "opacity-60 hover:opacity-90")} />
+                                                    {selectedBg === i && (
+                                                        <div className="absolute inset-0 bg-purple-500/20 flex items-center justify-center">
+                                                            <CheckCircle2 size={20} className="text-white drop-shadow-lg" />
+                                                        </div>
+                                                    )}
+                                                </button>
                                             ))}
                                         </div>
                                     </div>
@@ -1226,55 +1266,74 @@ export default function Meetings() {
                                             <div className="h-px bg-white/10 flex-1" /> Video Enhancements <div className="h-px bg-white/10 flex-1" />
                                         </h4>
                                         <div className="space-y-2">
-                                            <label className="flex items-center gap-3 p-3.5 bg-white/5 rounded-xl border border-white/10 cursor-pointer hover:bg-white/10 transition-colors">
-                                                <div className="relative w-10 h-5 bg-purple-500 rounded-full transition-colors">
-                                                    <div className="absolute right-1 top-1 bg-white w-3 h-3 rounded-full transition-all" />
+                                            <button 
+                                                onClick={() => { setLowLightMode(!lowLightMode); addToast(lowLightMode ? 'Low light mode off' : 'Low light mode on', '💡'); }}
+                                                className={clsx(
+                                                    "w-full flex items-center gap-3 p-3.5 rounded-xl border cursor-pointer transition-all",
+                                                    lowLightMode ? "bg-purple-500/10 border-purple-500/30" : "bg-white/5 border-white/10 hover:bg-white/10"
+                                                )}
+                                            >
+                                                <div className={clsx("relative w-10 h-5 rounded-full transition-colors", lowLightMode ? "bg-purple-500" : "bg-white/20")}>
+                                                    <div className={clsx("absolute top-1 bg-white w-3 h-3 rounded-full transition-all", lowLightMode ? "right-1" : "left-1")} />
                                                 </div>
-                                                <div className="flex-1">
+                                                <div className="flex-1 text-left">
                                                     <span className="text-sm font-bold block">Low Light Mode</span>
                                                     <span className="text-[10px] text-white/50 font-medium">Auto-adjusts brightness</span>
                                                 </div>
-                                            </label>
-                                            <label className="flex items-center gap-3 p-3.5 bg-white/5 rounded-xl border border-white/10 cursor-pointer hover:bg-white/10 transition-colors">
-                                                <div className="relative w-10 h-5 bg-white/20 rounded-full transition-colors">
-                                                    <div className="absolute left-1 top-1 bg-white w-3 h-3 rounded-full transition-all" />
+                                            </button>
+                                            <button 
+                                                onClick={() => { setStudioLighting(!studioLighting); addToast(studioLighting ? 'Studio lighting off' : 'Studio lighting on', '✨'); }}
+                                                className={clsx(
+                                                    "w-full flex items-center gap-3 p-3.5 rounded-xl border cursor-pointer transition-all",
+                                                    studioLighting ? "bg-purple-500/10 border-purple-500/30" : "bg-white/5 border-white/10 hover:bg-white/10"
+                                                )}
+                                            >
+                                                <div className={clsx("relative w-10 h-5 rounded-full transition-colors", studioLighting ? "bg-purple-500" : "bg-white/20")}>
+                                                    <div className={clsx("absolute top-1 bg-white w-3 h-3 rounded-full transition-all", studioLighting ? "right-1" : "left-1")} />
                                                 </div>
-                                                <div className="flex-1">
+                                                <div className="flex-1 text-left">
                                                     <span className="text-sm font-bold block">Studio Lighting</span>
                                                     <span className="text-[10px] text-white/50 font-medium">Professional portrait lighting</span>
                                                 </div>
-                                            </label>
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
                             )}
 
                             {showSidebar === 'notes' && (
-                                <div className="flex flex-col h-full animate-fade-in space-y-4">
-                                    <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4 mb-2 flex items-start gap-3">
-                                        <div className="bg-emerald-500/20 p-2 rounded-xl text-emerald-400 mt-1">
-                                            <FileText size={20} />
+                                <div className="flex flex-col h-full animate-fade-in space-y-3">
+                                    <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-3 flex items-start gap-3 shrink-0">
+                                        <div className="bg-emerald-500/20 p-2 rounded-xl text-emerald-400 mt-0.5">
+                                            <FileText size={18} />
                                         </div>
                                         <div>
-                                            <h4 className="font-bold text-white text-sm mb-1">Meeting Notes</h4>
-                                            <p className="text-xs text-emerald-100/60 leading-relaxed">
-                                                Jot down key takeaways. Notes are saved automatically to your workspace.
+                                            <h4 className="font-bold text-white text-sm mb-0.5">Meeting Notes</h4>
+                                            <p className="text-[10px] text-emerald-100/60 leading-relaxed">
+                                                Jot down key takeaways. Notes are saved to your workspace.
                                             </p>
                                         </div>
                                     </div>
                                     
-                                    <div className="flex-1 flex flex-col relative group">
+                                    <div className="flex-1 flex flex-col relative">
                                         <textarea 
-                                            className="w-full h-full bg-white/5 border border-white/10 rounded-2xl p-4 text-sm text-white resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all custom-scrollbar placeholder:text-white/30"
+                                            className="w-full flex-1 min-h-[200px] bg-white/5 border border-white/10 rounded-2xl p-3 md:p-4 text-sm text-white resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500/50 transition-all custom-scrollbar placeholder:text-white/30"
                                             placeholder="Type your notes here... (Markdown supported)"
-                                            defaultValue={`# Meeting Notes\n*${new Date().toLocaleDateString()}*\n\n## Action Items\n- [ ] \n- [ ] \n\n## Discussion`}
+                                            value={notesContent}
+                                            onChange={(e) => setNotesContent(e.target.value)}
                                         />
-                                        <div className="absolute bottom-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button className="bg-black/50 backdrop-blur-md p-1.5 rounded-lg border border-white/10 hover:bg-white/10 text-white/70 hover:text-white transition-colors" title="Copy Notes">
-                                                <Copy size={14} />
+                                        <div className="flex gap-2 mt-2 shrink-0">
+                                            <button 
+                                                onClick={() => { navigator.clipboard.writeText(notesContent); addToast('Notes copied to clipboard', '📋'); }}
+                                                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-white/5 border border-white/10 hover:bg-white/10 text-white/70 hover:text-white rounded-xl transition-colors text-xs font-bold"
+                                            >
+                                                <Copy size={14} /> Copy Notes
                                             </button>
-                                            <button className="bg-emerald-500/80 backdrop-blur-md p-1.5 rounded-lg border border-emerald-400/20 text-white hover:bg-emerald-500 transition-colors" title="Save to PRISM Docs">
-                                                <CheckCircle2 size={14} />
+                                            <button 
+                                                onClick={() => addToast('Notes saved to PRISM Docs', '✅')}
+                                                className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-emerald-500/20 border border-emerald-500/30 hover:bg-emerald-500/30 text-emerald-400 rounded-xl transition-colors text-xs font-bold"
+                                            >
+                                                <CheckCircle2 size={14} /> Save
                                             </button>
                                         </div>
                                     </div>
@@ -1336,7 +1395,7 @@ export default function Meetings() {
                                                             target="_blank" 
                                                             rel="noopener noreferrer" 
                                                             download={f.name}
-                                                            className="p-2 rounded-xl bg-white/5 hover:bg-amber-500/20 text-white/50 hover:text-amber-400 transition-colors opacity-0 group-hover:opacity-100 flex-shrink-0"
+                                                            className="p-2 rounded-xl bg-white/5 hover:bg-amber-500/20 text-white/50 hover:text-amber-400 transition-colors md:opacity-0 md:group-hover:opacity-100 flex-shrink-0"
                                                         >
                                                             <Download size={14} />
                                                         </a>
@@ -1424,7 +1483,7 @@ export default function Meetings() {
                                         )}
                                         <div ref={chatEndRef} />
                                     </div>
-                                    <div className="mt-4 pt-4 border-t border-white/10 shrink-0">
+                                    <div className="mt-2 pt-2 md:mt-3 md:pt-3 border-t border-white/10 shrink-0 pb-2 md:pb-0">
                                         <form onSubmit={(e) => { e.preventDefault(); handleSendChat(); }} className="flex items-center gap-2">
                                             <button type="button" onClick={() => chatFileInputRef.current?.click()} className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/50 hover:text-amber-400 transition-colors flex-shrink-0" title="Attach file">
                                                 <Paperclip size={16} />
