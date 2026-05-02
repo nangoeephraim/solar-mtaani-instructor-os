@@ -545,9 +545,16 @@ export default function Meetings() {
     };
 
     const copyMeetingLink = () => {
-        navigator.clipboard.writeText(`https://prism.os/meet/${meetingId}`);
+        const link = `Meeting ID: ${meetingId}`;
+        navigator.clipboard.writeText(link);
         setCopied(true);
+        addToast('📋', 'Meeting ID copied to clipboard!');
         setTimeout(() => setCopied(false), 2000);
+    };
+
+    const shareMeetingToChat = () => {
+        window.dispatchEvent(new CustomEvent('broadcast-meeting', { detail: meetingId }));
+        addToast('📤', 'Meeting link shared to chat!');
     };
 
     const handleSendChat = () => {
@@ -695,14 +702,14 @@ export default function Meetings() {
     if (!inMeeting) {
         const { greeting, icon } = getTimeGreeting(userName);
         return (
-            <div className="w-full h-full flex items-center justify-center relative overflow-hidden bg-[#08090a] z-20">
+            <div className="w-full h-full relative overflow-y-auto overflow-x-hidden bg-[#08090a] z-20">
                 {/* Optimized static aurora background — no animate-pulse, reduced blur */}
-                <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                <div className="fixed inset-0 pointer-events-none overflow-hidden">
                     <div className="absolute top-[-30%] left-[-20%] w-[70%] h-[70%] bg-blue-600/8 rounded-full blur-[80px]" />
                     <div className="absolute bottom-[-20%] right-[-15%] w-[60%] h-[60%] bg-purple-600/8 rounded-full blur-[80px]" />
                 </div>
                 
-                <div className="relative z-10 p-6 md:p-8 max-w-5xl w-full flex flex-col items-center gap-8">
+                <div className="relative z-10 p-4 md:p-8 max-w-5xl mx-auto min-h-full w-full flex flex-col items-center justify-center gap-6 md:gap-8">
                     {/* Time-aware greeting */}
                     <motion.div 
                         initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
@@ -837,7 +844,7 @@ export default function Meetings() {
             </div>
 
             {/* Toast Notifications */}
-            <div className="absolute top-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
+            <div className="absolute top-14 md:top-4 right-2 md:right-4 z-50 flex flex-col gap-2 pointer-events-none max-w-[calc(100%-1rem)]">
                 <AnimatePresence>
                     {toasts.map(t => (
                         <motion.div
@@ -858,7 +865,7 @@ export default function Meetings() {
             <div className={clsx("flex-1 flex flex-col relative z-10 transition-all duration-300", showSidebar ? "lg:mr-96" : "")}>
                 
                 {/* Header — compact on mobile */}
-                <div className="absolute top-0 left-0 right-0 p-2.5 md:p-4 flex justify-between items-center bg-[#08090a]/90 z-20">
+                <div className="absolute top-0 left-0 right-0 p-2 md:p-4 flex justify-between items-center bg-[#08090a]/90 z-20 overflow-hidden">
                     <div className="flex items-center gap-2 md:gap-3 min-w-0">
                         {isRecording && (
                             <div className="bg-red-500/10 border border-red-500/30 px-2 md:px-3 py-1 md:py-1.5 rounded-xl flex items-center gap-1.5 text-[10px] md:text-xs font-bold text-red-400 animate-pulse flex-shrink-0">
@@ -874,9 +881,11 @@ export default function Meetings() {
                         </div>
                         <button 
                             onClick={() => window.dispatchEvent(new CustomEvent('broadcast-meeting', { detail: meetingId }))}
-                            className="hidden md:flex bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-500/30 px-3 py-1.5 rounded-xl items-center gap-1.5 text-xs font-bold transition-colors flex-shrink-0"
+                            className="flex bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-500/30 px-2 md:px-3 py-1.5 rounded-xl items-center gap-1 md:gap-1.5 text-[10px] md:text-xs font-bold transition-colors flex-shrink-0"
                         >
-                            <Share2 size={12} /> Share to Chat
+                            <Share2 size={12} />
+                            <span className="hidden sm:inline">Share to Chat</span>
+                            <span className="sm:hidden">Share</span>
                         </button>
                         <div className={clsx(
                             "px-2.5 py-1.5 rounded-xl flex items-center gap-1.5 text-xs font-bold hidden lg:flex border flex-shrink-0",
@@ -906,10 +915,10 @@ export default function Meetings() {
                 </div>
 
                 {/* Video Grid — optimized padding for mobile */}
-                <div className="flex-1 p-2 md:p-6 flex items-center justify-center pt-14 md:pt-20 pb-20 md:pb-28">
+                <div className="flex-1 p-2 md:p-6 flex items-center justify-center pt-12 md:pt-20 pb-24 md:pb-28">
                     <div className={clsx(
                         "w-full h-full grid gap-2 md:gap-6 max-w-7xl mx-auto",
-                        screenShared ? "grid-cols-3 grid-rows-3" : "grid-cols-1 grid-rows-1"
+                        screenShared ? "grid-cols-1 grid-rows-[2fr_1fr] md:grid-cols-3 md:grid-rows-3" : "grid-cols-1 grid-rows-1"
                     )}>
                         {/* Screen Share Spot */}
                         {screenShared && (
@@ -917,7 +926,7 @@ export default function Meetings() {
                                 initial={{ opacity: 0, scale: 0.95 }}
                                 animate={{ opacity: 1, scale: 1 }}
                                 transition={{ duration: 0.3 }}
-                                className="col-span-3 row-span-2 md:col-span-2 md:row-span-3 relative rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl bg-[#131416] border border-white/5 flex items-center justify-center"
+                                className="col-span-1 row-span-1 md:col-span-2 md:row-span-3 relative rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl bg-[#131416] border border-white/5 flex items-center justify-center"
                             >
                                 <video 
                                     ref={screenRef} 
@@ -939,7 +948,7 @@ export default function Meetings() {
                             transition={{ duration: 0.3 }}
                             className={clsx(
                                 "relative rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl bg-[#111214] flex items-center justify-center group",
-                                screenShared ? "col-span-3 row-span-1 md:col-span-1 md:row-span-3 aspect-video md:aspect-auto" : "w-full h-full"
+                                screenShared ? "col-span-1 row-span-1 md:col-span-1 md:row-span-3 aspect-video md:aspect-auto" : "w-full h-full"
                             )}
                             style={{
                                 boxShadow: audioEnabled && audioLevel > 0.05 
@@ -1010,7 +1019,7 @@ export default function Meetings() {
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: 20 }}
-                            className="absolute bottom-20 md:bottom-32 left-1/2 -translate-x-1/2 z-20 w-full max-w-2xl px-4 pointer-events-none"
+                            className="absolute bottom-28 md:bottom-32 left-1/2 -translate-x-1/2 z-20 w-[calc(100%-2rem)] max-w-2xl px-2 md:px-4 pointer-events-none"
                         >
                             <div className="bg-[#1a1b1e]/95 border border-white/10 rounded-2xl p-3 md:p-4 text-center shadow-lg">
                                 {!speechSupported ? (
@@ -1038,60 +1047,80 @@ export default function Meetings() {
                 {/* Mobile More Menu Overlay */}
                 <AnimatePresence>
                     {showMobileMore && (
-                        <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: 20 }}
-                            className="absolute bottom-16 left-1/2 -translate-x-1/2 z-30 md:hidden"
-                        >
-                            <div className="bg-[#1a1b1e] border border-white/10 rounded-3xl p-3 shadow-[0_8px_32px_rgba(0,0,0,0.6)] grid grid-cols-4 gap-2 min-w-[280px]">
-                                {[
-                                    { icon: <MonitorUp size={18} />, label: screenShared ? 'Stop Share' : 'Share', onClick: handleScreenShare, active: screenShared, color: 'blue' },
-                                    { icon: <Hand size={18} />, label: handRaised ? 'Lower' : 'Raise', onClick: toggleHandRaise, active: handRaised, color: 'yellow' },
-                                    { icon: <Captions size={18} />, label: captionsEnabled ? 'CC Off' : 'CC On', onClick: () => setCaptionsEnabled(!captionsEnabled), active: captionsEnabled, color: 'blue' },
-                                    { icon: <Circle size={18} className={clsx(isRecording && "fill-white")} />, label: isRecording ? 'Stop Rec' : 'Record', onClick: toggleRecording, active: isRecording, color: 'red' },
-                                    { icon: <SmilePlus size={18} />, label: 'React', onClick: () => { setShowReactionTray(!showReactionTray); setShowMobileMore(false); }, active: showReactionTray, color: 'yellow' },
-                                    { icon: <FileText size={18} />, label: 'Notes', onClick: () => { setShowSidebar(showSidebar === 'notes' ? null : 'notes'); setShowMobileMore(false); }, active: showSidebar === 'notes', color: 'emerald' },
-                                    { icon: <Sparkles size={18} />, label: 'Effects', onClick: () => { setShowSidebar(showSidebar === 'effects' ? null : 'effects'); setShowMobileMore(false); }, active: showSidebar === 'effects', color: 'purple' },
-                                    { icon: <Paperclip size={18} />, label: 'Files', onClick: () => { setShowSidebar(showSidebar === 'files' ? null : 'files'); setShowMobileMore(false); }, active: showSidebar === 'files', color: 'amber' },
-                                ].map((item, i) => (
-                                    <button
-                                        key={i}
-                                        onClick={item.onClick}
-                                        className={clsx(
-                                            "flex flex-col items-center gap-1 py-2.5 px-1 rounded-2xl transition-all text-[10px] font-bold",
-                                            item.active
-                                                ? item.color === 'red' ? "bg-red-500/20 text-red-400"
-                                                : item.color === 'yellow' ? "bg-yellow-500/20 text-yellow-400"
-                                                : item.color === 'emerald' ? "bg-emerald-500/20 text-emerald-400"
-                                                : item.color === 'purple' ? "bg-purple-500/20 text-purple-400"
-                                                : item.color === 'amber' ? "bg-amber-500/20 text-amber-400"
-                                                : "bg-blue-500/20 text-blue-400"
-                                                : "text-white/70 hover:bg-white/10 hover:text-white"
-                                        )}
-                                    >
-                                        {item.icon}
-                                        {item.label}
-                                    </button>
-                                ))}
-                            </div>
-                        </motion.div>
+                        <>
+                            <motion.div 
+                                initial={{ opacity: 0 }} 
+                                animate={{ opacity: 1 }} 
+                                exit={{ opacity: 0 }} 
+                                className="absolute inset-0 z-40 bg-black/40 md:hidden" 
+                                onClick={() => setShowMobileMore(false)} 
+                            />
+                            <motion.div
+                                initial={{ y: '100%', opacity: 0 }}
+                                animate={{ y: 0, opacity: 1 }}
+                                exit={{ y: '100%', opacity: 0 }}
+                                transition={{ type: 'spring', stiffness: 400, damping: 35 }}
+                                className="absolute bottom-0 left-0 right-0 z-50 md:hidden bg-[#1a1b1e] border-t border-white/10 rounded-t-3xl p-5 shadow-[0_-8px_32px_rgba(0,0,0,0.6)] overflow-hidden"
+                                style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom, 1.5rem))' }}
+                            >
+                                <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mb-6" />
+                                <div className="grid grid-cols-3 sm:grid-cols-4 gap-y-5 gap-x-3">
+                                    {[
+                                        { icon: <MonitorUp size={22} />, label: screenShared ? 'Stop Share' : 'Share', onClick: handleScreenShare, active: screenShared, color: 'blue' },
+                                        { icon: <Hand size={22} />, label: handRaised ? 'Lower' : 'Raise', onClick: toggleHandRaise, active: handRaised, color: 'yellow' },
+                                        { icon: <Captions size={22} />, label: captionsEnabled ? 'CC Off' : 'CC On', onClick: () => setCaptionsEnabled(!captionsEnabled), active: captionsEnabled, color: 'blue' },
+                                        { icon: <Circle size={22} className={clsx(isRecording && "fill-white")} />, label: isRecording ? 'Stop Rec' : 'Record', onClick: toggleRecording, active: isRecording, color: 'red' },
+                                        { icon: <SmilePlus size={22} />, label: 'React', onClick: () => { setShowReactionTray(!showReactionTray); setShowMobileMore(false); }, active: showReactionTray, color: 'yellow' },
+                                        { icon: <FileText size={22} />, label: 'Notes', onClick: () => { setShowSidebar(showSidebar === 'notes' ? null : 'notes'); setShowMobileMore(false); }, active: showSidebar === 'notes', color: 'emerald' },
+                                        { icon: <Sparkles size={22} />, label: 'Effects', onClick: () => { setShowSidebar(showSidebar === 'effects' ? null : 'effects'); setShowMobileMore(false); }, active: showSidebar === 'effects', color: 'purple' },
+                                        { icon: <Paperclip size={22} />, label: 'Files', onClick: () => { setShowSidebar(showSidebar === 'files' ? null : 'files'); setShowMobileMore(false); }, active: showSidebar === 'files', color: 'amber' },
+                                        { icon: <Copy size={22} />, label: 'Copy ID', onClick: () => { copyMeetingLink(); setShowMobileMore(false); }, active: false, color: 'blue' },
+                                    ].map((item, i) => (
+                                        <button
+                                            key={i}
+                                            onClick={item.onClick}
+                                            className="flex flex-col items-center gap-2 transition-transform active:scale-95"
+                                        >
+                                            <div className={clsx(
+                                                "w-11 h-11 rounded-2xl flex items-center justify-center shadow-md",
+                                                item.active
+                                                    ? item.color === 'red' ? "bg-red-500/20 text-red-400"
+                                                    : item.color === 'yellow' ? "bg-yellow-500/20 text-yellow-400"
+                                                    : item.color === 'emerald' ? "bg-emerald-500/20 text-emerald-400"
+                                                    : item.color === 'purple' ? "bg-purple-500/20 text-purple-400"
+                                                    : item.color === 'amber' ? "bg-amber-500/20 text-amber-400"
+                                                    : "bg-blue-500/20 text-blue-400"
+                                                    : "bg-white/5 text-white/70 border border-white/5"
+                                            )}>
+                                                {item.icon}
+                                            </div>
+                                            <span className="text-[10px] font-bold text-white/80">{item.label}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </motion.div>
+                        </>
                     )}
                 </AnimatePresence>
 
                 {/* Bottom Controls Bar */}
-                <div className="absolute bottom-2 md:bottom-6 left-1/2 -translate-x-1/2 z-30 w-[calc(100%-1rem)] md:w-auto max-w-[95vw]">
-                    <div className="flex items-center justify-center gap-1 md:gap-2 bg-[#1a1b1e]/95 border border-white/10 px-2.5 md:px-5 py-2 md:py-3 rounded-[2rem] shadow-[0_8px_32px_rgba(0,0,0,0.4)]">
+                <div 
+                    className="absolute bottom-0 left-1/2 -translate-x-1/2 z-30 w-[calc(100%-0.75rem)] md:w-auto max-w-[100vw] md:max-w-[95vw]"
+                    style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom, 0.5rem))' }}
+                >
+                    <div className="flex items-center justify-center gap-0.5 md:gap-2 bg-[#1a1b1e]/95 backdrop-blur-md border border-white/10 px-1.5 md:px-5 py-1.5 md:py-3 rounded-[2rem] shadow-[0_-4px_24px_rgba(0,0,0,0.3),0_8px_32px_rgba(0,0,0,0.4)] mb-2 md:mb-6">
                         
-                        <button aria-label={audioEnabled ? "Mute" : "Unmute"} onClick={() => setAudioEnabled(!audioEnabled)} className={clsx("p-2.5 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", audioEnabled ? "bg-white/10 hover:bg-white/20 text-white" : "bg-red-500 text-white hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.4)]")}>
-                            {audioEnabled ? <Mic size={18} /> : <MicOff size={18} />}
+                        <button aria-label={audioEnabled ? "Mute" : "Unmute"} onClick={() => setAudioEnabled(!audioEnabled)} className={clsx("p-2 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", audioEnabled ? "bg-white/10 hover:bg-white/20 text-white" : "bg-red-500 text-white hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.4)]")}>
+                            {audioEnabled ? <Mic size={16} className="md:hidden" /> : <MicOff size={16} className="md:hidden" />}
+                            {audioEnabled ? <Mic size={18} className="hidden md:block" /> : <MicOff size={18} className="hidden md:block" />}
                         </button>
                         
-                        <button aria-label={videoEnabled ? "Camera off" : "Camera on"} onClick={() => setVideoEnabled(!videoEnabled)} className={clsx("p-2.5 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", videoEnabled ? "bg-white/10 hover:bg-white/20 text-white" : "bg-red-500 text-white hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.4)]")}>
-                            {videoEnabled ? <Video size={18} /> : <VideoOff size={18} />}
+                        <button aria-label={videoEnabled ? "Camera off" : "Camera on"} onClick={() => setVideoEnabled(!videoEnabled)} className={clsx("p-2 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", videoEnabled ? "bg-white/10 hover:bg-white/20 text-white" : "bg-red-500 text-white hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.4)]")}>
+                            {videoEnabled ? <Video size={16} className="md:hidden" /> : <VideoOff size={16} className="md:hidden" />}
+                            {videoEnabled ? <Video size={18} className="hidden md:block" /> : <VideoOff size={18} className="hidden md:block" />}
                         </button>
 
-                        <div className="w-px h-7 bg-white/20 mx-0.5 md:mx-2 flex-shrink-0" />
+                        <div className="w-px h-7 bg-white/20 mx-0.5 md:mx-2 flex-shrink-0 hidden md:block" />
 
                         {/* Desktop-only inline buttons */}
                         <button aria-label="Share screen" onClick={handleScreenShare} className={clsx("hidden md:flex p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", screenShared ? "bg-blue-500 text-white" : "bg-white/10 hover:bg-white/20 text-white")}>
@@ -1140,22 +1169,25 @@ export default function Meetings() {
                         </button>
 
                         {/* Both mobile+desktop: People & Chat */}
-                        <button aria-label="People" onClick={() => setShowSidebar(showSidebar === 'people' ? null : 'people')} className={clsx("p-2.5 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", showSidebar === 'people' ? "bg-white/20 text-white" : "bg-white/10 hover:bg-white/20 text-white")}>
-                            <Users size={18} />
+                        <button aria-label="People" onClick={() => setShowSidebar(showSidebar === 'people' ? null : 'people')} className={clsx("p-2 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", showSidebar === 'people' ? "bg-white/20 text-white" : "bg-white/10 hover:bg-white/20 text-white")}>
+                            <Users size={16} className="md:hidden" />
+                            <Users size={18} className="hidden md:block" />
                         </button>
-                        <button aria-label="Chat" onClick={() => setShowSidebar(showSidebar === 'chat' ? null : 'chat')} className={clsx("p-2.5 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", showSidebar === 'chat' ? "bg-white/20 text-white" : "bg-white/10 hover:bg-white/20 text-white")}>
-                            <MessageSquare size={18} />
+                        <button aria-label="Chat" onClick={() => setShowSidebar(showSidebar === 'chat' ? null : 'chat')} className={clsx("p-2 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", showSidebar === 'chat' ? "bg-white/20 text-white" : "bg-white/10 hover:bg-white/20 text-white")}>
+                            <MessageSquare size={16} className="md:hidden" />
+                            <MessageSquare size={18} className="hidden md:block" />
                         </button>
 
                         {/* Mobile More button */}
-                        <button aria-label="More options" onClick={() => setShowMobileMore(!showMobileMore)} className={clsx("md:hidden p-2.5 rounded-2xl transition-all duration-300 flex-shrink-0", showMobileMore ? "bg-white/20 text-white" : "bg-white/10 hover:bg-white/20 text-white")}>
-                            <MoreHorizontal size={18} />
+                        <button aria-label="More options" onClick={() => setShowMobileMore(!showMobileMore)} className={clsx("md:hidden p-2 rounded-2xl transition-all duration-300 flex-shrink-0", showMobileMore ? "bg-white/20 text-white" : "bg-white/10 hover:bg-white/20 text-white")}>
+                            <MoreHorizontal size={16} />
                         </button>
 
-                        <div className="w-px h-7 bg-white/20 mx-0.5 md:mx-2 flex-shrink-0" />
+                        <div className="w-px h-5 md:h-7 bg-white/20 mx-0 md:mx-2 flex-shrink-0" />
 
-                        <button aria-label="Leave meeting" onClick={handleLeaveMeeting} className="px-3 md:px-5 py-2.5 md:py-3.5 rounded-2xl bg-red-500 text-white font-bold transition-all duration-300 hover:bg-red-600 hover:scale-105 shadow-[0_0_20px_rgba(239,68,68,0.4)] flex items-center gap-2 flex-shrink-0 text-sm">
-                            <PhoneOff size={16} />
+                        <button aria-label="Leave meeting" onClick={handleLeaveMeeting} className="px-2.5 md:px-5 py-2 md:py-3.5 rounded-2xl bg-red-500 text-white font-bold transition-all duration-300 hover:bg-red-600 hover:scale-105 shadow-[0_0_20px_rgba(239,68,68,0.4)] flex items-center gap-1.5 md:gap-2 flex-shrink-0 text-sm">
+                            <PhoneOff size={14} className="md:hidden" />
+                            <PhoneOff size={16} className="hidden md:block" />
                             <span className="hidden sm:inline">Leave</span>
                         </button>
                     </div>
@@ -1200,7 +1232,7 @@ export default function Meetings() {
                             </button>
                         </div>
                         
-                        <div className="flex-1 overflow-y-auto p-3 md:p-4 pb-6 md:pb-4 custom-scrollbar">
+                        <div className="flex-1 overflow-y-auto p-3 md:p-4 pb-8 md:pb-4 custom-scrollbar">
                             {showSidebar === 'effects' && (
                                 <div className="space-y-6 animate-fade-in">
                                     <div>
@@ -1483,7 +1515,7 @@ export default function Meetings() {
                                         )}
                                         <div ref={chatEndRef} />
                                     </div>
-                                    <div className="mt-2 pt-2 md:mt-3 md:pt-3 border-t border-white/10 shrink-0 pb-2 md:pb-0">
+                                    <div className="mt-2 pt-2 md:mt-3 md:pt-3 border-t border-white/10 shrink-0 pb-6 md:pb-0">
                                         <form onSubmit={(e) => { e.preventDefault(); handleSendChat(); }} className="flex items-center gap-2">
                                             <button type="button" onClick={() => chatFileInputRef.current?.click()} className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white/50 hover:text-amber-400 transition-colors flex-shrink-0" title="Attach file">
                                                 <Paperclip size={16} />

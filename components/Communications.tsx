@@ -475,7 +475,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
                     senderId: userId,
                     senderName: user.name,
                     senderRole: user.role as any,
-                    content: `Join my live video meeting! 🚀\nhttps://prism.os/meet/${mId}`,
+                    content: `📹 Join my live video meeting!\n\nMeeting ID: ${mId}\n\nGo to Video Meet → Enter code to join`,
                     timestamp: new Date().toISOString()
                 } as any);
                 onUpdateAppData(newData);
