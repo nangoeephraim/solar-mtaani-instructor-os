@@ -153,6 +153,21 @@ const AppContent: React.FC = () => {
     }
   }, [userLevel, showToast]);
 
+  // Listen for the 'navigate-to-communications' event dispatched when a user
+  // clicks "Join Now" on a broadcast meeting card from any chat channel.
+  // This ensures the Communications view (which embeds Meetings) is active
+  // before the 'join-meeting' event fires 350ms later.
+  useEffect(() => {
+    const handler = () => {
+      const minLevel = VIEW_MIN_ROLE['communications'] || 1;
+      if (userLevel >= minLevel) {
+        setCurrentView('communications');
+      }
+    };
+    window.addEventListener('navigate-to-communications', handler);
+    return () => window.removeEventListener('navigate-to-communications', handler);
+  }, [userLevel]);
+
   // Fetch initial data asynchronously from Supabase
   useEffect(() => {
     let isMounted = true;

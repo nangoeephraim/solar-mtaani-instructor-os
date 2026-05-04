@@ -76,9 +76,18 @@ const renderMarkdown = (text: string): React.ReactNode[] => {
                                     </div>
                                 </div>
                                 <button 
-                                    onClick={() => window.dispatchEvent(new CustomEvent('join-meeting', { detail: mId }))}
-                                    className="bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] px-4 py-2 rounded-lg text-sm font-bold shadow-md hover:scale-105 active:scale-95 transition-all whitespace-nowrap"
+                                    onClick={() => {
+                                        // Step 1: ensure the user is on the Communications view
+                                        // (Meetings is embedded inside Communications)
+                                        window.dispatchEvent(new CustomEvent('navigate-to-communications'));
+                                        // Step 2: after a brief delay for the view to mount, auto-join
+                                        setTimeout(() => {
+                                            window.dispatchEvent(new CustomEvent('join-meeting', { detail: mId }));
+                                        }, 350);
+                                    }}
+                                    className="bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] px-4 py-2 rounded-lg text-sm font-bold shadow-md hover:scale-105 active:scale-95 transition-all whitespace-nowrap flex items-center gap-2"
                                 >
+                                    <Video size={14} />
                                     Join Now
                                 </button>
                             </div>
@@ -463,6 +472,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
     // Global meeting listeners
     useEffect(() => {
         const handleJoin = (e: any) => {
+            // Switch to embedded video meeting panel
             setActiveChannelId('video_meetings');
         };
         const handleBroadcast = async (e: any) => {
@@ -494,7 +504,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
                     senderId: userId,
                     senderName: user.name,
                     senderRole: user.role as any,
-                    content: `📹 **Live Meeting in progress!**\n\nMeeting ID: \`${mId}\`\n\nOpen the **Video Meet** tab → Enter the code above to join.`,
+                    content: `📹 **Live Meeting in progress!**\n\nJoin the session now:\nhttps://prism.os/meet/${mId}\n\nTap **Join Now** to open the video meeting instantly.`,
                     timestamp: new Date().toISOString()
                 } as any);
                 onUpdateAppData(newData);

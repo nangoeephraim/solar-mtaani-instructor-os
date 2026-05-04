@@ -688,15 +688,48 @@ export default function Meetings() {
     }, [chatMessages, showSidebar]);
 
     useEffect(() => {
-        const handleJoin = (e: any) => {
+        const handleJoin = async (e: any) => {
             const mId = e.detail;
-            if (mId) {
-                setMeetingId(mId);
+            if (!mId) return;
+
+            // Pre-fill the meeting ID so it's visible immediately
+            setMeetingId(mId);
+
+            // If already in a meeting, don't restart
+            if (inMeeting) return;
+
+            // Auto-join: stop the camera preview first, then join with the provided ID
+            try {
+                // Stop preview if active
+                if (previewStream) {
+                    previewStream.getTracks().forEach(t => t.stop());
+                    setPreviewStream(null);
+                }
+                const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                setStream(mediaStream);
+                setInMeeting(true);
+                setHasError(null);
+
+                // Subscribe to the Supabase broadcast channel for this meeting
+                const broadcastName = `prism-meet-chat:${mId}`;
+                const ch = supabase.channel(broadcastName, { config: { broadcast: { self: false } } });
+                ch.on('broadcast', { event: 'chat' }, (payload: any) => {
+                    const msg = payload.payload as MeetingMessage;
+                    setChatMessages(prev => [...prev, { ...msg, timestamp: new Date(msg.timestamp), isSelf: false }]);
+                }).on('broadcast', { event: 'file-share' }, (payload: any) => {
+                    const f = payload.payload;
+                    setMeetingFiles(prev => [...prev, { ...f, timestamp: new Date(f.timestamp) }]);
+                }).subscribe();
+                chatChannelRef.current = ch;
+            } catch (err) {
+                console.error('[join-meeting] Auto-join failed:', err);
+                setHasError('Could not access camera/microphone. Please check permissions and try joining manually.');
             }
         };
         window.addEventListener('join-meeting', handleJoin);
         return () => window.removeEventListener('join-meeting', handleJoin);
-    }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [inMeeting, previewStream]);
 
     if (!inMeeting) {
         const { greeting, icon } = getTimeGreeting(userName);
