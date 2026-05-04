@@ -545,16 +545,15 @@ export default function Meetings() {
     };
 
     const copyMeetingLink = () => {
-        const link = `Meeting ID: ${meetingId}`;
-        navigator.clipboard.writeText(link);
+        navigator.clipboard.writeText(meetingId).catch(() => {});
         setCopied(true);
-        addToast('📋', 'Meeting ID copied to clipboard!');
+        addToast('Meeting ID copied!', '📋');
         setTimeout(() => setCopied(false), 2000);
     };
 
     const shareMeetingToChat = () => {
         window.dispatchEvent(new CustomEvent('broadcast-meeting', { detail: meetingId }));
-        addToast('📤', 'Meeting link shared to chat!');
+        addToast('Shared to Communications!', '📤');
     };
 
     const handleSendChat = () => {
@@ -864,61 +863,73 @@ export default function Meetings() {
             {/* Main Content */}
             <div className={clsx("flex-1 flex flex-col relative z-10 transition-all duration-300", showSidebar ? "lg:mr-96" : "")}>
                 
-                {/* Header — compact on mobile */}
-                <div className="absolute top-0 left-0 right-0 p-2 md:p-4 flex justify-between items-center bg-[#08090a]/90 z-20 overflow-hidden">
-                    <div className="flex items-center gap-2 md:gap-3 min-w-0">
-                        {isRecording && (
-                            <div className="bg-red-500/10 border border-red-500/30 px-2 md:px-3 py-1 md:py-1.5 rounded-xl flex items-center gap-1.5 text-[10px] md:text-xs font-bold text-red-400 animate-pulse flex-shrink-0">
-                                <Circle size={8} className="fill-red-400" /> REC
+                {/* Header — 2-section on mobile to prevent overflow */}
+                <div className="absolute top-0 left-0 right-0 z-20 bg-[#08090a]/95 border-b border-white/5">
+                    {/* Single unified row — items constrained & overflow-hidden */}
+                    <div className="flex items-center justify-between px-2 md:px-4 py-2 md:py-3 gap-2">
+                        {/* LEFT: recording badge + meeting ID */}
+                        <div className="flex items-center gap-1.5 md:gap-2 min-w-0 flex-1">
+                            {isRecording && (
+                                <div className="bg-red-500/10 border border-red-500/30 px-2 py-1 rounded-lg flex items-center gap-1 text-[9px] md:text-xs font-bold text-red-400 animate-pulse flex-shrink-0">
+                                    <Circle size={7} className="fill-red-400" /> REC
+                                </div>
+                            )}
+                            <button
+                                onClick={copyMeetingLink}
+                                className="bg-white/8 hover:bg-white/15 border border-white/10 rounded-lg md:rounded-xl px-2.5 md:px-3.5 py-1.5 flex items-center gap-1.5 md:gap-2 cursor-pointer transition-colors group min-w-0 max-w-[130px] md:max-w-xs"
+                            >
+                                <div className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0" />
+                                <span className="text-[10px] md:text-xs font-bold font-google text-white truncate">{meetingId}</span>
+                                <span className="text-white/40 group-hover:text-white/70 transition-colors flex-shrink-0">
+                                    {copied ? <CheckCircle2 size={11} className="text-green-400" /> : <Copy size={11} />}
+                                </span>
+                            </button>
+                            {/* Timer — always visible */}
+                            <div className="flex-shrink-0"><MeetingTimer active={inMeeting} /></div>
+                            {/* Connection — desktop only */}
+                            <div className={clsx(
+                                "px-2 py-1 rounded-lg items-center gap-1 text-[10px] font-bold hidden lg:flex border flex-shrink-0",
+                                connectionQuality === 'good' ? "bg-green-500/10 border-green-500/20 text-green-400" :
+                                connectionQuality === 'fair' ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-400" :
+                                "bg-red-500/10 border-red-500/20 text-red-400"
+                            )}>
+                                {connectionQuality === 'poor' ? <WifiOff size={11} /> : <Wifi size={11} />}
+                                {connectionQuality === 'good' ? 'Good' : connectionQuality === 'fair' ? 'Fair' : 'Poor'}
                             </div>
-                        )}
-                        <div className="bg-white/10 px-2.5 md:px-4 py-1.5 md:py-2 rounded-xl md:rounded-2xl border border-white/10 flex items-center gap-1.5 md:gap-2.5 text-xs md:text-sm font-google font-bold cursor-pointer hover:bg-white/20 transition-colors group min-w-0 flex-shrink" onClick={copyMeetingLink}>
-                            <div className="w-1.5 h-1.5 md:w-2 md:h-2 rounded-full bg-red-500 flex-shrink-0" />
-                            <span className="truncate">{meetingId}</span>
-                            <span className="opacity-0 group-hover:opacity-100 transition-opacity text-white/50 flex-shrink-0">
-                                {copied ? <CheckCircle2 size={12} className="text-green-400" /> : <Copy size={12} />}
-                            </span>
+                            {/* Encrypted — desktop only */}
+                            <div className="hidden lg:flex bg-green-500/10 border border-green-500/20 text-green-400 px-2 py-1 rounded-lg items-center gap-1 text-[10px] font-bold flex-shrink-0">
+                                <AlertCircle size={11} /> Encrypted
+                            </div>
+                            {/* Share to Chat — tablet+ only (mobile uses More menu) */}
+                            <button
+                                onClick={shareMeetingToChat}
+                                className="hidden sm:flex bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-500/30 px-2.5 py-1.5 rounded-lg items-center gap-1.5 text-[10px] md:text-xs font-bold transition-colors flex-shrink-0"
+                            >
+                                <Share2 size={11} /> Share to Chat
+                            </button>
                         </div>
-                        <button 
-                            onClick={() => window.dispatchEvent(new CustomEvent('broadcast-meeting', { detail: meetingId }))}
-                            className="flex bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 border border-blue-500/30 px-2 md:px-3 py-1.5 rounded-xl items-center gap-1 md:gap-1.5 text-[10px] md:text-xs font-bold transition-colors flex-shrink-0"
-                        >
-                            <Share2 size={12} />
-                            <span className="hidden sm:inline">Share to Chat</span>
-                            <span className="sm:hidden">Share</span>
-                        </button>
-                        <div className={clsx(
-                            "px-2.5 py-1.5 rounded-xl flex items-center gap-1.5 text-xs font-bold hidden lg:flex border flex-shrink-0",
-                            connectionQuality === 'good' ? "bg-green-500/10 border-green-500/20 text-green-400" :
-                            connectionQuality === 'fair' ? "bg-yellow-500/10 border-yellow-500/20 text-yellow-400" :
-                            "bg-red-500/10 border-red-500/20 text-red-400"
-                        )}>
-                            {connectionQuality === 'poor' ? <WifiOff size={12} /> : <Wifi size={12} />}
-                            {connectionQuality === 'good' ? 'Good' : connectionQuality === 'fair' ? 'Fair' : 'Poor'}
+                        {/* RIGHT: layout + fullscreen + PiP */}
+                        <div className="flex items-center gap-1 md:gap-1.5 flex-shrink-0">
+                            <button onClick={togglePiP} className="p-1.5 md:p-2 rounded-lg bg-white/8 hover:bg-white/15 border border-white/10 transition-colors hidden md:flex items-center justify-center" title="Picture-in-Picture">
+                                <PictureInPicture2 size={14} />
+                            </button>
+                            <button onClick={() => setLayout(layout === 'grid' ? 'spotlight' : 'grid')} className="p-1.5 md:p-2 rounded-lg bg-white/8 hover:bg-white/15 border border-white/10 transition-colors flex items-center justify-center" title="Toggle Layout">
+                                <LayoutGrid size={14} />
+                            </button>
+                            <button onClick={toggleFullscreen} className="p-1.5 md:p-2 rounded-lg bg-white/8 hover:bg-white/15 border border-white/10 transition-colors hidden sm:flex items-center justify-center" title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}>
+                                {isFullscreen ? <Minimize size={14} /> : <Maximize size={14} />}
+                            </button>
                         </div>
-                        <div className="hidden lg:flex bg-green-500/10 border border-green-500/20 text-green-400 px-2.5 py-1.5 rounded-xl items-center gap-1.5 text-xs font-bold flex-shrink-0">
-                            <AlertCircle size={12} /> Encrypted
-                        </div>
-                        <div className="hidden sm:block flex-shrink-0"><MeetingTimer active={inMeeting} /></div>
-                    </div>
-                    <div className="flex gap-1.5 md:gap-2 flex-shrink-0">
-                        <button onClick={togglePiP} className="p-2 md:p-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 transition-colors hidden md:block" title="Picture-in-Picture">
-                            <PictureInPicture2 size={16} />
-                        </button>
-                        <button onClick={() => setLayout(layout === 'grid' ? 'spotlight' : 'grid')} className="p-2 md:p-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 transition-colors" title="Toggle Layout">
-                            <LayoutGrid size={16} />
-                        </button>
-                        <button onClick={toggleFullscreen} className="p-2 md:p-2.5 rounded-xl bg-white/10 hover:bg-white/20 border border-white/10 transition-colors hidden sm:block" title={isFullscreen ? "Exit Fullscreen" : "Fullscreen"}>
-                            {isFullscreen ? <Minimize size={16} /> : <Maximize size={16} />}
-                        </button>
                     </div>
                 </div>
 
-                {/* Video Grid — optimized padding for mobile */}
-                <div className="flex-1 p-2 md:p-6 flex items-center justify-center pt-12 md:pt-20 pb-24 md:pb-28">
+                {/* Video Grid */}
+                <div className="flex-1 flex items-center justify-center p-2 md:p-6 pt-14 md:pt-20 pb-24 md:pb-28">
                     <div className={clsx(
-                        "w-full h-full grid gap-2 md:gap-6 max-w-7xl mx-auto",
-                        screenShared ? "grid-cols-1 grid-rows-[2fr_1fr] md:grid-cols-3 md:grid-rows-3" : "grid-cols-1 grid-rows-1"
+                        "w-full h-full grid gap-2 md:gap-4 max-w-7xl mx-auto",
+                        screenShared
+                            ? "grid-rows-[minmax(0,2fr)_minmax(0,1fr)] md:grid-cols-3 md:grid-rows-3"
+                            : "grid-cols-1 grid-rows-1"
                     )}>
                         {/* Screen Share Spot */}
                         {screenShared && (
@@ -947,8 +958,8 @@ export default function Meetings() {
                             animate={{ opacity: 1, scale: 1 }}
                             transition={{ duration: 0.3 }}
                             className={clsx(
-                                "relative rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl bg-[#111214] flex items-center justify-center group",
-                                screenShared ? "col-span-1 row-span-1 md:col-span-1 md:row-span-3 aspect-video md:aspect-auto" : "w-full h-full"
+                                "relative rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl bg-[#111214] flex items-center justify-center group min-h-0",
+                                screenShared ? "col-span-1 row-span-1 md:col-span-1 md:row-span-3" : "w-full h-full"
                             )}
                             style={{
                                 boxShadow: audioEnabled && audioLevel > 0.05 
@@ -1066,7 +1077,7 @@ export default function Meetings() {
                                 <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mb-6" />
                                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-y-5 gap-x-3">
                                     {[
-                                        { icon: <MonitorUp size={22} />, label: screenShared ? 'Stop Share' : 'Share', onClick: handleScreenShare, active: screenShared, color: 'blue' },
+                                        { icon: <MonitorUp size={22} />, label: screenShared ? 'Stop Share' : 'Screen', onClick: handleScreenShare, active: screenShared, color: 'blue' },
                                         { icon: <Hand size={22} />, label: handRaised ? 'Lower' : 'Raise', onClick: toggleHandRaise, active: handRaised, color: 'yellow' },
                                         { icon: <Captions size={22} />, label: captionsEnabled ? 'CC Off' : 'CC On', onClick: () => setCaptionsEnabled(!captionsEnabled), active: captionsEnabled, color: 'blue' },
                                         { icon: <Circle size={22} className={clsx(isRecording && "fill-white")} />, label: isRecording ? 'Stop Rec' : 'Record', onClick: toggleRecording, active: isRecording, color: 'red' },
@@ -1074,6 +1085,7 @@ export default function Meetings() {
                                         { icon: <FileText size={22} />, label: 'Notes', onClick: () => { setShowSidebar(showSidebar === 'notes' ? null : 'notes'); setShowMobileMore(false); }, active: showSidebar === 'notes', color: 'emerald' },
                                         { icon: <Sparkles size={22} />, label: 'Effects', onClick: () => { setShowSidebar(showSidebar === 'effects' ? null : 'effects'); setShowMobileMore(false); }, active: showSidebar === 'effects', color: 'purple' },
                                         { icon: <Paperclip size={22} />, label: 'Files', onClick: () => { setShowSidebar(showSidebar === 'files' ? null : 'files'); setShowMobileMore(false); }, active: showSidebar === 'files', color: 'amber' },
+                                        { icon: <Share2 size={22} />, label: 'Broadcast', onClick: () => { shareMeetingToChat(); setShowMobileMore(false); }, active: false, color: 'blue' },
                                         { icon: <Copy size={22} />, label: 'Copy ID', onClick: () => { copyMeetingLink(); setShowMobileMore(false); }, active: false, color: 'blue' },
                                     ].map((item, i) => (
                                         <button
@@ -1105,10 +1117,10 @@ export default function Meetings() {
 
                 {/* Bottom Controls Bar */}
                 <div 
-                    className="absolute bottom-0 left-1/2 -translate-x-1/2 z-30 w-[calc(100%-0.75rem)] md:w-auto max-w-[100vw] md:max-w-[95vw]"
+                    className="absolute bottom-0 left-0 right-0 z-30 flex justify-center"
                     style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom, 0.5rem))' }}
                 >
-                    <div className="flex items-center justify-center gap-0.5 md:gap-2 bg-[#1a1b1e]/95 backdrop-blur-md border border-white/10 px-1.5 md:px-5 py-1.5 md:py-3 rounded-[2rem] shadow-[0_-4px_24px_rgba(0,0,0,0.3),0_8px_32px_rgba(0,0,0,0.4)] mb-2 md:mb-6">
+                    <div className="flex items-center justify-center gap-0.5 md:gap-2 bg-[#1a1b1e]/95 md:backdrop-blur-md border border-white/10 px-2 md:px-5 py-1.5 md:py-3 rounded-[2rem] shadow-[0_-4px_24px_rgba(0,0,0,0.3),0_8px_32px_rgba(0,0,0,0.4)] mb-2 md:mb-6 mx-2 overflow-x-auto max-w-[calc(100vw-1rem)]">
                         
                         <button aria-label={audioEnabled ? "Mute" : "Unmute"} onClick={() => setAudioEnabled(!audioEnabled)} className={clsx("p-2 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", audioEnabled ? "bg-white/10 hover:bg-white/20 text-white" : "bg-red-500 text-white hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.4)]")}>
                             {audioEnabled ? <Mic size={16} className="md:hidden" /> : <MicOff size={16} className="md:hidden" />}

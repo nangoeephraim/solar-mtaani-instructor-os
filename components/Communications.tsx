@@ -467,19 +467,41 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
         };
         const handleBroadcast = async (e: any) => {
             const mId = e.detail;
-            const targetChannel = channels.find(c => c.type === 'announcement') || channels.find(c => c.type === 'chat');
-            if (targetChannel && user) {
+            if (!mId) {
+                console.warn('[broadcast-meeting] No meeting ID in event detail');
+                return;
+            }
+            // Try in priority order: announcement → chat → any first channel
+            const targetChannel =
+                channels.find(c => c.type === 'announcement') ||
+                channels.find(c => c.type === 'chat') ||
+                channels[0];
+
+            if (!targetChannel) {
+                console.warn('[broadcast-meeting] No channels available to broadcast to');
+                showToast('No chat channels found to share the meeting link', 'error');
+                return;
+            }
+            if (!user) {
+                console.warn('[broadcast-meeting] No authenticated user');
+                showToast('You must be logged in to share a meeting', 'error');
+                return;
+            }
+            try {
                 const newData = await addChatMessage(data, {
                     id: crypto.randomUUID(),
                     channelId: targetChannel.id,
                     senderId: userId,
                     senderName: user.name,
                     senderRole: user.role as any,
-                    content: `📹 Join my live video meeting!\n\nMeeting ID: ${mId}\n\nGo to Video Meet → Enter code to join`,
+                    content: `📹 **Live Meeting in progress!**\n\nMeeting ID: \`${mId}\`\n\nOpen the **Video Meet** tab → Enter the code above to join.`,
                     timestamp: new Date().toISOString()
                 } as any);
                 onUpdateAppData(newData);
-                showToast('Meeting link broadcasted to ' + targetChannel.name, 'success');
+                showToast(`Meeting link shared to #${targetChannel.name}`, 'success');
+            } catch (err) {
+                console.error('[broadcast-meeting] Failed to send message:', err);
+                showToast('Failed to share meeting link', 'error');
             }
         };
 

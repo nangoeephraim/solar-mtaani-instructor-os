@@ -6,7 +6,8 @@ import {
   ArrowUpRight, Zap, Monitor, Calendar, Play, ChevronRight,
   Sparkles, Sun, Moon, Sunrise, Coffee, Target, TrendingUp,
   Bell, Settings, BarChart3, GraduationCap, UserCheck, Lightbulb,
-  TrendingDown, XCircle, Timer, ArrowRight, Activity, Megaphone
+  TrendingDown, XCircle, Timer, ArrowRight, Activity, Megaphone,
+  Video, FileText, MessageSquare, CheckSquare, ListTodo, MessageCircle
 } from 'lucide-react';
 import { AreaChart, Area, ResponsiveContainer } from 'recharts';
 import clsx from 'clsx';
@@ -293,6 +294,49 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onNavigate }) => {
     return analyzeData(data).slice(0, 3);
   }, [data, currentSettings.preferences?.enableAI]);
 
+  // ── Unread Messages ──
+  const unreadMessagesCount = useMemo(() => {
+    if (!data.communications || !user) return 0;
+    let count = 0;
+    data.communications.channels.forEach(ch => {
+      const msgs = data.communications!.messages[ch.id] || [];
+      const lastRead = ch.lastReadBy?.[user.id];
+      if (!lastRead) {
+         count += msgs.filter(m => m.senderId !== user.id).length;
+      } else {
+         const lastReadDate = new Date(lastRead).getTime();
+         count += msgs.filter(m => m.senderId !== user.id && new Date(m.timestamp).getTime() > lastReadDate).length;
+      }
+    });
+    return count;
+  }, [data.communications, user]);
+
+  // ── Action Items (Smart Tasks) ──
+  const actionItems = useMemo(() => {
+    const items = [];
+    if (currentClass) {
+      items.push({ id: 'att', title: `Take attendance for ${currentClass.grade} ${currentClass.subject}`, icon: <CheckSquare size={16} />, action: () => onNavigate('attendance'), color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-900/20', border: 'border-emerald-100 dark:border-emerald-900/30' });
+      items.push({ id: 'meet', title: `Join video meeting for ${currentClass.subject}`, icon: <Video size={16} />, action: () => onNavigate('communications'), color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-900/20', border: 'border-blue-100 dark:border-blue-900/30' });
+    } else if (nextClass) {
+      items.push({ id: 'prep', title: `Prepare for next class: ${nextClass.subject}`, icon: <FileText size={16} />, action: () => onNavigate('resources'), color: 'text-indigo-500', bg: 'bg-indigo-50 dark:bg-indigo-900/20', border: 'border-indigo-100 dark:border-indigo-900/30' });
+    }
+    
+    if (atRiskStudents.length > 0) {
+      items.push({ id: 'risk', title: `Review ${atRiskStudents.length} at-risk student${atRiskStudents.length > 1 ? 's' : ''}`, icon: <AlertTriangle size={16} />, action: () => onNavigate('student-analytics'), color: 'text-amber-500', bg: 'bg-amber-50 dark:bg-amber-900/20', border: 'border-amber-100 dark:border-amber-900/30' });
+    }
+    
+    if (unreadMessagesCount > 0) {
+      items.push({ id: 'msgs', title: `Read ${unreadMessagesCount} unread message${unreadMessagesCount > 1 ? 's' : ''}`, icon: <MessageSquare size={16} />, action: () => onNavigate('communications'), color: 'text-purple-500', bg: 'bg-purple-50 dark:bg-purple-900/20', border: 'border-purple-100 dark:border-purple-900/30' });
+    }
+
+    const pendingPayments = data.payments?.filter(p => p.status?.toLowerCase() === 'pending').length || 0;
+    if (pendingPayments > 0 && (user?.role === 'admin' || user?.role === 'instructor')) {
+       items.push({ id: 'fees', title: `Review ${pendingPayments} pending payment${pendingPayments > 1 ? 's' : ''}`, icon: <AlertTriangle size={16}/>, action: () => onNavigate('fees'), color: 'text-red-500', bg: 'bg-red-50 dark:bg-red-900/20', border: 'border-red-100 dark:border-red-900/30' });
+    }
+
+    return items;
+  }, [currentClass, nextClass, atRiskStudents.length, unreadMessagesCount, onNavigate, data.payments, user?.role]);
+
   const heroTarget = currentClass || nextClass;
 
   /* ─────────── RENDER ─────────── */
@@ -334,21 +378,42 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onNavigate }) => {
 
                 {/* Hero Actions */}
                 <div className="flex flex-wrap gap-3 mt-5">
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => onNavigate('schedule')}
-                    className="px-5 py-2.5 bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] rounded-xl font-bold text-sm shadow-md hover:shadow-lg transition-shadow flex items-center gap-2"
-                  >
-                    {heroTarget ? <><Play size={16} fill="currentColor" /> Start Class</> : <><Calendar size={16} /> View Schedule</>}
-                  </motion.button>
-                  {heroTarget && (
-                    <button
-                      onClick={() => onNavigate('attendance')}
-                      className="px-5 py-2.5 bg-[var(--md-sys-color-surface)] text-[var(--md-sys-color-on-surface)] border border-[var(--md-sys-color-outline)] rounded-xl font-bold text-sm hover:bg-[var(--md-sys-color-surface-variant)] transition-colors shadow-sm"
-                    >
-                      Take Attendance
-                    </button>
+                  {currentClass ? (
+                    <>
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => onNavigate('communications')}
+                        className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold text-sm shadow-md hover:shadow-lg transition-shadow flex items-center gap-2"
+                      >
+                        <Video size={16} fill="currentColor" /> Join Class Meeting
+                      </motion.button>
+                      <button
+                        onClick={() => onNavigate('attendance')}
+                        className="px-5 py-2.5 bg-[var(--md-sys-color-surface)] text-[var(--md-sys-color-on-surface)] border border-[var(--md-sys-color-outline)] rounded-xl font-bold text-sm hover:bg-[var(--md-sys-color-surface-variant)] transition-colors shadow-sm flex items-center gap-2"
+                      >
+                        <CheckSquare size={16} /> Take Attendance
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <motion.button
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => onNavigate('schedule')}
+                        className="px-5 py-2.5 bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] rounded-xl font-bold text-sm shadow-md hover:shadow-lg transition-shadow flex items-center gap-2"
+                      >
+                        <Calendar size={16} /> View Schedule
+                      </motion.button>
+                      {nextClass && (
+                        <button
+                          onClick={() => onNavigate('resources')}
+                          className="px-5 py-2.5 bg-[var(--md-sys-color-surface)] text-[var(--md-sys-color-on-surface)] border border-[var(--md-sys-color-outline)] rounded-xl font-bold text-sm hover:bg-[var(--md-sys-color-surface-variant)] transition-colors shadow-sm flex items-center gap-2"
+                        >
+                          <FileText size={16} /> Lesson Resources
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -510,24 +575,68 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onNavigate }) => {
         {/* ═══ BOTTOM LEFT (8) ═══ */}
         <div className="xl:col-span-8 flex flex-col gap-6">
 
-          {/* Quick Actions */}
+          {/* Command Center: Quick Actions & Smart Tasks */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.45 }}
-            className="bg-[var(--md-sys-color-surface)] rounded-3xl border border-[var(--md-sys-color-outline-variant)] shadow-sm p-6"
+            className="grid grid-cols-1 md:grid-cols-2 gap-6"
           >
-            <div className="flex items-center gap-3 mb-6">
-              <Zap size={18} className="text-amber-500" />
-              <h3 className="font-google font-bold text-[var(--md-sys-color-on-surface)] text-sm uppercase tracking-wider">Quick Actions</h3>
+            <div className="bg-[var(--md-sys-color-surface)] rounded-3xl border border-[var(--md-sys-color-outline-variant)] shadow-sm p-6 flex flex-col">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                  <Zap size={18} className="text-amber-500" />
+                  <h3 className="font-google font-bold text-[var(--md-sys-color-on-surface)] text-sm uppercase tracking-wider">Quick Actions</h3>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-y-6 gap-x-4 flex-1 content-start">
+                <QuickAction icon={<Calendar size={22} />} label="Schedule" bg="bg-gradient-to-br from-blue-500 to-indigo-500" onClick={() => onNavigate('schedule')} delay={0.1} />
+                <QuickAction icon={<Users size={22} />} label="Students" bg="bg-gradient-to-br from-purple-500 to-pink-500" onClick={() => onNavigate('students')} delay={0.15} />
+                <QuickAction icon={<UserCheck size={22} />} label="Attendance" bg="bg-gradient-to-br from-emerald-500 to-green-500" onClick={() => onNavigate('attendance')} delay={0.2} />
+                <QuickAction icon={<BarChart3 size={22} />} label="Analytics" bg="bg-gradient-to-br from-cyan-500 to-blue-500" onClick={() => onNavigate('analytics')} delay={0.25} />
+                <QuickAction icon={<GraduationCap size={22} />} label="Assess" bg="bg-gradient-to-br from-orange-500 to-red-500" onClick={() => onNavigate('assessment')} delay={0.3} />
+                <QuickAction icon={<Settings size={22} />} label="Settings" bg="bg-gradient-to-br from-gray-500 to-slate-600" onClick={() => onNavigate('settings')} delay={0.35} />
+              </div>
             </div>
-            <div className="grid grid-cols-3 sm:grid-cols-6 gap-y-6 gap-x-4">
-              <QuickAction icon={<Calendar size={22} />} label="Schedule" bg="bg-gradient-to-br from-blue-500 to-indigo-500" onClick={() => onNavigate('schedule')} delay={0.1} />
-              <QuickAction icon={<Users size={22} />} label="Students" bg="bg-gradient-to-br from-purple-500 to-pink-500" onClick={() => onNavigate('students')} delay={0.15} />
-              <QuickAction icon={<UserCheck size={22} />} label="Attendance" bg="bg-gradient-to-br from-emerald-500 to-green-500" onClick={() => onNavigate('attendance')} delay={0.2} />
-              <QuickAction icon={<BarChart3 size={22} />} label="Analytics" bg="bg-gradient-to-br from-cyan-500 to-blue-500" onClick={() => onNavigate('analytics')} delay={0.25} />
-              <QuickAction icon={<GraduationCap size={22} />} label="Assess" bg="bg-gradient-to-br from-orange-500 to-red-500" onClick={() => onNavigate('assessment')} delay={0.3} />
-              <QuickAction icon={<Settings size={22} />} label="Settings" bg="bg-gradient-to-br from-gray-500 to-slate-600" onClick={() => onNavigate('settings')} delay={0.35} />
+
+            <div className="bg-[var(--md-sys-color-surface)] rounded-3xl border border-[var(--md-sys-color-outline-variant)] shadow-sm p-6 flex flex-col">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <ListTodo size={18} className="text-emerald-500" />
+                  <h3 className="font-google font-bold text-[var(--md-sys-color-on-surface)] text-sm uppercase tracking-wider">Smart Tasks</h3>
+                </div>
+                {actionItems.length > 0 && (
+                  <span className="bg-[var(--md-sys-color-surface-variant)] text-[var(--md-sys-color-on-surface-variant)] text-xs font-black px-2.5 py-1 rounded-lg">
+                    {actionItems.length}
+                  </span>
+                )}
+              </div>
+              <div className="space-y-3 flex-1 overflow-y-auto pr-1 custom-scrollbar max-h-[220px]">
+                {actionItems.length > 0 ? (
+                  actionItems.map((item, idx) => (
+                    <motion.div
+                      key={item.id}
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.1 * idx }}
+                      onClick={item.action}
+                      className={clsx('p-3 rounded-2xl border flex items-center gap-3 cursor-pointer transition-all hover:shadow-sm hover:-translate-y-0.5', item.bg, item.border)}
+                    >
+                      <div className={clsx('p-2 rounded-xl bg-white dark:bg-black/20 shadow-sm', item.color)}>
+                        {item.icon}
+                      </div>
+                      <span className={clsx('font-bold text-sm flex-1', item.color.replace('text-', 'text-').replace('-500', '-700 dark:text-').replace('-700 dark:text-', '-700 dark:text-'))}>{item.title}</span>
+                      <ChevronRight size={16} className="opacity-50" />
+                    </motion.div>
+                  ))
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center text-center py-4 opacity-60">
+                    <CheckSquare size={32} className="text-emerald-500 mb-2" />
+                    <p className="text-sm font-bold text-[var(--md-sys-color-on-surface)]">All caught up!</p>
+                    <p className="text-[11px] text-[var(--md-sys-color-secondary)]">No pending actions right now.</p>
+                  </div>
+                )}
+              </div>
             </div>
           </motion.div>
 
@@ -600,19 +709,31 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onNavigate }) => {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: idx * 0.05 }}
-                    onClick={() => onNavigate('students')}
-                    className="p-3.5 rounded-2xl bg-amber-50/20 dark:bg-amber-900/5 border border-amber-100/30 dark:border-amber-900/10 hover:bg-amber-50/60 dark:hover:bg-amber-900/20 hover:border-amber-200/50 dark:hover:border-amber-800/50 transition-all cursor-pointer group flex items-center justify-between gap-3"
+                    onClick={() => onNavigate('student-profile', student.id)}
+                    className="p-3.5 rounded-2xl bg-amber-50/20 dark:bg-amber-900/5 border border-amber-100/30 dark:border-amber-900/10 hover:bg-amber-50/60 dark:hover:bg-amber-900/20 hover:border-amber-200/50 dark:hover:border-amber-800/50 transition-all cursor-pointer group flex items-center justify-between gap-3 relative overflow-hidden"
                   >
                     <div className="flex-1 min-w-0">
-                      <h4 className="font-bold text-[var(--md-sys-color-on-surface)] text-sm truncate group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">{student.name}</h4>
+                      <h4 className="font-bold text-[var(--md-sys-color-on-surface)] text-sm truncate group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors flex items-center gap-1.5">
+                        {student.name}
+                        <ArrowUpRight size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                      </h4>
                       <p className="text-[9px] font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-widest mt-1">Grade {student.grade} · {student.subject}</p>
                     </div>
-                    {student.attendancePct < 80 && (
-                      <div className="flex flex-col items-end flex-shrink-0">
-                        <span className="text-[8px] font-bold text-[var(--md-sys-color-secondary)] uppercase">Attend.</span>
-                        <span className="text-xs font-black text-amber-600 dark:text-amber-400 mt-0.5">{student.attendancePct}%</span>
-                      </div>
-                    )}
+                    <div className="flex items-center gap-3">
+                      {student.attendancePct < 80 && (
+                        <div className="flex flex-col items-end flex-shrink-0">
+                          <span className="text-[8px] font-bold text-[var(--md-sys-color-secondary)] uppercase">Attend.</span>
+                          <span className="text-xs font-black text-amber-600 dark:text-amber-400 mt-0.5">{student.attendancePct}%</span>
+                        </div>
+                      )}
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); onNavigate('communications'); }}
+                        className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:bg-amber-200 dark:hover:bg-amber-800 hover:scale-110 shadow-sm"
+                        title="Message Student"
+                      >
+                        <MessageCircle size={14} />
+                      </button>
+                    </div>
                   </motion.div>
                 )) : (
                   <div className="h-full flex flex-col items-center justify-center text-center py-6">
