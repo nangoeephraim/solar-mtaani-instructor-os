@@ -77,14 +77,14 @@ const renderMarkdown = (text: string): React.ReactNode[] => {
                                 </div>
                                 <button 
                                     onClick={() => {
-                                        // Store the pending ID in session storage so that when Meetings mounts, it auto-joins
+                                        // Store the pending ID in session storage so that when Meetings mounts, it pre-fills
                                         sessionStorage.setItem('pendingMeetingId', mId);
                                         
                                         // Step 1: ensure the user is on the Communications view
                                         window.dispatchEvent(new CustomEvent('navigate-to-communications'));
                                         
-                                        // Step 2: Switch to the video meetings tab and trigger join
-                                        window.dispatchEvent(new CustomEvent('join-meeting', { detail: mId }));
+                                        // Step 2: Switch to the video meetings tab and prepare lobby
+                                        window.dispatchEvent(new CustomEvent('prepare-meeting', { detail: mId }));
                                     }}
                                     className="bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] px-4 py-2 rounded-lg text-sm font-bold shadow-md hover:scale-105 active:scale-95 transition-all whitespace-nowrap flex items-center gap-2"
                                 >
@@ -474,7 +474,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
 
     // Global meeting listeners
     useEffect(() => {
-        const handleJoin = (e: any) => {
+        const handlePrepareMeeting = (e: any) => {
             // Switch to embedded video meeting panel
             setActiveChannelId('video_meetings');
         };
@@ -518,10 +518,10 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
             }
         };
 
-        window.addEventListener('join-meeting', handleJoin);
+        window.addEventListener('prepare-meeting', handlePrepareMeeting);
         window.addEventListener('broadcast-meeting', handleBroadcast);
         return () => {
-            window.removeEventListener('join-meeting', handleJoin);
+            window.removeEventListener('prepare-meeting', handlePrepareMeeting);
             window.removeEventListener('broadcast-meeting', handleBroadcast);
         };
     }, [channels, data, onUpdateAppData, showToast, user, userId]);

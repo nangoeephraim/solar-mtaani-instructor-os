@@ -688,55 +688,27 @@ export default function Meetings() {
     }, [chatMessages, showSidebar]);
 
     useEffect(() => {
-        const handleJoin = async (e: any) => {
+        const handlePrepare = (e: any) => {
             const mId = e.detail;
             if (!mId) return;
 
             // Pre-fill the meeting ID so it's visible immediately
             setMeetingId(mId);
-
-            // If already in a meeting, don't restart
-            if (inMeeting) return;
-
-            // Auto-join: stop the camera preview first, then join with the provided ID
-            try {
-                // Stop preview if active
-                if (previewStream) {
-                    previewStream.getTracks().forEach(t => t.stop());
-                    setPreviewStream(null);
-                }
-                const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-                setStream(mediaStream);
-                setInMeeting(true);
-                setHasError(null);
-
-                // Subscribe to the Supabase broadcast channel for this meeting
-                const broadcastName = `prism-meet-chat:${mId}`;
-                const ch = supabase.channel(broadcastName, { config: { broadcast: { self: false } } });
-                ch.on('broadcast', { event: 'chat' }, (payload: any) => {
-                    const msg = payload.payload as MeetingMessage;
-                    setChatMessages(prev => [...prev, { ...msg, timestamp: new Date(msg.timestamp), isSelf: false }]);
-                }).on('broadcast', { event: 'file-share' }, (payload: any) => {
-                    const f = payload.payload;
-                    setMeetingFiles(prev => [...prev, { ...f, timestamp: new Date(f.timestamp) }]);
-                }).subscribe();
-                chatChannelRef.current = ch;
-            } catch (err) {
-                console.error('[join-meeting] Auto-join failed:', err);
-                setHasError('Could not access camera/microphone. Please check permissions and try joining manually.');
-            }
+            // Intentionally bypassing auto-join to satisfy iOS Safari user-gesture requirements
         };
 
-        window.addEventListener('join-meeting', handleJoin);
+        window.addEventListener('prepare-meeting', handlePrepare);
 
         // Check for pending meeting ID from routing/navigation
         const pendingMId = sessionStorage.getItem('pendingMeetingId');
         if (pendingMId) {
             sessionStorage.removeItem('pendingMeetingId');
-            handleJoin({ detail: pendingMId });
+            setMeetingId(pendingMId);
+            // Intentionally bypassing auto-join to satisfy iOS Safari user-gesture requirements
+            // The landing page will render with the meeting ID pre-filled and the preview stream active
         }
 
-        return () => window.removeEventListener('join-meeting', handleJoin);
+        return () => window.removeEventListener('prepare-meeting', handlePrepare);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [inMeeting, previewStream]);
 
@@ -812,30 +784,42 @@ export default function Meetings() {
                         initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
                         className="flex flex-col sm:flex-row gap-3 w-full max-w-md"
                     >
-                        <button 
-                            onClick={handleJoinWithPreviewCleanup}
-                            className="flex-1 px-6 py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-2xl transition-all shadow-[0_4px_24px_rgba(37,99,235,0.3)] hover:shadow-[0_4px_32px_rgba(37,99,235,0.5)] hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 text-sm"
-                        >
-                            <Video size={18} />
-                            New Meeting
-                        </button>
-                        <div className="relative flex-1">
-                            <input
-                                type="text"
-                                placeholder="Enter code to join"
-                                value={meetingId}
-                                onChange={(e) => setMeetingId(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && meetingId && handleJoinWithPreviewCleanup()}
-                                className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-4 pr-16 text-sm font-google outline-none focus:border-blue-500/50 transition-colors text-white placeholder:text-white/30"
-                            />
+                        {meetingId ? (
                             <button 
-                                onClick={() => meetingId && handleJoinWithPreviewCleanup()}
-                                disabled={!meetingId}
-                                className="absolute right-1.5 top-1/2 -translate-y-1/2 px-3.5 py-1.5 bg-white/10 text-white text-xs font-bold rounded-xl transition-all disabled:opacity-30 disabled:cursor-not-allowed hover:bg-blue-600"
+                                onClick={handleJoinWithPreviewCleanup}
+                                className="w-full px-6 py-4 bg-green-600 hover:bg-green-500 text-white font-bold rounded-2xl transition-all shadow-[0_4px_24px_rgba(22,163,74,0.3)] hover:shadow-[0_4px_32px_rgba(22,163,74,0.5)] hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 text-base"
                             >
-                                Join
+                                <Video size={20} />
+                                Join Meeting {meetingId}
                             </button>
-                        </div>
+                        ) : (
+                            <>
+                                <button 
+                                    onClick={handleJoinWithPreviewCleanup}
+                                    className="flex-1 px-6 py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-2xl transition-all shadow-[0_4px_24px_rgba(37,99,235,0.3)] hover:shadow-[0_4px_32px_rgba(37,99,235,0.5)] hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 text-sm"
+                                >
+                                    <Video size={18} />
+                                    New Meeting
+                                </button>
+                                <div className="relative flex-1">
+                                    <input
+                                        type="text"
+                                        placeholder="Enter code to join"
+                                        value={meetingId}
+                                        onChange={(e) => setMeetingId(e.target.value)}
+                                        onKeyDown={(e) => e.key === 'Enter' && meetingId && handleJoinWithPreviewCleanup()}
+                                        className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-4 pr-16 text-sm font-google outline-none focus:border-blue-500/50 transition-colors text-white placeholder:text-white/30"
+                                    />
+                                    <button 
+                                        onClick={() => meetingId && handleJoinWithPreviewCleanup()}
+                                        disabled={!meetingId}
+                                        className="absolute right-1.5 top-1/2 -translate-y-1/2 px-3.5 py-1.5 bg-white/10 text-white text-xs font-bold rounded-xl transition-all disabled:opacity-30 disabled:cursor-not-allowed hover:bg-blue-600"
+                                    >
+                                        Join
+                                    </button>
+                                </div>
+                            </>
+                        )}
                     </motion.div>
 
                     {hasError && (
