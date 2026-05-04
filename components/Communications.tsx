@@ -77,13 +77,14 @@ const renderMarkdown = (text: string): React.ReactNode[] => {
                                 </div>
                                 <button 
                                     onClick={() => {
+                                        // Store the pending ID in session storage so that when Meetings mounts, it auto-joins
+                                        sessionStorage.setItem('pendingMeetingId', mId);
+                                        
                                         // Step 1: ensure the user is on the Communications view
-                                        // (Meetings is embedded inside Communications)
                                         window.dispatchEvent(new CustomEvent('navigate-to-communications'));
-                                        // Step 2: after a brief delay for the view to mount, auto-join
-                                        setTimeout(() => {
-                                            window.dispatchEvent(new CustomEvent('join-meeting', { detail: mId }));
-                                        }, 350);
+                                        
+                                        // Step 2: Switch to the video meetings tab and trigger join
+                                        window.dispatchEvent(new CustomEvent('join-meeting', { detail: mId }));
                                     }}
                                     className="bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] px-4 py-2 rounded-lg text-sm font-bold shadow-md hover:scale-105 active:scale-95 transition-all whitespace-nowrap flex items-center gap-2"
                                 >
@@ -462,7 +463,9 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
     const channels = data.communications?.channels || [];
     const messages = data.communications?.messages || {};
 
-    const [activeChannelId, setActiveChannelId] = useState<string>(channels[0]?.id || '');
+    const [activeChannelId, setActiveChannelId] = useState<string>(
+        sessionStorage.getItem('pendingMeetingId') ? 'video_meetings' : (channels[0]?.id || '')
+    );
     const [messageInput, setMessageInput] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const [showSearch, setShowSearch] = useState(false);

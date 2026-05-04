@@ -726,7 +726,16 @@ export default function Meetings() {
                 setHasError('Could not access camera/microphone. Please check permissions and try joining manually.');
             }
         };
+
         window.addEventListener('join-meeting', handleJoin);
+
+        // Check for pending meeting ID from routing/navigation
+        const pendingMId = sessionStorage.getItem('pendingMeetingId');
+        if (pendingMId) {
+            sessionStorage.removeItem('pendingMeetingId');
+            handleJoin({ detail: pendingMId });
+        }
+
         return () => window.removeEventListener('join-meeting', handleJoin);
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [inMeeting, previewStream]);
