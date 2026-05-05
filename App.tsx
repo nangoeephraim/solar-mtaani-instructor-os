@@ -98,14 +98,55 @@ const VIEW_MIN_ROLE: Record<string, number> = {
   assessment: 2,        // instructor+
 };
 
+// ─── Global meeting code persistence ───
+// Read the ?meet= param ONCE at the top-level module scope so it survives
+// React re-mounts caused by the auth wrapper showing LoginPage first.
+// This is the Google Meet approach: the URL carries the meeting ID and
+// the app preserves it across the entire authentication flow.
+const INITIAL_MEET_CODE: string | null = (() => {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('meet');
+    if (code) {
+      // Persist to sessionStorage so it survives full page reloads during auth
+      sessionStorage.setItem('prism_pending_meet', code);
+      return code;
+    }
+    // Check sessionStorage fallback (set on a previous page load before auth redirect)
+    return sessionStorage.getItem('prism_pending_meet') || null;
+  } catch {
+    return null;
+  }
+})();
+
 const AppContent: React.FC = () => {
   const [data, setData] = useState<AppData | null>(null);
-  const [currentView, setCurrentView] = useState('dashboard');
+  // Use the globally-captured meeting code so it survives auth flow
+  const [pendingMeetCode, setPendingMeetCode] = useState<string | null>(INITIAL_MEET_CODE);
+  const [currentView, setCurrentView] = useState(() => {
+    return INITIAL_MEET_CODE ? 'communications' : 'dashboard';
+  });
   const [selectedStudentId, setSelectedStudentId] = useState<number | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
   const { user } = useAuth();
 
   const { showToast } = useToast();
+
+  // Clean up URL + sessionStorage after the meeting code has been consumed
+  useEffect(() => {
+    if (pendingMeetCode) {
+      // Clean the URL so refreshes don't re-trigger
+      try {
+        const url = new URL(window.location.href);
+        if (url.searchParams.has('meet')) {
+          url.searchParams.delete('meet');
+          window.history.replaceState({}, '', url.pathname + url.search);
+        }
+      } catch {}
+      // Clear sessionStorage after consumption so future loads don't pick it up
+      sessionStorage.removeItem('prism_pending_meet');
+    }
+  }, [pendingMeetCode]);
 
   // Refs for realtime callbacks to access latest state without re-triggering useEffect
   const currentViewRef = useRef(currentView);
@@ -975,6 +1016,7 @@ const AppContent: React.FC = () => {
           data={data}
           onUpdateAppData={handleUpdateAppData}
           onNavigate={handleNavigate}
+          pendingMeetCode={pendingMeetCode || undefined}
         />
       )}
 

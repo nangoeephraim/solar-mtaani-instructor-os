@@ -83,7 +83,7 @@ const MeetingTimer = React.memo(({ active }: { active: boolean }) => {
     );
 });
 
-export default function Meetings() {
+export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string }) {
     const { user } = useAuth();
     const userName = user?.name || 'You';
     const userAvatar = (user as any)?.avatarUrl || null;
@@ -174,7 +174,30 @@ export default function Meetings() {
             const mid = meetingId || generateMeetingId();
             if (!meetingId) setMeetingId(mid);
             setHasError(null);
-            // Timer is handled by isolated MeetingTimer component
+
+            // Persist meeting to Supabase so it can be looked up cross-device
+            if (user?.id) {
+                try {
+                    const { data: existing } = await supabase
+                        .from('meetings')
+                        .select('id')
+                        .eq('meeting_code', mid)
+                        .maybeSingle();
+                    
+                    if (!existing) {
+                        // Create new meeting record (host creating)
+                        await supabase.from('meetings').insert({
+                            meeting_code: mid,
+                            host_id: user.id,
+                            host_name: userName,
+                            title: `Meeting ${mid}`,
+                            status: 'active',
+                        });
+                    }
+                } catch (err) {
+                    console.warn('[Meetings] Could not persist meeting to DB:', err);
+                }
+            }
 
             // Setup broadcast channel for in-meeting chat
             const broadcastName = `prism-meet-chat:${mid}`;
@@ -193,7 +216,7 @@ export default function Meetings() {
         }
     };
 
-    const handleLeaveMeeting = () => {
+    const handleLeaveMeeting = async () => {
         if (stream) stream.getTracks().forEach(track => track.stop());
         if (screenStream) screenStream.getTracks().forEach(track => track.stop());
         // Timer cleanup is handled by MeetingTimer component
@@ -208,6 +231,17 @@ export default function Meetings() {
             try { recognitionRef.current.stop(); } catch {}
             recognitionRef.current = null;
         }
+
+        // Mark meeting as ended in Supabase
+        if (meetingId && user?.id) {
+            try {
+                await supabase.from('meetings')
+                    .update({ status: 'ended', ended_at: new Date().toISOString() })
+                    .eq('meeting_code', meetingId)
+                    .eq('host_id', user.id);
+            } catch { /* non-blocking */ }
+        }
+
         setStream(null);
         setScreenStream(null);
         setInMeeting(false);
@@ -545,9 +579,11 @@ export default function Meetings() {
     };
 
     const copyMeetingLink = () => {
-        navigator.clipboard.writeText(meetingId).catch(() => {});
+        // Copy the full shareable URL (not just the code) so it works cross-device
+        const shareUrl = `${window.location.origin}/?meet=${meetingId}`;
+        navigator.clipboard.writeText(shareUrl).catch(() => {});
         setCopied(true);
-        addToast('Meeting ID copied!', '📋');
+        addToast('Meeting link copied!', '📋');
         setTimeout(() => setCopied(false), 2000);
     };
 
@@ -687,30 +723,48 @@ export default function Meetings() {
         }
     }, [chatMessages, showSidebar]);
 
+    // State for validated meeting (shows green "Join Now" CTA)
+    const [validatedMeeting, setValidatedMeeting] = useState<{code: string; hostName: string; title: string} | null>(null);
+
+    // Validate a meeting code against Supabase to confirm it exists & is active
+    const validateMeetingCode = useCallback(async (code: string) => {
+        try {
+            const { data: meeting } = await supabase
+                .from('meetings')
+                .select('meeting_code, host_name, title, status')
+                .eq('meeting_code', code)
+                .maybeSingle();
+
+            if (meeting && meeting.status === 'active') {
+                setValidatedMeeting({ code: meeting.meeting_code, hostName: meeting.host_name, title: meeting.title });
+            }
+            // Even if not found in DB (host hasn't persisted yet), still set the ID
+            // so the user can join — the meeting row gets created when the host joins
+            setMeetingId(code);
+        } catch (err) {
+            console.warn('[Meetings] Failed to validate meeting code:', err);
+            setMeetingId(code);
+        }
+    }, []);
+
     useEffect(() => {
         const handlePrepare = (e: any) => {
             const mId = e.detail;
             if (!mId) return;
-
-            // Pre-fill the meeting ID so it's visible immediately
-            setMeetingId(mId);
-            // Intentionally bypassing auto-join to satisfy iOS Safari user-gesture requirements
+            validateMeetingCode(mId);
         };
 
         window.addEventListener('prepare-meeting', handlePrepare);
 
-        // Check for pending meeting ID from routing/navigation
-        const pendingMId = sessionStorage.getItem('pendingMeetingId');
-        if (pendingMId) {
-            sessionStorage.removeItem('pendingMeetingId');
-            setMeetingId(pendingMId);
-            // Intentionally bypassing auto-join to satisfy iOS Safari user-gesture requirements
-            // The landing page will render with the meeting ID pre-filled and the preview stream active
+        // Check for pending meeting code from URL-based routing (via props)
+        // This is the critical path for cross-device meeting links
+        if (pendingMeetCode && !meetingId) {
+            validateMeetingCode(pendingMeetCode);
         }
 
         return () => window.removeEventListener('prepare-meeting', handlePrepare);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [inMeeting, previewStream]);
+    }, [inMeeting, previewStream, pendingMeetCode, validateMeetingCode]);
 
     if (!inMeeting) {
         const { greeting, icon } = getTimeGreeting(userName);
@@ -782,18 +836,41 @@ export default function Meetings() {
                     {/* Action buttons */}
                     <motion.div 
                         initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
-                        className="flex flex-col sm:flex-row gap-3 w-full max-w-md"
+                        className="flex flex-col gap-3 w-full max-w-md"
                     >
+                        {/* Validated meeting banner — shown when coming from a shared link or broadcast */}
+                        {validatedMeeting && meetingId === validatedMeeting.code && (
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.95 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                className="bg-gradient-to-r from-emerald-500/10 to-blue-500/10 border border-emerald-500/20 rounded-2xl p-4 mb-1"
+                            >
+                                <div className="flex items-center gap-3 mb-3">
+                                    <div className="w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center">
+                                        <Users size={20} className="text-emerald-400" />
+                                    </div>
+                                    <div>
+                                        <p className="text-white font-bold text-sm font-google">{validatedMeeting.title}</p>
+                                        <p className="text-white/50 text-xs">Hosted by {validatedMeeting.hostName} • Active now</p>
+                                    </div>
+                                    <div className="ml-auto flex items-center gap-1.5">
+                                        <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+                                        <span className="text-emerald-400 text-[10px] font-bold uppercase tracking-wider">Live</span>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        )}
+
                         {meetingId ? (
                             <button 
                                 onClick={handleJoinWithPreviewCleanup}
                                 className="w-full px-6 py-4 bg-green-600 hover:bg-green-500 text-white font-bold rounded-2xl transition-all shadow-[0_4px_24px_rgba(22,163,74,0.3)] hover:shadow-[0_4px_32px_rgba(22,163,74,0.5)] hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 text-base"
                             >
                                 <Video size={20} />
-                                Join Meeting {meetingId}
+                                {validatedMeeting ? 'Join Now' : `Join Meeting ${meetingId}`}
                             </button>
                         ) : (
-                            <>
+                            <div className="flex flex-col sm:flex-row gap-3">
                                 <button 
                                     onClick={handleJoinWithPreviewCleanup}
                                     className="flex-1 px-6 py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-2xl transition-all shadow-[0_4px_24px_rgba(37,99,235,0.3)] hover:shadow-[0_4px_32px_rgba(37,99,235,0.5)] hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-2 text-sm"
@@ -818,7 +895,7 @@ export default function Meetings() {
                                         Join
                                     </button>
                                 </div>
-                            </>
+                            </div>
                         )}
                     </motion.div>
 

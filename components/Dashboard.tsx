@@ -188,7 +188,7 @@ const QuickAction: React.FC<{
 
 interface DashboardProps {
   data: AppData;
-  onNavigate: (view: string) => void;
+  onNavigate: (view: string, studentId?: number) => void;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ data, onNavigate }) => {

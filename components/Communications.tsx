@@ -57,13 +57,19 @@ const renderMarkdown = (text: string): React.ReactNode[] => {
             if (mentionParts.length > 1) processed = mentionParts.map((p, j) => p.startsWith('@') ? <span key={j} className="font-bold px-0.5 rounded" style={{ color: 'var(--md-sys-color-primary)', background: 'var(--md-sys-color-primary-container)' }}>{p}</span> : p);
         }
         
-        // Meeting link detection
+        // Meeting link detection — supports any URL containing ?meet= (the universal sharing format)
+        // Also still supports legacy prism.os/meet/ links for backward compatibility
         if (typeof processed === 'string') {
-            const meetLinkParts = processed.split(/(https:\/\/prism\.os\/meet\/[a-zA-Z0-9-]+)/g);
+            const meetLinkParts = processed.split(/(https?:\/\/[^\s]+[?&]meet=[a-zA-Z0-9-]+|https:\/\/prism\.os\/meet\/[a-zA-Z0-9-]+)/g);
             if (meetLinkParts.length > 1) {
                 processed = meetLinkParts.map((p, j) => {
+                    let mId: string | undefined;
                     if (p.startsWith('https://prism.os/meet/')) {
-                        const mId = p.split('/').pop();
+                        mId = p.split('/').pop();
+                    } else if (p.includes('?meet=')) {
+                        try { mId = new URL(p).searchParams.get('meet') || undefined; } catch { }
+                    }
+                    if (mId) {
                         return (
                             <div key={j} className="my-2 bg-[var(--md-sys-color-primary-container)] border border-[var(--md-sys-color-primary)] rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm hover:shadow-md transition-shadow">
                                 <div className="flex items-center gap-3">
@@ -77,9 +83,6 @@ const renderMarkdown = (text: string): React.ReactNode[] => {
                                 </div>
                                 <button 
                                     onClick={() => {
-                                        // Store the pending ID in session storage so that when Meetings mounts, it pre-fills
-                                        sessionStorage.setItem('pendingMeetingId', mId);
-                                        
                                         // Step 1: ensure the user is on the Communications view
                                         window.dispatchEvent(new CustomEvent('navigate-to-communications'));
                                         
@@ -453,9 +456,11 @@ interface CommunicationsProps {
     data: AppData;
     onUpdateAppData: (newData: AppData) => void;
     onNavigate?: (view: string) => void;
+    /** Meeting code from URL query param (?meet=xyz) — passed from App when user clicks a shared link */
+    pendingMeetCode?: string;
 }
 
-export default function Communications({ data, onUpdateAppData, onNavigate }: CommunicationsProps) {
+export default function Communications({ data, onUpdateAppData, onNavigate, pendingMeetCode }: CommunicationsProps) {
     const { user } = useAuth();
     // Derive userId immediately so all effects below can reference it safely
     const userId = user?.id || '';
@@ -464,7 +469,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
     const messages = data.communications?.messages || {};
 
     const [activeChannelId, setActiveChannelId] = useState<string>(
-        sessionStorage.getItem('pendingMeetingId') ? 'video_meetings' : (channels[0]?.id || '')
+        pendingMeetCode ? 'video_meetings' : (channels[0]?.id || '')
     );
     const [messageInput, setMessageInput] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
@@ -501,13 +506,18 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
                 return;
             }
             try {
+                // Build a real shareable URL using the production domain
+                // This works cross-device — the ?meet= param is read by App.tsx on load
+                const appHost = window.location.origin;
+                const shareableUrl = `${appHost}/?meet=${mId}`;
+                
                 const newData = await addChatMessage(data, {
                     id: crypto.randomUUID(),
                     channelId: targetChannel.id,
                     senderId: userId,
                     senderName: user.name,
                     senderRole: user.role as any,
-                    content: `📹 **Live Meeting in progress!**\n\nJoin the session now:\nhttps://prism.os/meet/${mId}\n\nTap **Join Now** to open the video meeting instantly.`,
+                    content: `📹 **Live Meeting in progress!**\n\nJoin the session now:\n${shareableUrl}\n\nTap **Join Now** to open the video meeting instantly.`,
                     timestamp: new Date().toISOString()
                 } as any);
                 onUpdateAppData(newData);
@@ -1182,7 +1192,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate }: Co
             {/* ═══ MAIN CHAT AREA ═══ */}
             {activeChannelId === 'video_meetings' ? (
                 <div className="flex-1 flex flex-col relative overflow-hidden" style={{ background: 'var(--md-sys-color-background)' }}>
-                    <Meetings />
+                    <Meetings pendingMeetCode={pendingMeetCode} />
                 </div>
             ) : activeChannel ? (
                 <>
