@@ -747,24 +747,22 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
         }
     }, []);
 
+    // ─── React to pendingMeetCode prop (from URL or internal "Join Now" click) ───
+    // This is the SINGLE entry point for meeting codes. No more DOM events.
+    // Inspired by Google Meet / Zoom: state flows down via props, never via events.
+    const lastConsumedCode = useRef<string | null>(null);
+    
     useEffect(() => {
-        const handlePrepare = (e: any) => {
-            const mId = e.detail;
-            if (!mId) return;
-            validateMeetingCode(mId);
-        };
-
-        window.addEventListener('prepare-meeting', handlePrepare);
-
-        // Check for pending meeting code from URL-based routing (via props)
-        // This is the critical path for cross-device meeting links
-        if (pendingMeetCode && !meetingId) {
-            validateMeetingCode(pendingMeetCode);
-        }
-
-        return () => window.removeEventListener('prepare-meeting', handlePrepare);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [inMeeting, previewStream, pendingMeetCode, validateMeetingCode]);
+        if (!pendingMeetCode) return;
+        // Don't re-process the same code on re-renders
+        if (lastConsumedCode.current === pendingMeetCode) return;
+        lastConsumedCode.current = pendingMeetCode;
+        
+        // If already in a meeting, don't override
+        if (inMeeting) return;
+        
+        validateMeetingCode(pendingMeetCode);
+    }, [pendingMeetCode, inMeeting, validateMeetingCode]);
 
     if (!inMeeting) {
         const { greeting, icon } = getTimeGreeting(userName);

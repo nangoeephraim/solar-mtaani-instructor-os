@@ -194,19 +194,37 @@ const AppContent: React.FC = () => {
     }
   }, [userLevel, showToast]);
 
-  // Listen for the 'navigate-to-communications' event dispatched when a user
-  // clicks "Join Now" on a broadcast meeting card from any chat channel.
-  // This ensures the Communications view (which embeds Meetings) is active
-  // before the 'join-meeting' event fires 350ms later.
+  // Listen for navigation events dispatched when a user clicks "Join Now"
+  // on a broadcast meeting card. If the user is on Dashboard or another view,
+  // this ensures Communications (which embeds Meetings) gets activated with
+  // the meeting code propagated via props — Google Meet / Zoom pattern.
   useEffect(() => {
-    const handler = () => {
+    const handleNavToCommunications = () => {
       const minLevel = VIEW_MIN_ROLE['communications'] || 1;
       if (userLevel >= minLevel) {
         setCurrentView('communications');
       }
     };
-    window.addEventListener('navigate-to-communications', handler);
-    return () => window.removeEventListener('navigate-to-communications', handler);
+    
+    // Also catch prepare-meeting at the App level: if the user is NOT already
+    // on Communications, we need to switch AND set the meeting code so it
+    // propagates down through the prop chain.
+    const handlePrepareMeetingAtApp = (e: any) => {
+      const mId = e.detail;
+      if (!mId) return;
+      const minLevel = VIEW_MIN_ROLE['communications'] || 1;
+      if (userLevel >= minLevel) {
+        setPendingMeetCode(mId);
+        setCurrentView('communications');
+      }
+    };
+    
+    window.addEventListener('navigate-to-communications', handleNavToCommunications);
+    window.addEventListener('prepare-meeting', handlePrepareMeetingAtApp);
+    return () => {
+      window.removeEventListener('navigate-to-communications', handleNavToCommunications);
+      window.removeEventListener('prepare-meeting', handlePrepareMeetingAtApp);
+    };
   }, [userLevel]);
 
   // Fetch initial data asynchronously from Supabase

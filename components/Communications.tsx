@@ -83,10 +83,11 @@ const renderMarkdown = (text: string): React.ReactNode[] => {
                                 </div>
                                 <button 
                                     onClick={() => {
-                                        // Step 1: ensure the user is on the Communications view
+                                        // Ensure we're on Communications view (for cross-tab navigation)
                                         window.dispatchEvent(new CustomEvent('navigate-to-communications'));
-                                        
-                                        // Step 2: Switch to the video meetings tab and prepare lobby
+                                        // Use state-driven join — sets meeting code + switches to video tab
+                                        // This is called from within the renderMarkdown closure, so we
+                                        // dispatch the event which Communications' listener handles via joinMeetingById
                                         window.dispatchEvent(new CustomEvent('prepare-meeting', { detail: mId }));
                                     }}
                                     className="bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] px-4 py-2 rounded-lg text-sm font-bold shadow-md hover:scale-105 active:scale-95 transition-all whitespace-nowrap flex items-center gap-2"
@@ -471,17 +472,32 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
     const [activeChannelId, setActiveChannelId] = useState<string>(
         pendingMeetCode ? 'video_meetings' : (channels[0]?.id || '')
     );
+    // ─── Meeting code state (Google Meet / Zoom pattern) ───
+    // Instead of relying on fire-and-forget DOM events, we store the meeting
+    // code in state and pass it to Meetings via props. This guarantees the
+    // code arrives even when Meetings hasn't mounted yet.
+    const [internalMeetCode, setInternalMeetCode] = useState<string | null>(pendingMeetCode || null);
     const [messageInput, setMessageInput] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const [showSearch, setShowSearch] = useState(false);
     const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
     const [editContent, setEditContent] = useState('');
 
+    // ─── Join a meeting by switching to video tab and setting the code ───
+    // This is the single entry point for ALL internal join actions.
+    // Inspired by Google Meet / Zoom — state-driven, no ephemeral events.
+    const joinMeetingById = useCallback((meetCode: string) => {
+        setInternalMeetCode(meetCode);
+        setActiveChannelId('video_meetings');
+    }, []);
+
     // Global meeting listeners
     useEffect(() => {
         const handlePrepareMeeting = (e: any) => {
-            // Switch to embedded video meeting panel
-            setActiveChannelId('video_meetings');
+            const mId = e.detail;
+            if (!mId) return;
+            // Use state-based approach instead of hoping Meetings catches the event
+            joinMeetingById(mId);
         };
         const handleBroadcast = async (e: any) => {
             const mId = e.detail;
@@ -534,7 +550,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
             window.removeEventListener('prepare-meeting', handlePrepareMeeting);
             window.removeEventListener('broadcast-meeting', handleBroadcast);
         };
-    }, [channels, data, onUpdateAppData, showToast, user, userId]);
+    }, [channels, data, onUpdateAppData, showToast, user, userId, joinMeetingById]);
 
     const [replyToMsg, setReplyToMsg] = useState<ChatMessage | null>(null);
     const [showEmojiPicker, setShowEmojiPicker] = useState<string | null>(null);
@@ -1192,7 +1208,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
             {/* ═══ MAIN CHAT AREA ═══ */}
             {activeChannelId === 'video_meetings' ? (
                 <div className="flex-1 flex flex-col relative overflow-hidden" style={{ background: 'var(--md-sys-color-background)' }}>
-                    <Meetings pendingMeetCode={pendingMeetCode} />
+                    <Meetings pendingMeetCode={internalMeetCode || pendingMeetCode} />
                 </div>
             ) : activeChannel ? (
                 <>
