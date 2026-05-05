@@ -49,6 +49,27 @@ interface FloatingReaction {
     x: number;
 }
 
+// ─── WebRTC Types ───
+interface RemotePeer {
+    odei: string; // unique peer ID
+    userName: string;
+    avatarUrl?: string;
+    pc: RTCPeerConnection;
+    stream: MediaStream | null;
+    screenStream: MediaStream | null;
+    audioEnabled: boolean;
+    videoEnabled: boolean;
+    handRaised: boolean;
+}
+
+const ICE_SERVERS: RTCConfiguration = {
+    iceServers: [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+    ],
+};
+
 const REACTION_EMOJIS = ['👏', '🎉', '❤️', '👍', '😂', '🔥'];
 
 const getTimeGreeting = (name: string) => {
@@ -156,6 +177,15 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
     const videoRef = useRef<HTMLVideoElement>(null);
     const screenRef = useRef<HTMLVideoElement>(null);
 
+    // ─── WebRTC State ───
+    // Each remote participant gets an RTCPeerConnection + stream
+    const [remotePeers, setRemotePeers] = useState<Map<string, RemotePeer>>(new Map());
+    const remotePeersRef = useRef<Map<string, RemotePeer>>(new Map());
+    const localPeerId = useRef<string>(crypto.randomUUID());
+    const signalingChannelRef = useRef<any>(null);
+    const localStreamRef = useRef<MediaStream | null>(null);
+    const localScreenStreamRef = useRef<MediaStream | null>(null);
+
     // File sharing state
     const [meetingFiles, setMeetingFiles] = useState<MeetingFile[]>([]);
     const [isUploading, setIsUploading] = useState(false);
@@ -166,10 +196,254 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
         return Math.random().toString(36).substring(2, 6) + '-' + Math.random().toString(36).substring(2, 6) + '-' + Math.random().toString(36).substring(2, 6);
     };
 
+    // ─── WebRTC Core ───
+
+    // Helper: update a peer in both ref and state
+    const updatePeer = useCallback((peerId: string, updater: (peer: RemotePeer) => RemotePeer) => {
+        const existing = remotePeersRef.current.get(peerId);
+        if (!existing) return;
+        const updated = updater(existing);
+        remotePeersRef.current.set(peerId, updated);
+        setRemotePeers(new Map(remotePeersRef.current));
+    }, []);
+
+    // Create an RTCPeerConnection for a specific remote peer
+    const createPeerConnection = useCallback((peerId: string, peerName: string, peerAvatar?: string): RTCPeerConnection => {
+        const pc = new RTCPeerConnection(ICE_SERVERS);
+
+        // Add all local tracks (audio + video) to the connection
+        const localStream = localStreamRef.current;
+        if (localStream) {
+            localStream.getTracks().forEach(track => {
+                pc.addTrack(track, localStream);
+            });
+        }
+
+        // Handle incoming remote tracks (their video/audio arrives here)
+        pc.ontrack = (event) => {
+            const [remoteStream] = event.streams;
+            if (!remoteStream) return;
+
+            // Determine if this is a screen share track or camera track
+            // Screen share tracks come with a specific label pattern
+            const isScreen = event.track.kind === 'video' && event.transceiver?.mid === 'screen';
+
+            const existing = remotePeersRef.current.get(peerId);
+            if (existing) {
+                if (isScreen) {
+                    existing.screenStream = remoteStream;
+                } else {
+                    existing.stream = remoteStream;
+                }
+                remotePeersRef.current.set(peerId, { ...existing });
+                setRemotePeers(new Map(remotePeersRef.current));
+            } else {
+                const newPeer: RemotePeer = {
+                    odei: peerId,
+                    userName: peerName,
+                    avatarUrl: peerAvatar,
+                    pc,
+                    stream: isScreen ? null : remoteStream,
+                    screenStream: isScreen ? remoteStream : null,
+                    audioEnabled: true,
+                    videoEnabled: true,
+                    handRaised: false,
+                };
+                remotePeersRef.current.set(peerId, newPeer);
+                setRemotePeers(new Map(remotePeersRef.current));
+            }
+        };
+
+        // Send ICE candidates to the remote peer via signaling
+        pc.onicecandidate = (event) => {
+            if (event.candidate && signalingChannelRef.current) {
+                signalingChannelRef.current.send({
+                    type: 'broadcast',
+                    event: 'ice-candidate',
+                    payload: {
+                        from: localPeerId.current,
+                        to: peerId,
+                        candidate: event.candidate.toJSON(),
+                    },
+                }).catch(() => {});
+            }
+        };
+
+        pc.onconnectionstatechange = () => {
+            if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+                console.warn(`[WebRTC] Connection to ${peerName} (${peerId}) is ${pc.connectionState}`);
+            }
+        };
+
+        // Store the peer
+        const peerData: RemotePeer = {
+            odei: peerId,
+            userName: peerName,
+            avatarUrl: peerAvatar,
+            pc,
+            stream: null,
+            screenStream: null,
+            audioEnabled: true,
+            videoEnabled: true,
+            handRaised: false,
+        };
+        remotePeersRef.current.set(peerId, peerData);
+        setRemotePeers(new Map(remotePeersRef.current));
+
+        return pc;
+    }, []);
+
+    // Setup Supabase signaling channel for WebRTC
+    const setupSignaling = useCallback((mid: string) => {
+        const channelName = `prism-meet-signal:${mid}`;
+        const ch = supabase.channel(channelName, { config: { broadcast: { self: false } } });
+
+        ch.on('broadcast', { event: 'peer-join' }, async (payload: any) => {
+            const { peerId, peerName, peerAvatar } = payload.payload;
+            if (peerId === localPeerId.current) return;
+
+            // A new peer joined — create a connection and send them an offer
+            const pc = createPeerConnection(peerId, peerName, peerAvatar);
+            try {
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                ch.send({
+                    type: 'broadcast',
+                    event: 'offer',
+                    payload: {
+                        from: localPeerId.current,
+                        fromName: userName,
+                        fromAvatar: userAvatar,
+                        to: peerId,
+                        sdp: pc.localDescription?.toJSON(),
+                    },
+                }).catch(() => {});
+            } catch (err) {
+                console.error('[WebRTC] Failed to create offer:', err);
+            }
+
+            addToast(`${peerName} joined the meeting`, '👋');
+        });
+
+        ch.on('broadcast', { event: 'offer' }, async (payload: any) => {
+            const { from, fromName, fromAvatar, to, sdp } = payload.payload;
+            if (to !== localPeerId.current) return;
+
+            // Someone sent us an offer — create peer connection, set remote desc, send answer
+            let pc = remotePeersRef.current.get(from)?.pc;
+            if (!pc) {
+                pc = createPeerConnection(from, fromName, fromAvatar);
+            }
+            try {
+                await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                ch.send({
+                    type: 'broadcast',
+                    event: 'answer',
+                    payload: {
+                        from: localPeerId.current,
+                        to: from,
+                        sdp: pc.localDescription?.toJSON(),
+                    },
+                }).catch(() => {});
+            } catch (err) {
+                console.error('[WebRTC] Failed to handle offer:', err);
+            }
+        });
+
+        ch.on('broadcast', { event: 'answer' }, async (payload: any) => {
+            const { from, to, sdp } = payload.payload;
+            if (to !== localPeerId.current) return;
+
+            const peer = remotePeersRef.current.get(from);
+            if (peer?.pc) {
+                try {
+                    await peer.pc.setRemoteDescription(new RTCSessionDescription(sdp));
+                } catch (err) {
+                    console.error('[WebRTC] Failed to set remote description:', err);
+                }
+            }
+        });
+
+        ch.on('broadcast', { event: 'ice-candidate' }, async (payload: any) => {
+            const { from, to, candidate } = payload.payload;
+            if (to !== localPeerId.current) return;
+
+            const peer = remotePeersRef.current.get(from);
+            if (peer?.pc) {
+                try {
+                    await peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
+                } catch (err) {
+                    console.error('[WebRTC] Failed to add ICE candidate:', err);
+                }
+            }
+        });
+
+        ch.on('broadcast', { event: 'peer-leave' }, (payload: any) => {
+            const { peerId, peerName } = payload.payload;
+            const peer = remotePeersRef.current.get(peerId);
+            if (peer) {
+                peer.pc.close();
+                remotePeersRef.current.delete(peerId);
+                setRemotePeers(new Map(remotePeersRef.current));
+                addToast(`${peerName} left the meeting`, '👋');
+            }
+        });
+
+        // Media state updates (mute/unmute, camera on/off, hand raise)
+        ch.on('broadcast', { event: 'media-state' }, (payload: any) => {
+            const { peerId, audioEnabled: ae, videoEnabled: ve, handRaised: hr } = payload.payload;
+            updatePeer(peerId, (p) => ({ ...p, audioEnabled: ae ?? p.audioEnabled, videoEnabled: ve ?? p.videoEnabled, handRaised: hr ?? p.handRaised }));
+        });
+
+        // Reactions from remote peers
+        ch.on('broadcast', { event: 'reaction' }, (payload: any) => {
+            const { emoji } = payload.payload;
+            const reaction: FloatingReaction = { id: Date.now().toString(), emoji, x: 20 + Math.random() * 60 };
+            setFloatingReactions(prev => [...prev, reaction]);
+            setTimeout(() => setFloatingReactions(prev => prev.filter(r => r.id !== reaction.id)), 3000);
+        });
+
+        ch.subscribe((status: string) => {
+            if (status === 'SUBSCRIBED') {
+                // Announce our presence to existing peers
+                ch.send({
+                    type: 'broadcast',
+                    event: 'peer-join',
+                    payload: {
+                        peerId: localPeerId.current,
+                        peerName: userName,
+                        peerAvatar: userAvatar,
+                    },
+                }).catch(() => {});
+            }
+        });
+
+        signalingChannelRef.current = ch;
+    }, [createPeerConnection, userName, userAvatar, updatePeer]);
+
+    // Broadcast local media state to all peers
+    const broadcastMediaState = useCallback((overrides?: { audioEnabled?: boolean; videoEnabled?: boolean; handRaised?: boolean }) => {
+        if (signalingChannelRef.current) {
+            signalingChannelRef.current.send({
+                type: 'broadcast',
+                event: 'media-state',
+                payload: {
+                    peerId: localPeerId.current,
+                    audioEnabled: overrides?.audioEnabled ?? audioEnabled,
+                    videoEnabled: overrides?.videoEnabled ?? videoEnabled,
+                    handRaised: overrides?.handRaised ?? handRaised,
+                },
+            }).catch(() => {});
+        }
+    }, [audioEnabled, videoEnabled, handRaised]);
+
     const handleJoinMeeting = async () => {
         try {
             const mediaStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
             setStream(mediaStream);
+            localStreamRef.current = mediaStream;
             setInMeeting(true);
             const mid = meetingId || generateMeetingId();
             if (!meetingId) setMeetingId(mid);
@@ -210,6 +484,10 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                 setMeetingFiles(prev => [...prev, { ...f, timestamp: new Date(f.timestamp) }]);
             }).subscribe();
             chatChannelRef.current = ch;
+
+            // ─── WebRTC Signaling ───
+            // Start the signaling channel to connect with other peers
+            setupSignaling(mid);
         } catch (err) {
             console.error("Failed to get local stream", err);
             setHasError("Failed to access camera and microphone. Please check your permissions.");
@@ -217,6 +495,26 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
     };
 
     const handleLeaveMeeting = async () => {
+        // ─── WebRTC Cleanup ───
+        // Announce departure to all peers
+        if (signalingChannelRef.current) {
+            signalingChannelRef.current.send({
+                type: 'broadcast',
+                event: 'peer-leave',
+                payload: { peerId: localPeerId.current, peerName: userName },
+            }).catch(() => {});
+            supabase.removeChannel(signalingChannelRef.current);
+            signalingChannelRef.current = null;
+        }
+        // Close all peer connections
+        remotePeersRef.current.forEach((peer) => {
+            peer.pc.close();
+        });
+        remotePeersRef.current.clear();
+        setRemotePeers(new Map());
+        localStreamRef.current = null;
+        localScreenStreamRef.current = null;
+
         if (stream) stream.getTracks().forEach(track => track.stop());
         if (screenStream) screenStream.getTracks().forEach(track => track.stop());
         // Timer cleanup is handled by MeetingTimer component
@@ -272,7 +570,7 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
         }
     }, [screenStream]);
 
-    // Handle toggles
+    // Handle toggles and broadcast state
     useEffect(() => {
         if (stream) {
             stream.getAudioTracks().forEach(track => {
@@ -282,8 +580,12 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                 track.enabled = videoEnabled;
             });
         }
-    }, [audioEnabled, videoEnabled, stream]);
-
+        
+        // Broadcast our state to peers so their UI updates
+        if (inMeeting) {
+            broadcastMediaState();
+        }
+    }, [audioEnabled, videoEnabled, handRaised, stream, inMeeting, broadcastMediaState]);
     // Cleanup on unmount
     useEffect(() => {
         return () => {
@@ -437,8 +739,8 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
     const sendReaction = useCallback((emoji: string) => {
         const reaction: FloatingReaction = { id: Date.now().toString(), emoji, x: 20 + Math.random() * 60 };
         setFloatingReactions(prev => [...prev, reaction]);
-        if (chatChannelRef.current) {
-            chatChannelRef.current.send({ type: 'broadcast', event: 'reaction', payload: { emoji, userName } }).catch(() => {});
+        if (signalingChannelRef.current) {
+            signalingChannelRef.current.send({ type: 'broadcast', event: 'reaction', payload: { emoji, userName } }).catch(() => {});
         }
         setTimeout(() => setFloatingReactions(prev => prev.filter(r => r.id !== reaction.id)), 3000);
         setShowReactionTray(false);
@@ -561,16 +863,43 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
             }
             setScreenStream(null);
             setScreenShared(false);
+            localScreenStreamRef.current = null;
+
+            // Restore camera video track on all peer connections
+            const cameraTrack = localStreamRef.current?.getVideoTracks()[0];
+            if (cameraTrack) {
+                remotePeersRef.current.forEach((peer) => {
+                    const sender = peer.pc.getSenders().find(s => s.track?.kind === 'video');
+                    if (sender) sender.replaceTrack(cameraTrack).catch(() => {});
+                });
+            }
         } else {
             try {
-                const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+                const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
                 setScreenStream(displayStream);
                 setScreenShared(true);
+                localScreenStreamRef.current = displayStream;
                 
+                // Replace the video track on all peer connections with the screen track
+                const screenTrack = displayStream.getVideoTracks()[0];
+                remotePeersRef.current.forEach((peer) => {
+                    const sender = peer.pc.getSenders().find(s => s.track?.kind === 'video');
+                    if (sender) sender.replaceTrack(screenTrack).catch(() => {});
+                });
+
                 // Handle user stopping share via browser UI
-                displayStream.getVideoTracks()[0].onended = () => {
+                screenTrack.onended = () => {
                     setScreenShared(false);
                     setScreenStream(null);
+                    localScreenStreamRef.current = null;
+                    // Restore camera track
+                    const cameraTrack = localStreamRef.current?.getVideoTracks()[0];
+                    if (cameraTrack) {
+                        remotePeersRef.current.forEach((peer) => {
+                            const sender = peer.pc.getSenders().find(s => s.track?.kind === 'video');
+                            if (sender) sender.replaceTrack(cameraTrack).catch(() => {});
+                        });
+                    }
                 };
             } catch (err) {
                 console.error("Failed to share screen", err);
@@ -1025,103 +1354,157 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                 </div>
 
                 {/* Video Grid */}
-                <div className="flex-1 flex items-center justify-center p-2 md:p-6 pt-14 md:pt-20 pb-24 md:pb-28">
-                    <div className={clsx(
-                        "w-full h-full grid gap-2 md:gap-4 max-w-7xl mx-auto",
-                        screenShared
-                            ? "grid-rows-[minmax(0,2fr)_minmax(0,1fr)] md:grid-cols-3 md:grid-rows-3"
-                            : "grid-cols-1 grid-rows-1"
-                    )}>
-                        {/* Screen Share Spot */}
-                        {screenShared && (
-                             <motion.div 
-                                initial={{ opacity: 0, scale: 0.95 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                transition={{ duration: 0.3 }}
-                                className="col-span-1 row-span-1 md:col-span-2 md:row-span-3 relative rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl bg-[#131416] border border-white/5 flex items-center justify-center"
-                            >
-                                <video 
-                                    ref={screenRef} 
-                                    autoPlay 
-                                    playsInline 
-                                    className="w-full h-full object-contain"
-                                />
-                                <div className="absolute bottom-2 md:bottom-4 left-2 md:left-4 bg-blue-500/90 px-2.5 md:px-3.5 py-1.5 md:py-2 rounded-lg md:rounded-xl border border-blue-400/20 flex items-center gap-1.5 md:gap-2.5 shadow-lg">
-                                    <MonitorUp size={16} />
-                                    <span className="text-sm font-bold font-google">Screen Sharing</span>
-                                </div>
-                             </motion.div>
-                        )}
+                <div className="flex-1 flex items-center justify-center p-2 md:p-6 pt-14 md:pt-20 pb-24 md:pb-28 overflow-hidden">
+                    {(() => {
+                        const peersList = Array.from(remotePeers.values());
+                        const totalCount = 1 + peersList.length;
+                        
+                        // Check if anyone is screen sharing
+                        const anyRemoteScreen = peersList.find(p => p.screenStream !== null);
+                        const isSpotlight = screenShared || !!anyRemoteScreen;
+                        
+                        let gridCols = "grid-cols-1";
+                        if (!isSpotlight) {
+                            if (totalCount === 2) gridCols = "md:grid-cols-2";
+                            else if (totalCount === 3 || totalCount === 4) gridCols = "md:grid-cols-2 md:grid-rows-2";
+                            else if (totalCount > 4) gridCols = "md:grid-cols-3";
+                        }
 
-                        {/* Local Camera — with voice activity ring */}
-                        <motion.div 
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ duration: 0.3 }}
-                            className={clsx(
-                                "relative rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl bg-[#111214] flex items-center justify-center group min-h-0",
-                                screenShared ? "col-span-1 row-span-1 md:col-span-1 md:row-span-3" : "w-full h-full"
-                            )}
-                            style={{
-                                boxShadow: audioEnabled && audioLevel > 0.05 
-                                    ? `0 0 ${20 + audioLevel * 40}px rgba(59,130,246,${0.1 + audioLevel * 0.3}), inset 0 0 ${audioLevel * 20}px rgba(59,130,246,${audioLevel * 0.1})`
-                                    : undefined,
-                                border: audioEnabled && audioLevel > 0.05 
-                                    ? `2px solid rgba(59,130,246,${0.2 + audioLevel * 0.5})`
-                                    : '1px solid rgba(255,255,255,0.05)'
-                            }}
-                        >
-                            {!videoEnabled ? (
-                                <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#111214]">
-                                    <div className="w-28 h-28 rounded-full flex items-center justify-center mb-4 bg-gradient-to-br from-blue-500/15 to-purple-500/15 border border-white/10 shadow-[0_0_40px_rgba(59,130,246,0.1)]">
-                                         <UserAvatar name={userName} avatarUrl={userAvatar} size={88} rounded="full" />
-                                    </div>
-                                    <p className="text-white/40 text-xs font-medium">{userName} · Camera off</p>
-                                </div>
-                            ) : (
-                                <video 
-                                    ref={videoRef} 
-                                    autoPlay 
-                                    playsInline 
-                                    muted 
-                                    className="w-full h-full object-cover transform -scale-x-100"
-                                />
-                            )}
+                        return (
+                            <div className={clsx(
+                                "w-full h-full grid gap-2 md:gap-4 max-w-7xl mx-auto",
+                                isSpotlight 
+                                    ? "grid-rows-[minmax(0,2fr)_minmax(0,1fr)] md:grid-cols-3 md:grid-rows-3"
+                                    : gridCols
+                            )}>
+                                {/* --- SPOTLIGHT SCREEN SHARE --- */}
+                                {isSpotlight && (
+                                    <motion.div 
+                                        initial={{ opacity: 0, scale: 0.95 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        transition={{ duration: 0.3 }}
+                                        className="col-span-1 row-span-1 md:col-span-2 md:row-span-3 relative rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl bg-[#131416] border border-white/5 flex items-center justify-center"
+                                    >
+                                        {screenShared ? (
+                                            <video ref={screenRef} autoPlay playsInline muted className="w-full h-full object-contain" />
+                                        ) : anyRemoteScreen ? (
+                                            <video 
+                                                autoPlay playsInline 
+                                                className="w-full h-full object-contain"
+                                                ref={el => { if (el && el.srcObject !== anyRemoteScreen.screenStream) el.srcObject = anyRemoteScreen.screenStream; }} 
+                                            />
+                                        ) : null}
+                                        <div className="absolute bottom-2 md:bottom-4 left-2 md:left-4 bg-blue-500/90 px-2.5 md:px-3.5 py-1.5 md:py-2 rounded-lg md:rounded-xl border border-blue-400/20 flex items-center gap-1.5 md:gap-2.5 shadow-lg">
+                                            <MonitorUp size={16} />
+                                            <span className="text-[10px] md:text-sm font-bold font-google">
+                                                {screenShared ? 'You are sharing screen' : `${anyRemoteScreen?.userName} is sharing screen`}
+                                            </span>
+                                        </div>
+                                    </motion.div>
+                                )}
 
-                            {/* Always-visible bottom overlay */}
-                            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent p-2.5 md:p-4 flex justify-between items-end">
-                                <div className="flex gap-1.5 items-center">
-                                    <div className="bg-black/60 px-2.5 py-1 md:px-3 md:py-1.5 rounded-lg md:rounded-xl border border-white/10 flex items-center gap-1.5 md:gap-2">
-                                        {audioEnabled && audioLevel > 0.05 && (
-                                            <div className="flex gap-0.5 items-end h-3">
-                                                {[0, 1, 2].map(i => (
-                                                    <div key={i} className="w-0.5 bg-blue-400 rounded-full transition-all duration-75" style={{ height: `${Math.max(3, audioLevel * 12 * (i === 1 ? 1 : 0.6))}px` }} />
-                                                ))}
+                                {/* --- LOCAL PARTICIPANT TILE --- */}
+                                <motion.div 
+                                    initial={{ opacity: 0, scale: 0.95 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    transition={{ duration: 0.3 }}
+                                    className={clsx(
+                                        "relative rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl bg-[#111214] flex items-center justify-center group min-h-0",
+                                        isSpotlight ? "col-span-1 row-span-1 md:col-span-1 md:row-span-1" : "w-full h-full"
+                                    )}
+                                    style={{
+                                        boxShadow: audioEnabled && audioLevel > 0.05 
+                                            ? `0 0 ${20 + audioLevel * 40}px rgba(59,130,246,${0.1 + audioLevel * 0.3}), inset 0 0 ${audioLevel * 20}px rgba(59,130,246,${audioLevel * 0.1})`
+                                            : undefined,
+                                        border: audioEnabled && audioLevel > 0.05 
+                                            ? `2px solid rgba(59,130,246,${0.2 + audioLevel * 0.5})`
+                                            : '1px solid rgba(255,255,255,0.05)'
+                                    }}
+                                >
+                                    {!videoEnabled ? (
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#111214]">
+                                            <div className="w-16 h-16 md:w-28 md:h-28 rounded-full flex items-center justify-center mb-2 md:mb-4 bg-gradient-to-br from-blue-500/15 to-purple-500/15 border border-white/10 shadow-[0_0_40px_rgba(59,130,246,0.1)]">
+                                                <UserAvatar name={userName} avatarUrl={userAvatar} size={88} rounded="full" className="w-12 h-12 md:w-[88px] md:h-[88px]" />
                                             </div>
-                                        )}
-                                        <span className="text-[10px] md:text-xs font-bold font-google text-white/90">{userName}</span>
+                                            <p className="text-white/40 text-[10px] md:text-xs font-medium">{userName} (You)</p>
+                                        </div>
+                                    ) : (
+                                        <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover transform -scale-x-100" />
+                                    )}
+
+                                    <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent p-2 md:p-4 flex justify-between items-end">
+                                        <div className="flex gap-1.5 items-center">
+                                            <div className="bg-black/60 px-2 py-1 md:px-3 md:py-1.5 rounded-lg md:rounded-xl border border-white/10 flex items-center gap-1.5 md:gap-2">
+                                                {audioEnabled && audioLevel > 0.05 && (
+                                                    <div className="flex gap-0.5 items-end h-2 md:h-3">
+                                                        {[0, 1, 2].map(i => (
+                                                            <div key={i} className="w-0.5 bg-blue-400 rounded-full transition-all duration-75" style={{ height: `${Math.max(3, audioLevel * 12 * (i === 1 ? 1 : 0.6))}px` }} />
+                                                        ))}
+                                                    </div>
+                                                )}
+                                                <span className="text-[10px] md:text-xs font-bold font-google text-white/90">You</span>
+                                            </div>
+                                            {handRaised && (
+                                                <div className="bg-yellow-500/90 p-1 md:p-1.5 rounded-lg border border-yellow-400/20 animate-bounce">
+                                                    <Hand size={12} className="text-white md:w-[14px] md:h-[14px]" />
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="flex gap-1">
+                                            {!audioEnabled && <div className="bg-red-500/80 p-1 md:p-1.5 rounded-lg"><MicOff size={10} className="text-white md:w-3 md:h-3" /></div>}
+                                            {!videoEnabled && <div className="bg-red-500/80 p-1 md:p-1.5 rounded-lg"><VideoOff size={10} className="text-white md:w-3 md:h-3" /></div>}
+                                        </div>
                                     </div>
-                                    {handRaised && (
-                                        <div className="bg-yellow-500/90 p-1 md:p-1.5 rounded-lg md:rounded-xl border border-yellow-400/20 animate-bounce">
-                                            <Hand size={14} className="text-white" />
+                                </motion.div>
+
+                                {/* --- REMOTE PEERS TILES --- */}
+                                {peersList.map((peer) => (
+                                    <motion.div 
+                                        key={peer.odei}
+                                        initial={{ opacity: 0, scale: 0.95 }}
+                                        animate={{ opacity: 1, scale: 1 }}
+                                        className={clsx(
+                                            "relative rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl bg-[#111214] flex items-center justify-center group min-h-0",
+                                            isSpotlight ? "col-span-1 row-span-1 md:col-span-1 md:row-span-1" : "w-full h-full"
+                                        )}
+                                        style={{ border: '1px solid rgba(255,255,255,0.05)' }}
+                                    >
+                                        {!peer.videoEnabled || !peer.stream ? (
+                                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#111214]">
+                                                <div className="w-16 h-16 md:w-28 md:h-28 rounded-full flex items-center justify-center mb-2 md:mb-4 bg-gradient-to-br from-blue-500/15 to-purple-500/15 border border-white/10">
+                                                    <UserAvatar name={peer.userName} avatarUrl={peer.avatarUrl} size={88} rounded="full" className="w-12 h-12 md:w-[88px] md:h-[88px]" />
+                                                </div>
+                                                <p className="text-white/40 text-[10px] md:text-xs font-medium">{peer.userName}</p>
+                                            </div>
+                                        ) : (
+                                            <video 
+                                                autoPlay playsInline 
+                                                className="w-full h-full object-cover transform -scale-x-100"
+                                                ref={el => { if (el && el.srcObject !== peer.stream) el.srcObject = peer.stream; }}
+                                            />
+                                        )}
+
+                                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent p-2 md:p-4 flex justify-between items-end">
+                                            <div className="flex gap-1.5 items-center">
+                                                <div className="bg-black/60 px-2 py-1 md:px-3 md:py-1.5 rounded-lg md:rounded-xl border border-white/10 flex items-center gap-1.5 md:gap-2">
+                                                    <span className="text-[10px] md:text-xs font-bold font-google text-white/90">{peer.userName}</span>
+                                                </div>
+                                                {peer.handRaised && (
+                                                    <div className="bg-yellow-500/90 p-1 md:p-1.5 rounded-lg border border-yellow-400/20 animate-bounce">
+                                                        <Hand size={12} className="text-white md:w-[14px] md:h-[14px]" />
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div className="flex gap-1">
+                                                {!peer.audioEnabled && <div className="bg-red-500/80 p-1 md:p-1.5 rounded-lg"><MicOff size={10} className="text-white md:w-3 md:h-3" /></div>}
+                                                {!peer.videoEnabled && <div className="bg-red-500/80 p-1 md:p-1.5 rounded-lg"><VideoOff size={10} className="text-white md:w-3 md:h-3" /></div>}
+                                            </div>
                                         </div>
-                                    )}
-                                </div>
-                                <div className="flex gap-1">
-                                    {!audioEnabled && (
-                                        <div className="bg-red-500/80 p-1 md:p-1.5 rounded-lg">
-                                            <MicOff size={10} className="text-white" />
-                                        </div>
-                                    )}
-                                    {!videoEnabled && (
-                                        <div className="bg-red-500/80 p-1 md:p-1.5 rounded-lg">
-                                            <VideoOff size={10} className="text-white" />
-                                        </div>
-                                    )}
-                                </div>
+                                    </motion.div>
+                                ))}
                             </div>
-                        </motion.div>
-                    </div>
+                        );
+                    })()}
                 </div>
 
                 {/* Closed Captions Overlay — Live Speech Recognition */}
