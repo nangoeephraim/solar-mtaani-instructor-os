@@ -5,6 +5,9 @@ import clsx from 'clsx';
 import UserAvatar from './UserAvatar';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../services/supabase';
+import { Room, RoomEvent, VideoPresets, LocalParticipant, RemoteParticipant, RemoteTrackPublication, RemoteTrack, Track } from 'livekit-client';
+import { BackgroundBlur, VirtualBackground } from '@livekit/track-processors';
+import { KrispNoiseFilter } from '@livekit/krisp-noise-filter';
 
 // Web Speech API types
 interface SpeechRecognitionEvent extends Event {
@@ -179,6 +182,7 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
     // Captions (Web Speech API)
     const [captionText, setCaptionText] = useState('');
     const [captionInterim, setCaptionInterim] = useState('');
+    const [captionSpeaker, setCaptionSpeaker] = useState('');
     const [speechSupported, setSpeechSupported] = useState(false);
     const recognitionRef = useRef<any>(null);
     const captionTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -233,8 +237,45 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
     const remotePeersRef = useRef<Map<string, RemotePeer>>(new Map());
     const localPeerId = useRef<string>(crypto.randomUUID());
     const signalingChannelRef = useRef<any>(null);
+    const liveKitRoomRef = useRef<Room | null>(null);
     const localStreamRef = useRef<MediaStream | null>(null);
     const localScreenStreamRef = useRef<MediaStream | null>(null);
+    const dbMeetingIdRef = useRef<string | null>(null);
+
+    // LiveKit Track Processors
+    const krispFilterRef = useRef<KrispNoiseFilter | null>(null);
+    const blurFilterRef = useRef<BackgroundBlur | null>(null);
+    const virtualBgFilterRef = useRef<VirtualBackground | null>(null);
+
+    // Apply LiveKit video processor when background settings change
+    useEffect(() => {
+        const applyVideoProcessor = async () => {
+            if (!liveKitRoomRef.current) return;
+            const videoTracks = liveKitRoomRef.current.localParticipant.videoTrackPublications;
+            for (const [, pub] of videoTracks) {
+                if (pub.track && pub.source !== 'screen_share') {
+                    try {
+                        if (backgroundBlur === 'Heavy') {
+                            if (!blurFilterRef.current) blurFilterRef.current = BackgroundBlur(20, { delegate: 'GPU' });
+                            else blurFilterRef.current.updateBlurRadius(20);
+                            await pub.track.setProcessor(blurFilterRef.current);
+                        } else if (backgroundBlur === 'Light') {
+                            if (!blurFilterRef.current) blurFilterRef.current = BackgroundBlur(10, { delegate: 'GPU' });
+                            else blurFilterRef.current.updateBlurRadius(10);
+                            await pub.track.setProcessor(blurFilterRef.current);
+                        } else if (selectedBg !== null) {
+                            if (!virtualBgFilterRef.current) virtualBgFilterRef.current = VirtualBackground(`https://picsum.photos/seed/${selectedBg * 42}/1920/1080`, { delegate: 'GPU' });
+                            else virtualBgFilterRef.current.updateImagePath(`https://picsum.photos/seed/${selectedBg * 42}/1920/1080`);
+                            await pub.track.setProcessor(virtualBgFilterRef.current);
+                        } else {
+                            await pub.track.stopProcessor();
+                        }
+                    } catch (err) { console.warn('[LiveKit] Failed to apply video processor:', err); }
+                }
+            }
+        };
+        applyVideoProcessor();
+    }, [backgroundBlur, selectedBg]);
 
     // File sharing state
     const [meetingFiles, setMeetingFiles] = useState<MeetingFile[]>([]);
@@ -407,7 +448,74 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
     }, []);
 
     // Setup Supabase signaling channel for WebRTC
-    const setupSignaling = useCallback((mid: string) => {
+    const setupSignaling = useCallback(async (mid: string) => {
+        const useLiveKit = !!(import.meta as any).env.VITE_LIVEKIT_URL;
+        if (useLiveKit) {
+            try {
+                // Phase 4.1: Use Vercel Edge Function for token generation
+                const response = await fetch('/api/livekit-token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ roomName: mid, participantName: userName, participantId: user?.id || crypto.randomUUID() })
+                });
+                const data = await response.json();
+                
+                if (data?.token) {
+                    const room = new Room({
+                        adaptiveStream: true,
+                        dynacast: true,
+                        videoCaptureDefaults: { resolution: VideoPresets.h720.resolution },
+                        publishDefaults: { simulcast: true, videoSimulcastLayers: [VideoPresets.h1080, VideoPresets.h720, VideoPresets.h180], videoCodec: 'vp8' }
+                    });
+                    liveKitRoomRef.current = room;
+
+                    room.on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
+                        const pid = participant.identity;
+                        const stream = new MediaStream([track.mediaStreamTrack]);
+                        const isScreen = track.source === 'screen_share';
+                        updatePeer(pid, p => isScreen ? { ...p, screenStream: stream } : { ...p, stream });
+                        if (!remotePeersRef.current.has(pid)) {
+                            const peerData: RemotePeer = {
+                                odei: pid, userName: participant.name || pid, avatarUrl: undefined, pc: null as any,
+                                stream: isScreen ? null : stream, screenStream: isScreen ? stream : null,
+                                audioEnabled: participant.isMicrophoneEnabled, videoEnabled: participant.isCameraEnabled, handRaised: false
+                            };
+                            remotePeersRef.current.set(pid, peerData);
+                            setRemotePeers(new Map(remotePeersRef.current));
+                        }
+                    });
+                    room.on(RoomEvent.TrackUnsubscribed, (track, pub, participant) => {
+                        const pid = participant.identity;
+                        const isScreen = track.source === 'screen_share';
+                        updatePeer(pid, p => isScreen ? { ...p, screenStream: null } : { ...p, stream: null });
+                    });
+                    room.on(RoomEvent.ParticipantDisconnected, (participant) => {
+                        remotePeersRef.current.delete(participant.identity);
+                        setRemotePeers(new Map(remotePeersRef.current));
+                        addToast(`${participant.name || 'Participant'} left`, '👋');
+                    });
+                    room.on(RoomEvent.TrackMuted, (pub, participant) => {
+                        const pid = participant.identity;
+                        updatePeer(pid, p => pub.source === 'microphone' ? { ...p, audioEnabled: false } : pub.source === 'camera' ? { ...p, videoEnabled: false } : p);
+                    });
+                    room.on(RoomEvent.TrackUnmuted, (pub, participant) => {
+                        const pid = participant.identity;
+                        updatePeer(pid, p => pub.source === 'microphone' ? { ...p, audioEnabled: true } : pub.source === 'camera' ? { ...p, videoEnabled: true } : p);
+                    });
+
+                    await room.connect((import.meta as any).env.VITE_LIVEKIT_URL, data.token);
+                    
+                    if (localStreamRef.current) {
+                        for (const track of localStreamRef.current.getTracks()) {
+                            await room.localParticipant.publishTrack(track, { simulcast: track.kind === 'video' });
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error("[LiveKit] Connection failed, falling back to WebRTC", err);
+            }
+        }
+
         const channelName = `prism-meet-signal:${mid}`;
         const ch = supabase.channel(channelName, { config: { broadcast: { self: false } } });
 
@@ -525,6 +633,18 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
             setTimeout(() => setFloatingReactions(prev => prev.filter(r => r.id !== reaction.id)), 3000);
         });
 
+        // Remote Captions (Task 3.3: ASR Diarization broadcast)
+        ch.on('broadcast', { event: 'caption' }, (payload: any) => {
+            const { text, interim, speaker } = payload.payload;
+            if (text) setCaptionText(text);
+            if (interim) setCaptionInterim(interim);
+            setCaptionSpeaker(speaker);
+            if (text) {
+                if (captionTimeoutRef.current) clearTimeout(captionTimeoutRef.current);
+                captionTimeoutRef.current = setTimeout(() => { setCaptionText(''); setCaptionSpeaker(''); }, 6000);
+            }
+        });
+
         // Task 1.1: Screen share signaling events
         ch.on('broadcast', { event: 'screen-share-start' }, (payload: any) => {
             const { peerId: pid, peerName: pn } = payload.payload;
@@ -588,16 +708,18 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
 
         ch.subscribe((status: string) => {
             if (status === 'SUBSCRIBED') {
-                // Announce our presence to existing peers
-                ch.send({
-                    type: 'broadcast',
-                    event: 'peer-join',
-                    payload: {
-                        peerId: localPeerId.current,
-                        peerName: userName,
-                        peerAvatar: userAvatar,
-                    },
-                }).catch(() => {});
+                // Announce our presence to existing peers only if not using LiveKit
+                if (!liveKitRoomRef.current) {
+                    ch.send({
+                        type: 'broadcast',
+                        event: 'peer-join',
+                        payload: {
+                            peerId: localPeerId.current,
+                            peerName: userName,
+                            peerAvatar: userAvatar,
+                        },
+                    }).catch(() => {});
+                }
 
                 // Task 0.5: Exponential backoff re-announce for late-joiner discovery
                 // Fast first re-announce (1s) then backs off (3s, 8s, 15s) to avoid flooding
@@ -698,11 +820,24 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                 try {
                     const { data: existing } = await supabase
                         .from('meetings').select('id').eq('meeting_code', mid).maybeSingle();
+                    
+                    let currentMeetingId = existing?.id;
                     if (!existing) {
-                        await supabase.from('meetings').insert({
+                        const { data: newMeeting } = await supabase.from('meetings').insert({
                             meeting_code: mid, host_id: user.id, host_name: userName,
                             title: `Meeting ${mid}`, status: 'active',
-                        });
+                        }).select('id').single();
+                        currentMeetingId = newMeeting?.id;
+                    }
+
+                    if (currentMeetingId) {
+                        dbMeetingIdRef.current = currentMeetingId;
+                        // Task 2.1 & 2.2: Persist participant to satisfy RLS and presence queries
+                        await supabase.from('meeting_participants').upsert({
+                            meeting_id: currentMeetingId,
+                            user_id: user.id,
+                            role: existing ? 'participant' : 'host'
+                        }, { onConflict: 'meeting_id,user_id' });
                     }
                 } catch (err) { console.warn('[Meetings] DB persist failed:', err); }
             };
@@ -720,7 +855,12 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
     };
 
     const handleLeaveMeeting = async () => {
-        // ─── WebRTC Cleanup ───
+        // ─── WebRTC/LiveKit Cleanup ───
+        if (liveKitRoomRef.current) {
+            liveKitRoomRef.current.disconnect();
+            liveKitRoomRef.current = null;
+        }
+
         // Announce departure to all peers
         if (signalingChannelRef.current) {
             // Clear re-announce heartbeat timeout
@@ -767,10 +907,19 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
         // Mark meeting as ended in Supabase
         if (meetingId && user?.id) {
             try {
+                // If host, end the meeting
                 await supabase.from('meetings')
                     .update({ status: 'ended', ended_at: new Date().toISOString() })
                     .eq('meeting_code', meetingId)
                     .eq('host_id', user.id);
+                    
+                // For all participants, set left_at
+                if (dbMeetingIdRef.current) {
+                    await supabase.from('meeting_participants')
+                        .update({ left_at: new Date().toISOString() })
+                        .eq('meeting_id', dbMeetingIdRef.current)
+                        .eq('user_id', user.id);
+                }
             } catch { /* non-blocking */ }
         }
 
@@ -886,13 +1035,27 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
             }
             if (final) {
                 setCaptionText(final);
+                setCaptionSpeaker(userName);
                 setCaptionInterim('');
+                if (signalingChannelRef.current) {
+                    signalingChannelRef.current.send({
+                        type: 'broadcast', event: 'caption',
+                        payload: { text: final, interim: '', speaker: userName }
+                    }).catch(() => {});
+                }
                 // Clear caption after 6s of silence
                 if (captionTimeoutRef.current) clearTimeout(captionTimeoutRef.current);
-                captionTimeoutRef.current = setTimeout(() => setCaptionText(''), 6000);
+                captionTimeoutRef.current = setTimeout(() => { setCaptionText(''); setCaptionSpeaker(''); }, 6000);
             }
             if (interim) {
                 setCaptionInterim(interim);
+                setCaptionSpeaker(userName);
+                if (signalingChannelRef.current) {
+                    signalingChannelRef.current.send({
+                        type: 'broadcast', event: 'caption',
+                        payload: { text: '', interim, speaker: userName }
+                    }).catch(() => {});
+                }
             }
         };
 
@@ -1210,10 +1373,33 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
         }
     }, [stream, noiseSuppression, addToast]);
 
-    // Phase 2: Toggle noise suppression
+    // Phase 2/3: Toggle noise suppression (LiveKit + Krisp or WebRTC Fallback)
     const toggleNoiseSuppression = useCallback(async () => {
         const newState = !noiseSuppression;
         setNoiseSuppression(newState);
+
+        // Phase 3.2: Use Krisp AI Noise Cancellation if connected to LiveKit
+        if (liveKitRoomRef.current) {
+            try {
+                if (!krispFilterRef.current) krispFilterRef.current = KrispNoiseFilter();
+                const audioTracks = liveKitRoomRef.current.localParticipant.audioTrackPublications;
+                for (const [, pub] of audioTracks) {
+                    if (pub.track) {
+                        if (newState) {
+                            await pub.track.setProcessor(krispFilterRef.current);
+                        } else {
+                            await pub.track.stopProcessor();
+                        }
+                    }
+                }
+                addToast(newState ? 'Krisp AI Noise Cancellation ON' : 'Noise Cancellation OFF', newState ? '🔇' : '🔊');
+                return;
+            } catch (err) {
+                console.warn("[LiveKit] Krisp failed, falling back to basic:", err);
+            }
+        }
+
+        // WebRTC Mesh fallback
         if (!stream) return;
         const audioTrack = stream.getAudioTracks()[0];
         if (audioTrack) {
@@ -1461,22 +1647,31 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
             setScreenShared(false);
             localScreenStreamRef.current = null;
 
-            // Task 1.1: Remove screen share transceivers from all peers
-            remotePeersRef.current.forEach((peer) => {
-                const senders = peer.pc.getSenders();
-                senders.forEach(sender => {
-                    if (sender.track && sender.track.kind === 'video' && (sender.track as any).__isScreenShare) {
-                        peer.pc.removeTrack(sender);
+            if (liveKitRoomRef.current) {
+                // LiveKit unpublish screen
+                liveKitRoomRef.current.localParticipant.videoTrackPublications.forEach(pub => {
+                    if (pub.source === 'screen_share' && pub.track) {
+                        liveKitRoomRef.current?.localParticipant.unpublishTrack(pub.track);
                     }
                 });
-            });
+            } else {
+                // Task 1.1: Remove screen share transceivers from all peers
+                remotePeersRef.current.forEach((peer) => {
+                    const senders = peer.pc.getSenders();
+                    senders.forEach(sender => {
+                        if (sender.track && sender.track.kind === 'video' && (sender.track as any).__isScreenShare) {
+                            peer.pc.removeTrack(sender);
+                        }
+                    });
+                });
 
-            // Notify peers that screen share stopped
-            if (signalingChannelRef.current) {
-                signalingChannelRef.current.send({
-                    type: 'broadcast', event: 'screen-share-stop',
-                    payload: { peerId: localPeerId.current },
-                }).catch(() => {});
+                // Notify peers that screen share stopped
+                if (signalingChannelRef.current) {
+                    signalingChannelRef.current.send({
+                        type: 'broadcast', event: 'screen-share-stop',
+                        payload: { peerId: localPeerId.current },
+                    }).catch(() => {});
+                }
             }
         } else {
             try {
@@ -1484,44 +1679,49 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                 setScreenStream(displayStream);
                 setScreenShared(true);
                 localScreenStreamRef.current = displayStream;
-                
-                // Task 1.1: ADD screen track as a new transceiver (keeps camera running)
                 const screenTrack = displayStream.getVideoTracks()[0];
-                (screenTrack as any).__isScreenShare = true; // tag for cleanup
-                
-                remotePeersRef.current.forEach((peer) => {
-                    peer.pc.addTrack(screenTrack, displayStream);
-                });
 
-                // Notify peers that screen share started
-                if (signalingChannelRef.current) {
-                    signalingChannelRef.current.send({
-                        type: 'broadcast', event: 'screen-share-start',
-                        payload: { peerId: localPeerId.current, peerName: userName },
-                    }).catch(() => {});
-                }
-
-                // Handle user stopping share via browser UI
-                screenTrack.onended = () => {
-                    setScreenShared(false);
-                    setScreenStream(null);
-                    localScreenStreamRef.current = null;
-                    // Remove screen track from all peers
+                if (liveKitRoomRef.current) {
+                    await liveKitRoomRef.current.localParticipant.publishTrack(screenTrack, { source: 'screen_share' });
+                    screenTrack.onended = () => {
+                        liveKitRoomRef.current?.localParticipant.unpublishTrack(screenTrack);
+                        setScreenShared(false);
+                        setScreenStream(null);
+                        localScreenStreamRef.current = null;
+                    };
+                } else {
+                    (screenTrack as any).__isScreenShare = true; // tag for cleanup
                     remotePeersRef.current.forEach((peer) => {
-                        const senders = peer.pc.getSenders();
-                        senders.forEach(sender => {
-                            if (sender.track && (sender.track as any).__isScreenShare) {
-                                peer.pc.removeTrack(sender);
-                            }
-                        });
+                        peer.pc.addTrack(screenTrack, displayStream);
                     });
+
                     if (signalingChannelRef.current) {
                         signalingChannelRef.current.send({
-                            type: 'broadcast', event: 'screen-share-stop',
-                            payload: { peerId: localPeerId.current },
+                            type: 'broadcast', event: 'screen-share-start',
+                            payload: { peerId: localPeerId.current, peerName: userName },
                         }).catch(() => {});
                     }
-                };
+
+                    screenTrack.onended = () => {
+                        setScreenShared(false);
+                        setScreenStream(null);
+                        localScreenStreamRef.current = null;
+                        remotePeersRef.current.forEach((peer) => {
+                            const senders = peer.pc.getSenders();
+                            senders.forEach(sender => {
+                                if (sender.track && (sender.track as any).__isScreenShare) {
+                                    peer.pc.removeTrack(sender);
+                                }
+                            });
+                        });
+                        if (signalingChannelRef.current) {
+                            signalingChannelRef.current.send({
+                                type: 'broadcast', event: 'screen-share-stop',
+                                payload: { peerId: localPeerId.current },
+                            }).catch(() => {});
+                        }
+                    };
+                }
             } catch (err) {
                 console.error("Failed to share screen", err);
             }
@@ -1680,18 +1880,50 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                     videoBitsPerSecond: 2500000, // 2.5 Mbps
                 });
                 mr.ondataavailable = (e) => { if (e.data.size > 0) recordedChunksRef.current.push(e.data); };
-                mr.onstop = () => {
+                mr.onstop = async () => {
                     const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url; 
-                    a.download = `PRISM_Meeting_${meetingId}_${new Date().toISOString().slice(0,10)}.webm`;
-                    a.click(); 
-                    URL.revokeObjectURL(url);
+                    
+                    addToast('Uploading recording to cloud...', '☁️');
+                    try {
+                        const formData = new FormData();
+                        formData.append('file', blob, `PRISM_Meeting_${meetingId}.webm`);
+                        formData.append('meetingId', meetingId);
+                        
+                        const res = await fetch('/api/upload-recording', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        const data = await res.json();
+                        if (data.url) {
+                            addToast('Recording saved to Vercel Blob!', '✅');
+                            // Broadcast the recording link to the chat
+                            if (chatChannelRef.current) {
+                                chatChannelRef.current.send({
+                                    type: 'broadcast', event: 'chat',
+                                    payload: {
+                                        id: Date.now().toString(),
+                                        sender: 'System',
+                                        text: `Meeting recording is available: ${data.url}`,
+                                        timestamp: new Date().toISOString(),
+                                        isSelf: false
+                                    }
+                                }).catch(() => {});
+                            }
+                        } else {
+                            throw new Error('Upload failed');
+                        }
+                    } catch (e) {
+                        addToast('Cloud upload failed, saving locally', '💾');
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url; 
+                        a.download = `PRISM_Meeting_${meetingId}_${new Date().toISOString().slice(0,10)}.webm`;
+                        a.click(); 
+                        URL.revokeObjectURL(url);
+                    }
                     // Cleanup
                     audioCtx.close().catch(() => {});
                     peerVideos.forEach(pv => { pv.video.srcObject = null; });
-                    addToast('Recording saved!', '💾');
                 };
                 mr.start(1000);
                 mediaRecorderRef2.current = mr;
@@ -2036,7 +2268,7 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
             <div className={clsx("flex-1 flex flex-col relative z-10 transition-all duration-300", showSidebar ? "lg:mr-96" : "")}>
                 
                 {/* Header — 2-section on mobile to prevent overflow */}
-                <div className="absolute top-0 left-0 right-0 z-20 bg-[#08090a]/95 border-b border-white/5">
+                <div className="absolute top-0 left-0 right-0 z-20 bg-black/40 backdrop-blur-xl border-b border-white/10">
                     {/* Single unified row — items constrained & overflow-hidden */}
                     <div className="flex items-center justify-between px-2 md:px-4 py-2 md:py-3 gap-2">
                         {/* LEFT: recording badge + meeting ID */}
@@ -2125,17 +2357,17 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                         
                         let gridCols = "grid-cols-1";
                         if (!isSpotlight) {
-                            if (totalCount === 2) gridCols = "md:grid-cols-2";
-                            else if (totalCount === 3 || totalCount === 4) gridCols = "md:grid-cols-2 md:grid-rows-2";
-                            else if (totalCount <= 6) gridCols = "md:grid-cols-3 md:grid-rows-2";
-                            else if (totalCount <= 9) gridCols = "md:grid-cols-3 md:grid-rows-3";
-                            else if (totalCount <= 12) gridCols = "md:grid-cols-4 md:grid-rows-3";
-                            else gridCols = "md:grid-cols-4";
+                            if (totalCount === 2) gridCols = "grid-cols-1 md:grid-cols-2 grid-rows-2 md:grid-rows-1";
+                            else if (totalCount <= 4) gridCols = "grid-cols-2 grid-rows-2";
+                            else if (totalCount <= 6) gridCols = "grid-cols-2 md:grid-cols-3 grid-rows-3 md:grid-rows-2";
+                            else if (totalCount <= 9) gridCols = "grid-cols-2 sm:grid-cols-3 md:grid-cols-3 grid-rows-auto md:grid-rows-3";
+                            else gridCols = "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 grid-rows-auto";
                         }
 
                         return (
                             <div className={clsx(
-                                "w-full h-full grid gap-2 md:gap-4 max-w-7xl mx-auto",
+                                "w-full h-full grid gap-2 md:gap-4 max-w-7xl mx-auto overflow-hidden",
+                                !isSpotlight && totalCount > 6 ? "overflow-y-auto custom-scrollbar auto-rows-[minmax(180px,1fr)] md:auto-rows-fr" : "auto-rows-fr",
                                 isSpotlight 
                                     ? "grid-rows-[minmax(0,2fr)_minmax(0,1fr)] md:grid-cols-3 md:grid-rows-3"
                                     : gridCols
@@ -2362,10 +2594,13 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                                         <span>Captions unavailable — your browser doesn't support Speech Recognition</span>
                                     </p>
                                 ) : (captionText || captionInterim) ? (
-                                    <p className="text-white font-medium text-base leading-relaxed">
-                                        {captionText && <span>{captionText} </span>}
-                                        {captionInterim && <span className="text-white/50 italic">{captionInterim}</span>}
-                                    </p>
+                                    <div className="flex flex-col gap-1">
+                                        <span className="text-xs font-bold text-blue-400 uppercase tracking-wider">{captionSpeaker}</span>
+                                        <p className="text-white font-medium text-base leading-relaxed">
+                                            {captionText && <span>{captionText} </span>}
+                                            {captionInterim && <span className="text-white/50 italic">{captionInterim}</span>}
+                                        </p>
+                                    </div>
                                 ) : (
                                     <p className="text-white/50 font-medium text-sm flex items-center justify-center gap-2">
                                         <Captions size={16} className="text-blue-400" />
@@ -2394,7 +2629,7 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                                 animate={{ y: 0, opacity: 1 }}
                                 exit={{ y: '100%', opacity: 0 }}
                                 transition={{ type: 'spring', stiffness: 400, damping: 35 }}
-                                className="absolute bottom-0 left-0 right-0 z-50 md:hidden bg-[#1a1b1e] border-t border-white/10 rounded-t-3xl p-5 shadow-[0_-8px_32px_rgba(0,0,0,0.6)] overflow-hidden"
+                                className="absolute bottom-0 left-0 right-0 z-50 md:hidden bg-black/60 backdrop-blur-3xl border-t border-white/10 rounded-t-3xl p-5 shadow-[0_-8px_32px_rgba(0,0,0,0.6)] overflow-y-auto max-h-[85vh] custom-scrollbar"
                                 style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom, 1.5rem))' }}
                             >
                                 <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mb-6" />
@@ -2443,17 +2678,23 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
 
                 {/* Bottom Controls Bar */}
                 <div 
-                    className="absolute bottom-0 left-0 right-0 z-30 flex justify-center"
-                    style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom, 0.5rem))' }}
+                    className="absolute bottom-0 left-0 right-0 z-30 flex justify-center pb-3 md:pb-6 px-3 w-full"
+                    style={{ paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom, 0.75rem))' }}
                 >
-                    <div className="flex items-center justify-center gap-0.5 md:gap-2 bg-[#1a1b1e]/95 md:backdrop-blur-md border border-white/10 px-2 md:px-5 py-1.5 md:py-3 rounded-[2rem] shadow-[0_-4px_24px_rgba(0,0,0,0.3),0_8px_32px_rgba(0,0,0,0.4)] mb-2 md:mb-6 mx-2 overflow-x-auto max-w-[calc(100vw-1rem)]">
+                    <div className="flex items-center justify-between md:justify-center w-full max-w-fit gap-1 md:gap-2 bg-black/50 backdrop-blur-3xl border border-white/10 px-3 md:px-5 py-2.5 md:py-3.5 rounded-[2rem] shadow-[0_-4px_24px_rgba(0,0,0,0.4),0_8px_32px_rgba(0,0,0,0.5)] mx-auto transition-all duration-300">
                         
-                        <button aria-label={audioEnabled ? "Mute" : "Unmute"} onClick={() => setAudioEnabled(!audioEnabled)} className={clsx("p-2 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", audioEnabled ? "bg-white/10 hover:bg-white/20 text-white" : "bg-red-500 text-white hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.4)]")}>
+                        <button aria-label={audioEnabled ? "Mute" : "Unmute"} onClick={() => {
+                            setAudioEnabled(!audioEnabled);
+                            if (liveKitRoomRef.current) liveKitRoomRef.current.localParticipant.setMicrophoneEnabled(!audioEnabled);
+                        }} className={clsx("p-2 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", audioEnabled ? "bg-white/10 hover:bg-white/20 text-white" : "bg-red-500 text-white hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.4)]")}>
                             {audioEnabled ? <Mic size={16} className="md:hidden" /> : <MicOff size={16} className="md:hidden" />}
                             {audioEnabled ? <Mic size={18} className="hidden md:block" /> : <MicOff size={18} className="hidden md:block" />}
                         </button>
                         
-                        <button aria-label={videoEnabled ? "Camera off" : "Camera on"} onClick={() => setVideoEnabled(!videoEnabled)} className={clsx("p-2 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", videoEnabled ? "bg-white/10 hover:bg-white/20 text-white" : "bg-red-500 text-white hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.4)]")}>
+                        <button aria-label={videoEnabled ? "Camera off" : "Camera on"} onClick={() => {
+                            setVideoEnabled(!videoEnabled);
+                            if (liveKitRoomRef.current) liveKitRoomRef.current.localParticipant.setCameraEnabled(!videoEnabled);
+                        }} className={clsx("p-2 md:p-3.5 rounded-2xl transition-all duration-300 relative group flex-shrink-0", videoEnabled ? "bg-white/10 hover:bg-white/20 text-white" : "bg-red-500 text-white hover:bg-red-600 shadow-[0_0_15px_rgba(239,68,68,0.4)]")}>
                             {videoEnabled ? <Video size={16} className="md:hidden" /> : <VideoOff size={16} className="md:hidden" />}
                             {videoEnabled ? <Video size={18} className="hidden md:block" /> : <VideoOff size={18} className="hidden md:block" />}
                         </button>
@@ -2531,15 +2772,16 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                         </button>
 
                         {/* Mobile More button */}
-                        <button aria-label="More options" onClick={() => setShowMobileMore(!showMobileMore)} className={clsx("md:hidden p-2 rounded-2xl transition-all duration-300 flex-shrink-0", showMobileMore ? "bg-white/20 text-white" : "bg-white/10 hover:bg-white/20 text-white")}>
-                            <MoreHorizontal size={16} />
+                        <button aria-label="More options" onClick={() => setShowMobileMore(!showMobileMore)} className={clsx("md:hidden p-3 rounded-2xl transition-all duration-300 flex-shrink-0 relative group", showMobileMore ? "bg-white/20 text-white" : "bg-white/10 hover:bg-white/20 text-white")}>
+                            <MoreHorizontal size={18} />
+                            {handRaised && <div className="absolute -top-1 -right-1 w-3 h-3 bg-yellow-500 rounded-full border-2 border-[#1a1b1e]" />}
                         </button>
 
-                        <div className="w-px h-5 md:h-7 bg-white/20 mx-0 md:mx-2 flex-shrink-0" />
+                        <div className="w-px h-6 md:h-7 bg-white/20 mx-1 md:mx-2 flex-shrink-0" />
 
-                        <button aria-label="Leave meeting" onClick={handleLeaveMeeting} className="px-2.5 md:px-5 py-2 md:py-3.5 rounded-2xl bg-red-500 text-white font-bold transition-all duration-300 hover:bg-red-600 hover:scale-105 shadow-[0_0_20px_rgba(239,68,68,0.4)] flex items-center gap-1.5 md:gap-2 flex-shrink-0 text-sm">
-                            <PhoneOff size={14} className="md:hidden" />
-                            <PhoneOff size={16} className="hidden md:block" />
+                        <button aria-label="Leave meeting" onClick={handleLeaveMeeting} className="px-3 md:px-5 py-2.5 md:py-3.5 rounded-2xl bg-red-500 text-white font-bold transition-all duration-300 hover:bg-red-600 hover:scale-105 shadow-[0_0_20px_rgba(239,68,68,0.4)] flex items-center gap-1.5 md:gap-2 flex-shrink-0 text-sm">
+                            <PhoneOff size={16} className="md:hidden" />
+                            <PhoneOff size={18} className="hidden md:block" />
                             <span className="hidden sm:inline">Leave</span>
                         </button>
                     </div>
@@ -2548,9 +2790,9 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                     <AnimatePresence>
                         {showReactionTray && (
                             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
-                                className="md:hidden absolute bottom-full left-1/2 -translate-x-1/2 mb-3 bg-[#1a1b1e] border border-white/10 rounded-2xl p-2 flex gap-1 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
+                                className="md:hidden absolute bottom-full left-1/2 -translate-x-1/2 mb-3 bg-black/60 backdrop-blur-3xl border border-white/10 rounded-2xl p-2 flex gap-1 shadow-[0_8px_32px_rgba(0,0,0,0.5)]">
                                 {REACTION_EMOJIS.map(emoji => (
-                                    <button key={emoji} onClick={() => sendReaction(emoji)} className="text-xl p-1.5 hover:bg-white/10 rounded-xl transition-all hover:scale-125 active:scale-95">
+                                    <button key={emoji} onClick={() => sendReaction(emoji)} className="text-2xl md:text-3xl p-2.5 hover:bg-white/10 rounded-xl transition-all hover:scale-125 active:scale-95">
                                         {emoji}
                                     </button>
                                 ))}
@@ -2649,27 +2891,38 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
             {/* Sidebar (Settings/Chat/People) */}
             <AnimatePresence>
                 {showSidebar && (
-                    <motion.div 
-                        initial={{ y: '100%', opacity: 0 }}
-                        animate={{ y: 0, opacity: 1 }}
-                        exit={{ y: '100%', opacity: 0 }}
-                        transition={{ type: 'spring', damping: 35, stiffness: 400 }}
-                        className="fixed inset-0 md:absolute md:inset-auto md:right-0 md:top-0 md:bottom-0 md:w-80 lg:w-96 bg-[#0c0d0f] md:bg-[#0c0d0f]/98 md:border-l border-white/10 z-40 flex flex-col shadow-[-10px_0_30px_rgba(0,0,0,0.5)]"
-                    >
-                        <div className="p-4 md:p-5 border-b border-white/10 flex justify-between items-center bg-white/5">
-                            <h3 className="font-google font-bold text-base md:text-lg flex items-center gap-2">
-                                {showSidebar === 'effects' ? <><Sparkles size={18} className="text-purple-400" /> Visual Effects</> : 
-                                 showSidebar === 'chat' ? <><MessageSquare size={18} className="text-blue-400" /> Meeting Chat</> : 
-                                 showSidebar === 'notes' ? <><FileText size={18} className="text-emerald-400" /> Quick Notes</> : 
-                                 showSidebar === 'files' ? <><Paperclip size={18} className="text-amber-400" /> Shared Files</> :
-                                 showSidebar === 'polls' ? <><BarChart3 size={18} className="text-blue-400" /> Polls & Q&A</> :
-                                 <><Users size={18} className="text-teal-400" /> Participants</>}
-                            </h3>
-                            <button onClick={() => setShowSidebar(null)} className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-colors text-white/70 hover:text-white">
-                                <X size={16} />
-                            </button>
-                        </div>
-                        
+                    <>
+                        <motion.div 
+                            initial={{ opacity: 0 }} 
+                            animate={{ opacity: 1 }} 
+                            exit={{ opacity: 0 }} 
+                            className="absolute inset-0 z-40 bg-black/40 md:hidden" 
+                            onClick={() => setShowSidebar(null)} 
+                        />
+                        <motion.div 
+                            initial={{ y: '100%', opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            exit={{ y: '100%', opacity: 0 }}
+                            transition={{ type: 'spring', damping: 35, stiffness: 400 }}
+                            className="absolute bottom-0 left-0 right-0 md:bottom-auto md:left-auto md:inset-auto md:right-0 md:top-0 md:h-full z-50 md:z-40 w-full md:w-80 lg:w-96 bg-black/60 md:bg-[#0c0d0f]/98 backdrop-blur-3xl md:backdrop-blur-none border-t md:border-t-0 md:border-l border-white/10 rounded-t-3xl md:rounded-none flex flex-col shadow-[0_-8px_32px_rgba(0,0,0,0.6)] md:shadow-[-10px_0_30px_rgba(0,0,0,0.5)] max-h-[85vh] md:max-h-full"
+                        >
+                            {/* Drag handle for mobile */}
+                            <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mt-4 mb-2 md:hidden flex-shrink-0" />
+                            
+                            <div className="px-4 pb-4 pt-2 md:p-5 border-b border-white/10 flex justify-between items-center bg-white/5 md:bg-transparent">
+                                <h3 className="font-google font-bold text-base md:text-lg flex items-center gap-2 text-white">
+                                    {showSidebar === 'effects' ? <><Sparkles size={18} className="text-purple-400" /> Visual Effects</> : 
+                                     showSidebar === 'chat' ? <><MessageSquare size={18} className="text-blue-400" /> Meeting Chat</> : 
+                                     showSidebar === 'notes' ? <><FileText size={18} className="text-emerald-400" /> Quick Notes</> : 
+                                     showSidebar === 'files' ? <><Paperclip size={18} className="text-amber-400" /> Shared Files</> :
+                                     showSidebar === 'polls' ? <><BarChart3 size={18} className="text-blue-400" /> Polls & Q&A</> :
+                                     <><Users size={18} className="text-teal-400" /> Participants</>}
+                                </h3>
+                                <button onClick={() => setShowSidebar(null)} className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-colors text-white/70 hover:text-white">
+                                    <X size={16} />
+                                </button>
+                            </div>
+                            
                         <div className="flex-1 overflow-y-auto p-3 md:p-4 pb-8 md:pb-4 custom-scrollbar">
                             {showSidebar === 'effects' && (
                                 <div className="space-y-6 animate-fade-in">
@@ -3205,6 +3458,7 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                             )}
                         </div>
                     </motion.div>
+                    </>
                 )}
             </AnimatePresence>
         </div>
