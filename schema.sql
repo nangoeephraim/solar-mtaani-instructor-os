@@ -194,6 +194,42 @@ CREATE POLICY "Update Messages" ON public.chat_messages FOR UPDATE USING (
 
 
 -- ==========================================
+-- 7. Video Meetings
+-- ==========================================
+-- Persists meeting sessions so join-links can be validated cross-device.
+-- Referenced by components/Meetings.tsx
+CREATE TABLE IF NOT EXISTS public.meetings (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    meeting_code TEXT UNIQUE NOT NULL,
+    host_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+    host_name TEXT NOT NULL,
+    title TEXT NOT NULL DEFAULT 'PRISM Meeting',
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'ended')),
+    ended_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.meetings ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated users can view meetings" ON public.meetings
+    FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY "Authenticated users can create meetings" ON public.meetings
+    FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+CREATE POLICY "Hosts can update own meetings" ON public.meetings
+    FOR UPDATE USING (auth.role() = 'authenticated' AND host_id = auth.uid());
+CREATE POLICY "Hosts and admins can delete meetings" ON public.meetings
+    FOR DELETE USING (
+        auth.role() = 'authenticated' AND (
+            host_id = auth.uid()
+            OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+        )
+    );
+
+CREATE INDEX IF NOT EXISTS idx_meetings_code ON public.meetings (meeting_code);
+CREATE INDEX IF NOT EXISTS idx_meetings_status ON public.meetings (status) WHERE status = 'active';
+
+
+-- ==========================================
 -- REALTIME PUBLICATIONS
 -- ==========================================
 -- Turn on realtime for specific tables so the app gets instant websocket updates
@@ -204,6 +240,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.schedule_slots;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.resources;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.chat_channels;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.chat_messages;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.meetings;
 
 -- Initial Database Seeding
 INSERT INTO public.app_settings (id, organization_name) VALUES ('global', 'PRISM Academy') ON CONFLICT DO NOTHING;
