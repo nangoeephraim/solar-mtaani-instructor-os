@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mic, MicOff, Video, VideoOff, MonitorUp, Settings, Maximize, Minimize, Users, MessageSquare, Sparkles, LayoutGrid, AlertCircle, Copy, CheckCircle2, PhoneOff, Share2, Circle, Hand, Captions, Presentation, PictureInPicture2, Wifi, WifiOff, SmilePlus, X, Clock, FileText, Paperclip, Upload, Download, File, MoreHorizontal, ChevronUp, Image, BarChart3, MessageCircleQuestion, Plus, Check, ThumbsUp, Trash2 } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, MonitorUp, Settings, Maximize, Minimize, Users, MessageSquare, Sparkles, LayoutGrid, AlertCircle, Copy, CheckCircle2, PhoneOff, Share2, Circle, Hand, Captions, Presentation, PictureInPicture2, Wifi, WifiOff, SmilePlus, X, Clock, FileText, Paperclip, Upload, Download, File, MoreHorizontal, ChevronUp, Image, BarChart3, MessageCircleQuestion, Plus, Check, ThumbsUp, Trash2, SwitchCamera } from 'lucide-react';
 import clsx from 'clsx';
 import UserAvatar from './UserAvatar';
 import { useAuth } from '../contexts/AuthContext';
@@ -1384,6 +1384,17 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
         }
     }, [stream, noiseSuppression, addToast]);
 
+    const handleFlipCamera = useCallback(() => {
+        if (!availableDevices.videoin || availableDevices.videoin.length < 2) {
+            addToast('No alternative camera found', '⚠️');
+            return;
+        }
+        const currentIndex = availableDevices.videoin.findIndex(d => d.deviceId === selectedVideoIn);
+        const nextIndex = (currentIndex + 1) % availableDevices.videoin.length;
+        switchDevice('video', availableDevices.videoin[nextIndex].deviceId);
+    }, [availableDevices, selectedVideoIn, switchDevice, addToast]);
+
+
     // Phase 2/3: Toggle noise suppression (LiveKit + Krisp or WebRTC Fallback)
     const toggleNoiseSuppression = useCallback(async () => {
         const newState = !noiseSuppression;
@@ -2648,6 +2659,7 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-y-5 gap-x-3">
                                     {[
                                         { icon: <MonitorUp size={22} />, label: screenShared ? 'Stop Share' : 'Screen', onClick: handleScreenShare, active: screenShared, color: 'blue' },
+                                        { icon: <SwitchCamera size={22} />, label: 'Flip Cam', onClick: () => { handleFlipCamera(); setShowMobileMore(false); }, active: false, color: 'blue' },
                                         { icon: <Hand size={22} />, label: handRaised ? 'Lower' : 'Raise', onClick: toggleHandRaise, active: handRaised, color: 'yellow' },
                                         { icon: <Captions size={22} />, label: captionsEnabled ? 'CC Off' : 'CC On', onClick: () => setCaptionsEnabled(!captionsEnabled), active: captionsEnabled, color: 'blue' },
                                         { icon: <Circle size={22} className={clsx(isRecording && "fill-white")} />, label: isRecording ? 'Stop Rec' : 'Record', onClick: toggleRecording, active: isRecording, color: 'red' },
