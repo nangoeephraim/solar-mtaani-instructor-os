@@ -1337,8 +1337,21 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
 
     // Phase 2: Switch audio/video device mid-meeting
     const switchDevice = useCallback(async (kind: 'audio' | 'video', deviceId: string) => {
-        if (!stream) return;
         try {
+            // If connected via LiveKit, use the native SDK method
+            if (liveKitRoomRef.current) {
+                await liveKitRoomRef.current.switchActiveDevice(kind === 'audio' ? 'audioinput' : 'videoinput', deviceId);
+                
+                // Update local state selectors
+                if (kind === 'audio') setSelectedAudioIn(deviceId);
+                else setSelectedVideoIn(deviceId);
+                
+                addToast(`Switched ${kind} device`, kind === 'audio' ? '🎤' : '📷');
+                return;
+            }
+
+            // WebRTC Mesh fallback logic
+            if (!stream) return;
             const constraints = kind === 'audio'
                 ? { audio: { deviceId: { exact: deviceId }, noiseSuppression, echoCancellation: true, autoGainControl: true }, video: false }
                 : { audio: false, video: { deviceId: { exact: deviceId } } };
@@ -1347,12 +1360,10 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
             const oldTrack = kind === 'audio' ? stream.getAudioTracks()[0] : stream.getVideoTracks()[0];
 
             if (oldTrack) {
-                // Replace in local stream
                 stream.removeTrack(oldTrack);
                 stream.addTrack(newTrack);
                 oldTrack.stop();
 
-                // Replace on all peer connections
                 remotePeersRef.current.forEach((peer) => {
                     const sender = peer.pc.getSenders().find(s => s.track?.kind === newTrack.kind);
                     if (sender) sender.replaceTrack(newTrack).catch(() => {});
@@ -1369,7 +1380,7 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
             addToast(`Switched ${kind} device`, kind === 'audio' ? '🎤' : '📷');
         } catch (err) {
             console.error(`Failed to switch ${kind} device:`, err);
-            addToast(`Failed to switch ${kind}`, '⚠️');
+            addToast(`Failed to switch ${kind}. Check permissions.`, '⚠️');
         }
     }, [stream, noiseSuppression, addToast]);
 
@@ -1724,6 +1735,7 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                 }
             } catch (err) {
                 console.error("Failed to share screen", err);
+                addToast("Screen sharing not supported or denied", "🚫");
             }
         }
     };
