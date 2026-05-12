@@ -10,6 +10,20 @@ const IMAGES = [
 
 export const SlideshowBackground: React.FC = () => {
     const [currentIndex, setCurrentIndex] = useState(0);
+    const [imagesLoaded, setImagesLoaded] = useState<Set<number>>(new Set([0]));
+
+    // Preload the first image eagerly, others lazily
+    useEffect(() => {
+        IMAGES.forEach((src, idx) => {
+            if (idx === 0) return; // First image is loaded by <img> tag
+            const img = new Image();
+            img.onload = () => {
+                setImagesLoaded(prev => new Set([...prev, idx]));
+            };
+            // Delay loading non-first images
+            setTimeout(() => { img.src = src; }, idx * 1500);
+        });
+    }, []);
 
     useEffect(() => {
         // Change image every 7 seconds
@@ -26,19 +40,21 @@ export const SlideshowBackground: React.FC = () => {
                 <motion.img
                     key={currentIndex}
                     src={IMAGES[currentIndex]}
-                    initial={{ opacity: 0, scale: 1.15 }}
+                    initial={{ opacity: 0, scale: 1.1 }}
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, transition: { duration: 1.5, ease: 'easeInOut' } }}
                     transition={{
                         opacity: { duration: 2, ease: 'easeInOut' },
                         scale: { duration: 8, ease: 'easeOut' }
                     }}
-                    className="absolute inset-0 w-full h-full object-cover origin-center"
+                    className="absolute inset-0 w-full h-full object-cover origin-center will-change-transform"
                     alt="Background Slideshow"
+                    loading={currentIndex === 0 ? 'eager' : 'lazy'}
+                    fetchPriority={currentIndex === 0 ? 'high' : 'auto'}
                 />
             </AnimatePresence>
-            {/* Dark overlay to ensure login card contrast */}
-            <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" />
+            {/* Premium gradient vignette instead of flat overlay */}
+            <div className="absolute inset-0 login-vignette" />
         </div>
     );
 };

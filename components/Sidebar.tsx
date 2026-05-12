@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { LayoutDashboard, Calendar, Users, ClipboardCheck, Settings, BarChart3, UserCheck, LineChart, Box, MessageSquare, Wallet, UsersRound } from 'lucide-react';
 import clsx from 'clsx';
 import { motion } from 'framer-motion';
@@ -15,10 +15,33 @@ interface SidebarProps {
 // Role hierarchy: admin > instructor > viewer
 const ROLE_LEVEL: Record<string, number> = { admin: 3, instructor: 2, viewer: 1 };
 
+// Map view IDs to their lazy-loaded import paths for preloading
+const VIEW_PRELOAD_MAP: Record<string, () => Promise<any>> = {
+  schedule: () => import('./Schedule'),
+  'students-manage': () => import('./Students'),
+  'student-analytics': () => import('./StudentAnalytics'),
+  assessment: () => import('./Assessment'),
+  attendance: () => import('./Attendance'),
+  resources: () => import('./Resources'),
+  analytics: () => import('./Analytics'),
+  communications: () => import('./Communications'),
+  fees: () => import('./Fees'),
+  settings: () => import('./Settings'),
+  instructors: () => import('./InstructorManagement'),
+};
+
 const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, data }) => {
   const { user } = useAuth();
   const unreadCount = data && user ? (data.communications?.channels || []).reduce((sum, ch) => sum + getUnreadCount(data, ch.id, user.id || 'sys-user'), 0) : 0;
   const userLevel = ROLE_LEVEL[user?.role || 'viewer'] || 1;
+
+  // Preload the chunk for a view on hover to speed up navigation
+  const handlePreload = useCallback((viewId: string) => {
+    const loader = VIEW_PRELOAD_MAP[viewId];
+    if (loader) {
+      loader(); // Triggers webpack/vite chunk fetch — cached by browser
+    }
+  }, []);
 
   const navItems: { id: string; label: string; icon: any; minRole: UserRole }[] = [
     { id: 'dashboard', label: 'Command Center', icon: LayoutDashboard, minRole: 'viewer' },
@@ -51,7 +74,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, data }) => {
           <img src="/logo.png" alt="PRISM Logo" className="w-full h-full object-contain drop-shadow-sm" />
         </motion.div>
         <div className="hidden lg:block ml-1">
-          <p className="text-[9px] font-bold tracking-[0.15em] text-[var(--md-sys-color-primary)] uppercase">Illuminating Learning</p>
+          <p className="text-[9px] font-black tracking-[0.15em] text-[var(--md-sys-color-primary)] uppercase">Illuminating Learning</p>
         </div>
       </div>
 
@@ -59,12 +82,12 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, data }) => {
       {user && (
         <div className="px-4 pt-3 pb-1">
           <div className={clsx(
-            "text-[9px] font-black tracking-[0.15em] uppercase text-center py-1 rounded-full",
+            "text-[9px] font-black tracking-[0.15em] uppercase text-center py-1.5 rounded-full border",
             user.role === 'admin'
-              ? "bg-violet-500/10 text-violet-700 dark:bg-violet-400/20 dark:text-violet-300"
+              ? "bg-violet-500/10 text-violet-700 dark:bg-violet-400/20 dark:text-violet-300 border-violet-200 dark:border-violet-800/50"
               : user.role === 'instructor'
-                ? "bg-blue-500/10 text-blue-700 dark:bg-blue-400/20 dark:text-blue-300"
-                : "bg-slate-500/10 text-slate-700 dark:bg-slate-400/20 dark:text-slate-300"
+                ? "bg-blue-500/10 text-blue-700 dark:bg-blue-400/20 dark:text-blue-300 border-blue-200 dark:border-blue-800/50"
+                : "bg-slate-500/10 text-slate-700 dark:bg-slate-400/20 dark:text-slate-300 border-slate-200 dark:border-slate-800/50"
           )}>
             {user.role === 'admin' ? '🛡️ Administrator' : user.role === 'instructor' ? '📘 Instructor' : '👁️ Viewer'}
           </div>
@@ -72,55 +95,51 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, data }) => {
       )}
 
       {/* Navigation */}
-      <nav className="flex-1 mt-2 px-3 space-y-1.5 overflow-y-auto custom-scrollbar">
+      <nav className="flex-1 mt-2 px-3 space-y-1 overflow-y-auto custom-scrollbar">
         {visibleItems.map((item, index) => {
           const isActive = currentView === item.id;
           return (
             <motion.button
               key={item.id}
               onClick={() => onNavigate(item.id)}
+              onMouseEnter={() => handlePreload(item.id)}
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: index * 0.05 }}
+              transition={{ delay: index * 0.04 }}
               whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.98 }}
               className={clsx(
-                "w-full flex items-center gap-4 px-4 py-3 rounded-2xl transition-all duration-300 group font-medium relative overflow-hidden tap-target mx-auto",
+                "w-full flex items-center gap-3.5 px-4 py-2.5 rounded-2xl transition-all duration-200 group font-medium relative overflow-hidden tap-target mx-auto nav-preload-hint",
                 isActive
-                  ? "bg-[var(--md-sys-color-primary)] text-white shadow-md shadow-indigo-500/20"
+                  ? "bg-[var(--md-sys-color-primary)] text-white shadow-md sidebar-active-glow"
                   : "text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-surface-variant)] hover:text-[var(--md-sys-color-on-surface)]"
               )}
             >
-              <div className="relative z-10 flex items-center gap-4 w-full">
+              <div className="relative z-10 flex items-center gap-3.5 w-full">
                 {/* Active left-edge indicator */}
                 {isActive && (
                   <motion.div
                     layoutId="sidebar-indicator"
-                    className="absolute -left-4 top-1/2 -translate-y-1/2 w-1.5 h-6 rounded-r-full bg-white opacity-40"
+                    className="absolute -left-4 top-1/2 -translate-y-1/2 w-1.5 h-6 rounded-r-full bg-white opacity-50"
                     transition={{ type: "spring", stiffness: 500, damping: 30 }}
                   />
                 )}
                 <item.icon
-                  size={24}
-                  strokeWidth={isActive ? 2.5 : 2}
+                  size={20}
+                  strokeWidth={isActive ? 2.5 : 1.8}
                   className={clsx(
-                    "transition-colors duration-300",
-                    isActive ? "text-[var(--md-sys-color-primary)]" : "text-[var(--md-sys-color-secondary)] group-hover:text-[var(--md-sys-color-on-surface)]"
+                    "transition-colors duration-200 flex-shrink-0",
+                    isActive ? "text-white" : "text-[var(--md-sys-color-secondary)] group-hover:text-[var(--md-sys-color-on-surface)]"
                   )}
                 />
                 <span className={clsx(
-                  "text-sm font-google tracking-wide transition-colors duration-300 flex-1",
+                  "text-[13px] font-google tracking-wide transition-colors duration-200 flex-1 text-left",
                   isActive ? "font-bold" : "font-medium"
                 )}>{item.label}</span>
                 {item.id === 'communications' && unreadCount > 0 && (
-                  <span className="bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center animate-pulse">{unreadCount}</span>
+                  <span className="bg-red-500 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full min-w-[18px] text-center animate-pulse">{unreadCount}</span>
                 )}
               </div>
-
-              {/* Hover Glow Effect */}
-              {!isActive && (
-                <div className="absolute inset-0 bg-gradient-to-r from-[var(--md-sys-color-surface-variant)]/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
-              )}
             </motion.button>
           );
         })}
