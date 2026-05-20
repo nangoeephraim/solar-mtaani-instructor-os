@@ -345,23 +345,78 @@ export function useMeetingEngine(pendingMeetCode?: string) {
 
                     room.on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
                         const pid = participant.identity;
-                        const stream = new MediaStream([track.mediaStreamTrack]);
                         const isScreen = track.source === Track.Source.ScreenShare;
-                        updatePeer(pid, p => isScreen ? { ...p, screenStream: stream } : { ...p, stream });
+                        
+                        // Register peer FIRST if not yet known (prevents race condition
+                        // where updatePeer silently drops the first track)
                         if (!remotePeersRef.current.has(pid)) {
                             const peerData: RemotePeer = {
                                 odei: pid, userName: participant.name || pid, avatarUrl: undefined, pc: null as any,
-                                stream: isScreen ? null : stream, screenStream: isScreen ? stream : null,
+                                stream: null, screenStream: null,
                                 audioEnabled: participant.isMicrophoneEnabled, videoEnabled: participant.isCameraEnabled, handRaised: false
                             };
                             remotePeersRef.current.set(pid, peerData);
                             setRemotePeers(new Map(remotePeersRef.current));
                         }
+
+                        // Now safely add the track to the registered peer
+                        updatePeer(pid, p => {
+                            if (isScreen) {
+                                let stream = p.screenStream;
+                                if (!stream) {
+                                    stream = new MediaStream();
+                                }
+                                stream.getTracks().forEach(t => {
+                                    if (t.kind === track.kind) {
+                                        stream?.removeTrack(t);
+                                    }
+                                });
+                                stream.addTrack(track.mediaStreamTrack);
+                                return { ...p, screenStream: new MediaStream(stream.getTracks()) };
+                            } else {
+                                let stream = p.stream;
+                                if (!stream) {
+                                    stream = new MediaStream();
+                                }
+                                stream.getTracks().forEach(t => {
+                                    if (t.kind === track.kind) {
+                                        stream?.removeTrack(t);
+                                    }
+                                });
+                                stream.addTrack(track.mediaStreamTrack);
+                                return { ...p, stream: new MediaStream(stream.getTracks()) };
+                            }
+                        });
                     });
                     room.on(RoomEvent.TrackUnsubscribed, (track, pub, participant) => {
                         const pid = participant.identity;
                         const isScreen = track.source === Track.Source.ScreenShare;
-                        updatePeer(pid, p => isScreen ? { ...p, screenStream: null } : { ...p, stream: null });
+                        
+                        updatePeer(pid, p => {
+                            if (isScreen) {
+                                const stream = p.screenStream;
+                                if (stream) {
+                                    const t = stream.getTracks().find(x => x.kind === track.kind);
+                                    if (t) stream.removeTrack(t);
+                                    if (stream.getTracks().length === 0) {
+                                        return { ...p, screenStream: null };
+                                    }
+                                    return { ...p, screenStream: new MediaStream(stream.getTracks()) };
+                                }
+                                return p;
+                            } else {
+                                const stream = p.stream;
+                                if (stream) {
+                                    const t = stream.getTracks().find(x => x.kind === track.kind);
+                                    if (t) stream.removeTrack(t);
+                                    if (stream.getTracks().length === 0) {
+                                        return { ...p, stream: null };
+                                    }
+                                    return { ...p, stream: new MediaStream(stream.getTracks()) };
+                                }
+                                return p;
+                            }
+                        });
                     });
                     room.on(RoomEvent.ParticipantDisconnected, (participant) => {
                         remotePeersRef.current.delete(participant.identity);
@@ -386,7 +441,8 @@ export function useMeetingEngine(pendingMeetCode?: string) {
                     }
                 }
             } catch (err) {
-                console.error("[LiveKit] Connection failed, falling back to WebRTC", err);
+                console.error("[LiveKit] Connection failed, falling back to WebRTC Mesh", err);
+                liveKitRoomRef.current = null; // Clean fallback: ensure mesh signaling activates
             }
         }
 
@@ -394,6 +450,8 @@ export function useMeetingEngine(pendingMeetCode?: string) {
         const ch = supabase.channel(channelName, { config: { broadcast: { self: false } } });
 
         ch.on('broadcast', { event: 'peer-join' }, async (payload: any) => {
+            // ECHO FIX: Skip WebRTC mesh peer creation when LiveKit SFU is handling connections
+            if (liveKitRoomRef.current) return;
             const { peerId, peerName, peerAvatar } = payload.payload;
             if (peerId === localPeerId.current) return;
 
@@ -428,6 +486,7 @@ export function useMeetingEngine(pendingMeetCode?: string) {
         });
 
         ch.on('broadcast', { event: 'offer' }, async (payload: any) => {
+            if (liveKitRoomRef.current) return; // ECHO FIX: mesh bypass
             const { from, fromName, fromAvatar, to, sdp } = payload.payload;
             if (to !== localPeerId.current) return;
 
@@ -455,6 +514,7 @@ export function useMeetingEngine(pendingMeetCode?: string) {
         });
 
         ch.on('broadcast', { event: 'answer' }, async (payload: any) => {
+            if (liveKitRoomRef.current) return; // ECHO FIX: mesh bypass
             const { from, to, sdp } = payload.payload;
             if (to !== localPeerId.current) return;
 
@@ -469,6 +529,7 @@ export function useMeetingEngine(pendingMeetCode?: string) {
         });
 
         ch.on('broadcast', { event: 'ice-candidate' }, async (payload: any) => {
+            if (liveKitRoomRef.current) return; // ECHO FIX: mesh bypass
             const { from, to, candidate } = payload.payload;
             if (to !== localPeerId.current) return;
 
@@ -483,6 +544,7 @@ export function useMeetingEngine(pendingMeetCode?: string) {
         });
 
         ch.on('broadcast', { event: 'peer-leave' }, (payload: any) => {
+            if (liveKitRoomRef.current) return; // ECHO FIX: mesh bypass
             const { peerId, peerName } = payload.payload;
             const peer = remotePeersRef.current.get(peerId);
             if (peer) {
@@ -1104,6 +1166,21 @@ export function useMeetingEngine(pendingMeetCode?: string) {
                 // Update local state selectors
                 if (kind === 'audio') setSelectedAudioIn(deviceId);
                 else setSelectedVideoIn(deviceId);
+
+                // Update our local stream preview state with the newly switched track from LiveKit
+                const pub = Array.from(liveKitRoomRef.current.localParticipant.videoTrackPublications.values())
+                    .find(p => kind === 'audio' ? p.source === Track.Source.Microphone : p.source === Track.Source.Camera);
+                if (pub && pub.track && pub.track.mediaStreamTrack) {
+                    const newTrack = pub.track.mediaStreamTrack;
+                    if (stream) {
+                        const oldTrack = kind === 'audio' ? stream.getAudioTracks()[0] : stream.getVideoTracks()[0];
+                        if (oldTrack) {
+                            stream.removeTrack(oldTrack);
+                        }
+                        stream.addTrack(newTrack);
+                        setStream(new MediaStream(stream.getTracks()));
+                    }
+                }
                 
                 addToast(`Switched ${kind} device`, kind === 'audio' ? '🎤' : '📷');
                 return;
@@ -1111,18 +1188,24 @@ export function useMeetingEngine(pendingMeetCode?: string) {
 
             // WebRTC Mesh fallback logic
             if (!stream) return;
+
+            // Stop the old track FIRST on mobile/Safari to prevent device hardware lock conflicts
+            const oldTrack = kind === 'audio' ? stream.getAudioTracks()[0] : stream.getVideoTracks()[0];
+            if (oldTrack) {
+                oldTrack.stop();
+                stream.removeTrack(oldTrack);
+            }
+
             const constraints = kind === 'audio'
                 ? { audio: { deviceId: { exact: deviceId }, noiseSuppression, echoCancellation: true, autoGainControl: true }, video: false }
                 : { audio: false, video: { deviceId: { exact: deviceId } } };
+            
             const newStream = await navigator.mediaDevices.getUserMedia(constraints);
             const newTrack = newStream.getTracks()[0];
-            const oldTrack = kind === 'audio' ? stream.getAudioTracks()[0] : stream.getVideoTracks()[0];
 
-            if (oldTrack) {
-                stream.removeTrack(oldTrack);
+            if (newTrack) {
                 stream.addTrack(newTrack);
-                oldTrack.stop();
-
+                
                 remotePeersRef.current.forEach((peer) => {
                     const sender = peer.pc.getSenders().find(s => s.track?.kind === newTrack.kind);
                     if (sender) sender.replaceTrack(newTrack).catch(() => {});
@@ -1144,53 +1227,52 @@ export function useMeetingEngine(pendingMeetCode?: string) {
     }, [stream, noiseSuppression, addToast]);
 
     const handleFlipCamera = useCallback(async () => {
-        if (!stream) {
-            addToast('No active stream to flip', '⚠️');
+        if (availableDevices.videoin.length < 2) {
+            addToast('No alternative camera found to flip', '⚠️');
             return;
         }
-        const currentTrack = stream.getVideoTracks()[0];
-        const currentFacing = currentTrack?.getSettings()?.facingMode || 'user';
-        const nextFacing = currentFacing === 'user' ? 'environment' : 'user';
-        try {
-            // iOS/Safari requires facingMode constraint instead of deviceId
-            const newStream = await navigator.mediaDevices.getUserMedia({
-                video: { facingMode: { ideal: nextFacing } },
-                audio: false,
-            });
-            const newTrack = newStream.getVideoTracks()[0];
-            // Stop old track AFTER getting new one to avoid camera blink
+
+        // Try to find current active video device ID
+        let currentDeviceId = selectedVideoIn;
+        if (stream) {
+            const currentTrack = stream.getVideoTracks()[0];
             if (currentTrack) {
-                stream.removeTrack(currentTrack);
-                currentTrack.stop();
+                const settings = currentTrack.getSettings();
+                if (settings.deviceId) {
+                    currentDeviceId = settings.deviceId;
+                }
             }
-            stream.addTrack(newTrack);
-            // Replace track on all active peer connections
-            remotePeersRef.current.forEach(peer => {
-                const sender = peer.pc.getSenders().find(s => s.track?.kind === 'video');
-                if (sender) sender.replaceTrack(newTrack).catch(() => {});
-            });
-            // Replace in LiveKit if active
-            if (liveKitRoomRef.current) {
-                liveKitRoomRef.current.localParticipant.videoTrackPublications.forEach(pub => {
-                    if (pub.track && pub.source !== Track.Source.ScreenShare) {
-                        pub.track.replaceTrack(newTrack).catch(() => {});
+        }
+
+        // Cycle to next video input device
+        let idx = availableDevices.videoin.findIndex(d => d.deviceId === currentDeviceId);
+        
+        // Robust fallback: if index not found via deviceId, check if facingMode matches labels
+        if (idx === -1 && stream) {
+            const currentTrack = stream.getVideoTracks()[0];
+            const currentFacing = currentTrack?.getSettings()?.facingMode;
+            if (currentFacing) {
+                idx = availableDevices.videoin.findIndex(d => {
+                    const label = d.label.toLowerCase();
+                    if (currentFacing === 'user') {
+                        return label.includes('front') || label.includes('user') || label.includes('facing front');
+                    } else {
+                        return label.includes('back') || label.includes('rear') || label.includes('environment') || label.includes('facing back');
                     }
                 });
             }
-            // Refresh stream ref so video element updates
-            setStream(new MediaStream(stream.getTracks()));
-            addToast(`Switched to ${nextFacing === 'user' ? 'front' : 'rear'} camera`, '📷');
-        } catch {
-            // Fallback: cycle through enumerated device IDs
-            if (availableDevices.videoin.length >= 2) {
-                const idx = availableDevices.videoin.findIndex(d => d.deviceId === selectedVideoIn);
-                const next = (idx + 1) % availableDevices.videoin.length;
-                switchDevice('video', availableDevices.videoin[next].deviceId);
-            } else {
-                addToast('No alternative camera found', '⚠️');
-            }
+        }
+
+        const nextIdx = idx === -1 ? 1 : (idx + 1) % availableDevices.videoin.length;
+        const nextDevice = availableDevices.videoin[nextIdx];
+
+        if (nextDevice) {
+            await switchDevice('video', nextDevice.deviceId);
+        } else {
+            addToast('No alternative camera found', '⚠️');
         }
     }, [stream, availableDevices, selectedVideoIn, switchDevice, addToast]);
+
 
 
     // Phase 2/3: Toggle noise suppression (LiveKit + Krisp or WebRTC Fallback)

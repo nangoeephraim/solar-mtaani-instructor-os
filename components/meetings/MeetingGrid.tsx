@@ -1,9 +1,9 @@
 // ─── PRISM Meetings — Video Grid Layout ───
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MicOff, VideoOff, MonitorUp, Hand, Wifi } from 'lucide-react';
 import clsx from 'clsx';
-import { RemotePeer } from './types';
+import { RemotePeer, MeetingTheme, THEME_COLORS } from './types';
 import UserAvatar from '../UserAvatar';
 import { getSharedAudioContext } from './useMeetingEngine';
 
@@ -31,6 +31,14 @@ interface MeetingGridProps {
     backgroundBlur: string;
     lowLightMode: boolean;
     studioLighting: boolean;
+
+    // Theme
+    meetingTheme: MeetingTheme;
+}
+
+// Helper: get theme color RGB string
+function getThemeRgb(theme: MeetingTheme): string {
+    return THEME_COLORS[theme]?.rgb || '59,130,246';
 }
 
 // ─── LOCAL PARTICIPANT TILE (MEMOIZED & SELF-ANALYZING) ───
@@ -49,10 +57,11 @@ const LocalTile: React.FC<{
     lowLightMode: boolean;
     studioLighting: boolean;
     isSpotlight: boolean;
+    themeRgb: string;
 }> = React.memo(({
     userName, userAvatar, videoEnabled, audioEnabled, videoRef, localStream,
     setActiveSpeaker, activeSpeaker, handRaised, selectedBg, backgroundBlur,
-    lowLightMode, studioLighting, isSpotlight
+    lowLightMode, studioLighting, isSpotlight, themeRgb
 }) => {
     const voiceRingRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -102,11 +111,11 @@ const LocalTile: React.FC<{
 
                 if (containerRef.current) {
                     if (level > 0.05) {
-                        containerRef.current.style.borderColor = `rgba(59,130,246,${0.2 + level * 0.6})`;
-                        containerRef.current.style.boxShadow = `0 0 ${15 + level * 25}px rgba(59,130,246,${0.1 + level * 0.3})`;
+                        containerRef.current.style.borderColor = `rgba(${themeRgb},${0.2 + level * 0.6})`;
+                        containerRef.current.style.boxShadow = `0 0 ${15 + level * 25}px rgba(${themeRgb},${0.1 + level * 0.3})`;
                     } else {
-                        containerRef.current.style.borderColor = activeSpeaker === 'local' ? 'rgba(59,130,246,0.5)' : 'rgba(255,255,255,0.05)';
-                        containerRef.current.style.boxShadow = activeSpeaker === 'local' ? '0 0 15px rgba(59,130,246,0.15)' : 'none';
+                        containerRef.current.style.borderColor = activeSpeaker === 'local' ? `rgba(${themeRgb},0.5)` : 'rgba(255,255,255,0.05)';
+                        containerRef.current.style.boxShadow = activeSpeaker === 'local' ? `0 0 15px rgba(${themeRgb},0.15)` : 'none';
                     }
                 }
 
@@ -137,7 +146,7 @@ const LocalTile: React.FC<{
             if (animId) cancelAnimationFrame(animId);
             if (source) source.disconnect();
         };
-    }, [audioEnabled, localStream, activeSpeaker, setActiveSpeaker]);
+    }, [audioEnabled, localStream, activeSpeaker, setActiveSpeaker, themeRgb]);
 
     const isSpeaking = activeSpeaker === 'local';
 
@@ -149,14 +158,20 @@ const LocalTile: React.FC<{
             transition={{ duration: 0.3 }}
             className={clsx(
                 "relative rounded-2xl md:rounded-3xl overflow-hidden bg-[#111214] flex items-center justify-center group min-h-0 border transition-all duration-300",
-                isSpotlight ? "col-span-1 row-span-1 md:col-span-1 md:row-span-1" : "w-full h-full",
-                isSpeaking ? "border-blue-500/50 shadow-[0_0_20px_rgba(59,130,246,0.2)]" : "border-white/5"
+                isSpotlight
+                    ? "w-36 h-full flex-shrink-0 md:w-full md:h-full md:flex-shrink md:col-span-1 md:row-span-1"
+                    : "w-full h-full",
+                isSpeaking ? "shadow-[0_0_20px_rgba(59,130,246,0.2)]" : ""
             )}
+            style={{
+                borderColor: isSpeaking ? `rgba(${themeRgb},0.5)` : 'rgba(255,255,255,0.05)',
+            }}
         >
             {/* Visual audio animation ring (pulsing border effect) */}
             <div 
                 ref={voiceRingRef}
-                className="absolute inset-0 border-2 border-blue-500/40 rounded-2xl md:rounded-3xl pointer-events-none opacity-0 scale-100 transition-opacity duration-150 z-10"
+                className="absolute inset-0 rounded-2xl md:rounded-3xl pointer-events-none opacity-0 scale-100 transition-opacity duration-150 z-10"
+                style={{ border: `2px solid rgba(${themeRgb},0.4)` }}
             />
 
             {/* Avatar Placeholder (displayed when video is disabled) */}
@@ -222,8 +237,9 @@ const LocalTile: React.FC<{
                     <div className="bg-black/60 px-2 py-1 md:px-3 md:py-1.5 rounded-lg md:rounded-xl border border-white/10 flex items-center gap-1.5 md:gap-2">
                         <span className="text-[10px] md:text-xs font-bold font-google text-white/90">You</span>
                         {isSpeaking && (
-                            <span className="text-[8px] font-bold text-blue-400 uppercase tracking-wider animate-pulse flex items-center gap-1">
-                                <span className="w-1.5 h-1.5 bg-blue-400 rounded-full" />
+                            <span className="text-[8px] font-bold uppercase tracking-wider animate-pulse flex items-center gap-1"
+                                  style={{ color: `rgba(${themeRgb},1)` }}>
+                                <span className="w-1.5 h-1.5 rounded-full" style={{ background: `rgba(${themeRgb},1)` }} />
                                 Speaking
                             </span>
                         )}
@@ -252,11 +268,12 @@ const RemoteTile: React.FC<{
     setActiveSpeaker: React.Dispatch<React.SetStateAction<string | null>>;
     activeSpeaker: string | null;
     isSpotlight: boolean;
-}> = React.memo(({ peer, setActiveSpeaker, activeSpeaker, isSpotlight }) => {
+    themeRgb: string;
+}> = React.memo(({ peer, setActiveSpeaker, activeSpeaker, isSpotlight, themeRgb }) => {
     const voiceRingRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
-    const isConnecting = peer.pc.connectionState === 'new' || peer.pc.connectionState === 'connecting';
+    const isConnecting = peer.pc?.connectionState === 'new' || peer.pc?.connectionState === 'connecting';
     const isSpeaking = activeSpeaker === peer.odei;
 
     useEffect(() => {
@@ -304,11 +321,11 @@ const RemoteTile: React.FC<{
 
                 if (containerRef.current) {
                     if (level > 0.05) {
-                        containerRef.current.style.borderColor = `rgba(34,197,94,${0.2 + level * 0.6})`;
-                        containerRef.current.style.boxShadow = `0 0 ${15 + level * 25}px rgba(34,197,94,${0.1 + level * 0.3})`;
+                        containerRef.current.style.borderColor = `rgba(${themeRgb},${0.2 + level * 0.6})`;
+                        containerRef.current.style.boxShadow = `0 0 ${15 + level * 25}px rgba(${themeRgb},${0.1 + level * 0.3})`;
                     } else {
-                        containerRef.current.style.borderColor = activeSpeaker === peer.odei ? 'rgba(34,197,94,0.5)' : 'rgba(255,255,255,0.05)';
-                        containerRef.current.style.boxShadow = activeSpeaker === peer.odei ? '0 0 15px rgba(34,197,94,0.15)' : 'none';
+                        containerRef.current.style.borderColor = activeSpeaker === peer.odei ? `rgba(${themeRgb},0.5)` : 'rgba(255,255,255,0.05)';
+                        containerRef.current.style.boxShadow = activeSpeaker === peer.odei ? `0 0 15px rgba(${themeRgb},0.15)` : 'none';
                     }
                 }
 
@@ -339,7 +356,7 @@ const RemoteTile: React.FC<{
             if (animId) cancelAnimationFrame(animId);
             if (source) source.disconnect();
         };
-    }, [peer.audioEnabled, peer.stream, peer.odei, activeSpeaker, setActiveSpeaker, isConnecting]);
+    }, [peer.audioEnabled, peer.stream, peer.odei, activeSpeaker, setActiveSpeaker, isConnecting, themeRgb]);
 
     return (
         <motion.div 
@@ -348,14 +365,20 @@ const RemoteTile: React.FC<{
             animate={{ opacity: 1, scale: 1 }}
             className={clsx(
                 "relative rounded-2xl md:rounded-3xl overflow-hidden bg-[#111214] flex items-center justify-center group min-h-0 border transition-all duration-300",
-                isSpotlight ? "col-span-1 row-span-1 md:col-span-1 md:row-span-1" : "w-full h-full",
-                isSpeaking ? "border-green-500/50 shadow-[0_0_20px_rgba(34,197,94,0.2)]" : "border-white/5"
+                isSpotlight
+                    ? "w-36 h-full flex-shrink-0 md:w-full md:h-full md:flex-shrink md:col-span-1 md:row-span-1"
+                    : "w-full h-full",
             )}
+            style={{
+                borderColor: isSpeaking ? `rgba(${themeRgb},0.5)` : 'rgba(255,255,255,0.05)',
+                boxShadow: isSpeaking ? `0 0 20px rgba(${themeRgb},0.2)` : 'none',
+            }}
         >
             {/* Visual audio animation ring (pulsing border effect) */}
             <div 
                 ref={voiceRingRef}
-                className="absolute inset-0 border-2 border-green-500/40 rounded-2xl md:rounded-3xl pointer-events-none opacity-0 scale-100 transition-opacity duration-150 z-10"
+                className="absolute inset-0 rounded-2xl md:rounded-3xl pointer-events-none opacity-0 scale-100 transition-opacity duration-150 z-10"
+                style={{ border: `2px solid rgba(${themeRgb},0.4)` }}
             />
 
             {/* Connecting Shimmer View */}
@@ -414,8 +437,9 @@ const RemoteTile: React.FC<{
                     <div className="bg-black/60 px-2 py-1 md:px-3 md:py-1.5 rounded-lg md:rounded-xl border border-white/10 flex items-center gap-1.5 md:gap-2">
                         <span className="text-[10px] md:text-xs font-bold font-google text-white/90">{peer.userName}</span>
                         {isSpeaking && (
-                            <span className="text-[8px] font-bold text-green-400 uppercase tracking-wider animate-pulse flex items-center gap-1">
-                                <span className="w-1.5 h-1.5 bg-green-400 rounded-full" />
+                            <span className="text-[8px] font-bold uppercase tracking-wider animate-pulse flex items-center gap-1"
+                                  style={{ color: `rgba(${themeRgb},1)` }}>
+                                <span className="w-1.5 h-1.5 rounded-full" style={{ background: `rgba(${themeRgb},1)` }} />
                                 Speaking
                             </span>
                         )}
@@ -444,13 +468,15 @@ const MeetingGrid: React.FC<MeetingGridProps> = ({
     userName, userAvatar, videoEnabled, audioEnabled, audioLevel,
     videoRef, screenRef, localStream, setActiveSpeaker, screenShared,
     handRaised, activeSpeaker, remotePeers, selectedBg, backgroundBlur,
-    lowLightMode, studioLighting
+    lowLightMode, studioLighting, meetingTheme
 }) => {
     const peersList = Array.from(remotePeers.values());
     const totalCount = 1 + peersList.length;
     
     const anyRemoteScreen = peersList.find(p => p.screenStream !== null);
     const isSpotlight = screenShared || !!anyRemoteScreen;
+
+    const themeRgb = useMemo(() => getThemeRgb(meetingTheme), [meetingTheme]);
     
     let gridCols = "grid-cols-1";
     if (!isSpotlight) {
@@ -465,11 +491,11 @@ const MeetingGrid: React.FC<MeetingGridProps> = ({
         <div className="flex-1 flex items-center justify-center p-2 md:p-6 pt-14 md:pt-20 overflow-hidden"
              style={{ paddingBottom: 'calc(max(6rem, env(safe-area-inset-bottom, 0px) + 5rem))' }}>
             <div className={clsx(
-                "w-full h-full grid gap-2 md:gap-4 max-w-7xl mx-auto overflow-hidden",
-                !isSpotlight && totalCount > 6 ? "overflow-y-auto custom-scrollbar auto-rows-[minmax(180px,1fr)] md:auto-rows-fr" : "auto-rows-fr",
-                isSpotlight 
-                    ? "grid-rows-[minmax(0,2fr)_minmax(0,1fr)] md:grid-cols-3 md:grid-rows-3"
-                    : gridCols
+                "w-full h-full max-w-7xl mx-auto overflow-hidden",
+                isSpotlight
+                    ? "flex flex-col gap-2 md:grid md:grid-cols-3 md:grid-rows-3 md:gap-4"
+                    : clsx("grid gap-2 md:gap-4", gridCols),
+                !isSpotlight && totalCount > 6 ? "overflow-y-auto custom-scrollbar auto-rows-[minmax(180px,1fr)] md:auto-rows-fr" : !isSpotlight ? "auto-rows-fr" : ""
             )}>
                 {/* Spotlight Screen Share view */}
                 {isSpotlight && (
@@ -477,7 +503,7 @@ const MeetingGrid: React.FC<MeetingGridProps> = ({
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ duration: 0.3 }}
-                        className="col-span-1 row-span-1 md:col-span-2 md:row-span-3 relative rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl bg-[#131416] border border-white/5 flex items-center justify-center"
+                        className="flex-1 min-h-0 md:col-span-2 md:row-span-3 relative rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl bg-[#131416] border border-white/5 flex items-center justify-center"
                     >
                         {screenShared ? (
                             <video ref={screenRef} autoPlay playsInline muted className="w-full h-full object-contain" />
@@ -488,43 +514,82 @@ const MeetingGrid: React.FC<MeetingGridProps> = ({
                                 ref={el => { if (el && el.srcObject !== anyRemoteScreen.screenStream) el.srcObject = anyRemoteScreen.screenStream; }} 
                             />
                         ) : null}
-                        <div className="absolute bottom-2 md:bottom-4 left-2 md:left-4 bg-blue-500/90 px-2.5 md:px-3.5 py-1.5 md:py-2 rounded-lg md:rounded-xl border border-blue-400/20 flex items-center gap-1.5 md:gap-2.5 shadow-lg">
+                        <div className="absolute bottom-2 md:bottom-4 left-2 md:left-4 px-2.5 md:px-3.5 py-1.5 md:py-2 rounded-lg md:rounded-xl border flex items-center gap-1.5 md:gap-2.5 shadow-lg"
+                             style={{ background: `rgba(${themeRgb},0.9)`, borderColor: `rgba(${themeRgb},0.3)` }}>
                             <MonitorUp size={16} />
-                            <span className="text-[10px] md:text-sm font-bold font-google">
+                            <span className="text-[10px] md:text-sm font-bold font-google text-white">
                                 {screenShared ? 'You are sharing screen' : `${anyRemoteScreen?.userName} is sharing screen`}
                             </span>
                         </div>
                     </motion.div>
                 )}
 
-                {/* Local Participant Tile */}
-                <LocalTile 
-                    userName={userName}
-                    userAvatar={userAvatar}
-                    videoEnabled={videoEnabled}
-                    audioEnabled={audioEnabled}
-                    videoRef={videoRef}
-                    localStream={localStream}
-                    setActiveSpeaker={setActiveSpeaker}
-                    activeSpeaker={activeSpeaker}
-                    handRaised={handRaised}
-                    selectedBg={selectedBg}
-                    backgroundBlur={backgroundBlur}
-                    lowLightMode={lowLightMode}
-                    studioLighting={studioLighting}
-                    isSpotlight={isSpotlight}
-                />
-
-                {/* Remote Participants Tiles */}
-                {peersList.map((peer) => (
-                    <RemoteTile 
-                        key={peer.odei}
-                        peer={peer}
-                        setActiveSpeaker={setActiveSpeaker}
-                        activeSpeaker={activeSpeaker}
-                        isSpotlight={isSpotlight}
-                    />
-                ))}
+                {/* 
+                    MOBILE SPOTLIGHT FIX: When spotlight is active, participant tiles go into a 
+                    horizontal scrolling bar on mobile. On desktop (md:), `contents` makes the 
+                    wrapper disappear so tiles flow directly into the parent CSS grid.
+                */}
+                {isSpotlight ? (
+                    <div className="flex flex-row overflow-x-auto gap-2 py-1.5 h-28 w-full flex-shrink-0 scrollbar-none md:contents">
+                        <LocalTile 
+                            userName={userName}
+                            userAvatar={userAvatar}
+                            videoEnabled={videoEnabled}
+                            audioEnabled={audioEnabled}
+                            videoRef={videoRef}
+                            localStream={localStream}
+                            setActiveSpeaker={setActiveSpeaker}
+                            activeSpeaker={activeSpeaker}
+                            handRaised={handRaised}
+                            selectedBg={selectedBg}
+                            backgroundBlur={backgroundBlur}
+                            lowLightMode={lowLightMode}
+                            studioLighting={studioLighting}
+                            isSpotlight={true}
+                            themeRgb={themeRgb}
+                        />
+                        {peersList.map((peer) => (
+                            <RemoteTile 
+                                key={peer.odei}
+                                peer={peer}
+                                setActiveSpeaker={setActiveSpeaker}
+                                activeSpeaker={activeSpeaker}
+                                isSpotlight={true}
+                                themeRgb={themeRgb}
+                            />
+                        ))}
+                    </div>
+                ) : (
+                    <>
+                        <LocalTile 
+                            userName={userName}
+                            userAvatar={userAvatar}
+                            videoEnabled={videoEnabled}
+                            audioEnabled={audioEnabled}
+                            videoRef={videoRef}
+                            localStream={localStream}
+                            setActiveSpeaker={setActiveSpeaker}
+                            activeSpeaker={activeSpeaker}
+                            handRaised={handRaised}
+                            selectedBg={selectedBg}
+                            backgroundBlur={backgroundBlur}
+                            lowLightMode={lowLightMode}
+                            studioLighting={studioLighting}
+                            isSpotlight={false}
+                            themeRgb={themeRgb}
+                        />
+                        {peersList.map((peer) => (
+                            <RemoteTile 
+                                key={peer.odei}
+                                peer={peer}
+                                setActiveSpeaker={setActiveSpeaker}
+                                activeSpeaker={activeSpeaker}
+                                isSpotlight={false}
+                                themeRgb={themeRgb}
+                            />
+                        ))}
+                    </>
+                )}
             </div>
         </div>
     );
