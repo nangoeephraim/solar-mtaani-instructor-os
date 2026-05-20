@@ -67,6 +67,11 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
         const applyTheme = (isDark: boolean) => {
             document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+            if (isDark) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
             // Re-apply accent colors when theme changes (dark needs different values)
             applyAccentColors(isDark);
         };
