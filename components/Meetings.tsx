@@ -17,7 +17,7 @@ import type {
     MeetingMessage, MeetingFile, FloatingReaction,
     MeetingPoll, MeetingQuestion, RemotePeer,
     SpeechRecognitionEvent, SpeechRecognitionErrorEvent,
-    SidebarTab, BlurLevel,
+    SidebarTab, BlurLevel, MeetingTheme, MeetingWallpaper,
 } from './meetings/types';
 import { ICE_SERVERS, REACTION_EMOJIS, getTimeGreeting } from './meetings/types';
 import MeetingTimer from './meetings/MeetingTimer';
@@ -59,6 +59,10 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
     } = engine;
 
     const { user } = useAuth();
+
+    // ─── Premium Customization State ───
+    const [meetingTheme, setMeetingTheme] = useState<MeetingTheme>('classic');
+    const [meetingWallpaper, setMeetingWallpaper] = useState<MeetingWallpaper>('classic');
 
 
     if (!inMeeting) {
@@ -216,10 +220,49 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                 "bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-blue-500/20"
             )} />
 
-            {/* Optimized static aurora — reduced blur for performance */}
+            {/* Dynamic Wallpaper Backdrop */}
             <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-                <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-blue-600/6 blur-[80px]" />
-                <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-purple-600/6 blur-[80px]" />
+                {meetingWallpaper === 'classic' && (
+                    <>
+                        <div className="absolute top-[-20%] left-[-10%] w-[50%] h-[50%] rounded-full bg-blue-600/6 blur-[80px]" />
+                        <div className="absolute bottom-[-20%] right-[-10%] w-[50%] h-[50%] rounded-full bg-purple-600/6 blur-[80px]" />
+                    </>
+                )}
+                {meetingWallpaper === 'glow' && (
+                    <>
+                        <div className="absolute top-[10%] left-[5%] w-[40%] h-[40%] rounded-full bg-purple-500/10 blur-[100px]" />
+                        <div className="absolute bottom-[15%] right-[10%] w-[35%] h-[35%] rounded-full bg-cyan-500/10 blur-[100px]" />
+                        <div className="absolute top-[50%] left-[40%] w-[25%] h-[25%] rounded-full bg-pink-500/8 blur-[80px]" />
+                    </>
+                )}
+                {meetingWallpaper === 'mesh' && (
+                    <>
+                        <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
+                        <div className="absolute top-[-10%] right-[-5%] w-[50%] h-[50%] rounded-full bg-blue-600/8 blur-[100px]" />
+                        <div className="absolute bottom-[-10%] left-[10%] w-[40%] h-[40%] rounded-full bg-indigo-600/8 blur-[100px]" />
+                    </>
+                )}
+                {meetingWallpaper === 'starfield' && (
+                    <>
+                        <div className="absolute inset-0" style={{ background: 'radial-gradient(1px 1px at 10% 15%, rgba(255,255,255,0.3) 50%, transparent 100%), radial-gradient(1px 1px at 25% 60%, rgba(255,255,255,0.25) 50%, transparent 100%), radial-gradient(1px 1px at 45% 30%, rgba(255,255,255,0.2) 50%, transparent 100%), radial-gradient(1px 1px at 65% 75%, rgba(255,255,255,0.3) 50%, transparent 100%), radial-gradient(1px 1px at 80% 20%, rgba(255,255,255,0.15) 50%, transparent 100%), radial-gradient(1px 1px at 90% 50%, rgba(255,255,255,0.2) 50%, transparent 100%), radial-gradient(1px 1px at 15% 80%, rgba(255,255,255,0.25) 50%, transparent 100%), radial-gradient(1px 1px at 55% 10%, rgba(255,255,255,0.15) 50%, transparent 100%), radial-gradient(1px 1px at 35% 90%, rgba(255,255,255,0.2) 50%, transparent 100%), radial-gradient(1px 1px at 75% 45%, rgba(255,255,255,0.15) 50%, transparent 100%)' }} />
+                        <div className="absolute top-[20%] left-[30%] w-[50%] h-[50%] rounded-full bg-indigo-900/15 blur-[120px]" />
+                        <div className="absolute bottom-[10%] right-[20%] w-[30%] h-[30%] rounded-full bg-violet-900/10 blur-[80px]" />
+                    </>
+                )}
+                {meetingWallpaper === 'boardroom' && (
+                    <>
+                        <div className="absolute inset-0 bg-gradient-to-br from-amber-950/10 via-stone-950/20 to-slate-950/15" />
+                        <div className="absolute top-[15%] left-[20%] w-[60%] h-[40%] rounded-full bg-amber-900/8 blur-[120px]" />
+                        <div className="absolute bottom-[20%] right-[15%] w-[40%] h-[40%] rounded-full bg-stone-700/6 blur-[100px]" />
+                    </>
+                )}
+                {meetingWallpaper === 'neon' && (
+                    <>
+                        <div className="absolute top-[-15%] left-[-5%] w-[45%] h-[45%] rounded-full bg-fuchsia-500/10 blur-[100px] animate-[pulse_8s_ease-in-out_infinite]" />
+                        <div className="absolute bottom-[-10%] right-[-5%] w-[40%] h-[40%] rounded-full bg-cyan-500/10 blur-[100px] animate-[pulse_10s_ease-in-out_infinite_reverse]" />
+                        <div className="absolute top-[40%] left-[50%] w-[25%] h-[25%] rounded-full bg-yellow-500/5 blur-[80px] animate-[pulse_6s_ease-in-out_infinite]" />
+                    </>
+                )}
             </div>
 
             {/* Floating Reactions Layer */}
@@ -311,6 +354,7 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                     backgroundBlur={backgroundBlur}
                     lowLightMode={lowLightMode}
                     studioLighting={studioLighting}
+                    meetingTheme={meetingTheme}
                 />
 
                 {/* Closed Captions Overlay — Live Speech Recognition */}
@@ -523,6 +567,10 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                 handleChatFileAttach={handleChatFileAttach}
                 chatInput={chatInput}
                 setChatInput={setChatInput}
+                meetingTheme={meetingTheme}
+                setMeetingTheme={setMeetingTheme}
+                meetingWallpaper={meetingWallpaper}
+                setMeetingWallpaper={setMeetingWallpaper}
             />
         </div>
     );

@@ -1,9 +1,10 @@
 import React, { SetStateAction } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
-import { Sparkles, MessageSquare, FileText, Paperclip, BarChart3, Users, X, AlertCircle, CheckCircle2, Copy, Upload, Download, Plus, Trash2, Check, MessageCircleQuestion, ThumbsUp, Mic, MicOff, Video, VideoOff } from 'lucide-react';
+import { Sparkles, MessageSquare, FileText, Paperclip, BarChart3, Users, X, AlertCircle, CheckCircle2, Copy, Upload, Download, Plus, Trash2, Check, MessageCircleQuestion, ThumbsUp, Mic, MicOff, Video, VideoOff, Palette, Image } from 'lucide-react';
 import UserAvatar from '../UserAvatar';
-import type { MeetingMessage, MeetingFile, MeetingPoll, MeetingQuestion, SidebarTab, BlurLevel } from './types';
+import type { MeetingMessage, MeetingFile, MeetingPoll, MeetingQuestion, SidebarTab, BlurLevel, MeetingTheme, MeetingWallpaper } from './types';
+import { THEME_COLORS, WALLPAPER_OPTIONS } from './types';
 
 export interface MeetingSidebarProps {
     showSidebar: SidebarTab | null;
@@ -58,6 +59,10 @@ export interface MeetingSidebarProps {
     handleChatFileAttach: (files: FileList | null) => void;
     chatInput: string;
     setChatInput: (s: string) => void;
+    meetingTheme: MeetingTheme;
+    setMeetingTheme: (t: MeetingTheme) => void;
+    meetingWallpaper: MeetingWallpaper;
+    setMeetingWallpaper: (w: MeetingWallpaper) => void;
 }
 
 export default function MeetingSidebar(props: MeetingSidebarProps) {
@@ -72,7 +77,7 @@ export default function MeetingSidebar(props: MeetingSidebarProps) {
         submitQuestion, upvoteQuestion, markQuestionAnswered, audioEnabled, audioLevel,
         userAvatar, user, videoEnabled, copyMeetingLink, copied, chatMessages,
         chatEndRef, handleSendChat, chatFileInputRef, handleChatFileAttach,
-        chatInput, setChatInput
+        chatInput, setChatInput, meetingTheme, setMeetingTheme, meetingWallpaper, setMeetingWallpaper
     } = props;
 
     return (
@@ -206,6 +211,85 @@ export default function MeetingSidebar(props: MeetingSidebarProps) {
                                                 <span className="text-[10px] text-white/50 font-medium">Professional portrait lighting</span>
                                             </div>
                                         </button>
+                                    </div>
+                                </div>
+
+                                {/* ─── Room Accent Color ─── */}
+                                <div>
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-white/50 mb-3 flex items-center gap-2">
+                                        <div className="h-px bg-white/10 flex-1" /> <Palette size={10} /> Room Accent <div className="h-px bg-white/10 flex-1" />
+                                    </h4>
+                                    <div className="flex gap-2 flex-wrap">
+                                        {(Object.keys(THEME_COLORS) as MeetingTheme[]).map(theme => {
+                                            const c = THEME_COLORS[theme];
+                                            const isActive = meetingTheme === theme;
+                                            return (
+                                                <button
+                                                    key={theme}
+                                                    onClick={() => { setMeetingTheme(theme); addToast(`Theme: ${c.label}`, '🎨'); }}
+                                                    className={clsx(
+                                                        "relative w-10 h-10 rounded-xl border-2 transition-all duration-200 flex items-center justify-center group/theme",
+                                                        isActive
+                                                            ? "scale-110 shadow-lg"
+                                                            : "border-white/10 hover:scale-105 hover:border-white/20"
+                                                    )}
+                                                    style={{
+                                                        background: `linear-gradient(135deg, ${c.hex}30, ${c.hex}15)`,
+                                                        borderColor: isActive ? c.hex : undefined,
+                                                        boxShadow: isActive ? `0 0 16px ${c.hex}40` : undefined,
+                                                    }}
+                                                    title={c.label}
+                                                >
+                                                    <div className="w-5 h-5 rounded-full" style={{ background: c.hex }} />
+                                                    {isActive && (
+                                                        <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-white flex items-center justify-center shadow-md">
+                                                            <Check size={10} className="text-black" />
+                                                        </div>
+                                                    )}
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+                                    <p className="text-[9px] text-white/30 mt-2 font-medium">
+                                        Active: {THEME_COLORS[meetingTheme].label}
+                                    </p>
+                                </div>
+
+                                {/* ─── Room Wallpaper ─── */}
+                                <div>
+                                    <h4 className="text-[10px] font-black uppercase tracking-widest text-white/50 mb-3 flex items-center gap-2">
+                                        <div className="h-px bg-white/10 flex-1" /> <Image size={10} /> Room Wallpaper <div className="h-px bg-white/10 flex-1" />
+                                    </h4>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {(Object.keys(WALLPAPER_OPTIONS) as MeetingWallpaper[]).map(wp => {
+                                            const opt = WALLPAPER_OPTIONS[wp];
+                                            const isActive = meetingWallpaper === wp;
+                                            return (
+                                                <button
+                                                    key={wp}
+                                                    onClick={() => { setMeetingWallpaper(wp); addToast(`Wallpaper: ${opt.label}`, opt.preview); }}
+                                                    className={clsx(
+                                                        "relative aspect-video rounded-xl border-2 transition-all duration-200 flex flex-col items-center justify-center gap-1 cursor-pointer group/wp",
+                                                        isActive
+                                                            ? "shadow-lg scale-[1.03]"
+                                                            : "border-white/10 hover:border-white/20 hover:scale-[1.02]"
+                                                    )}
+                                                    style={{
+                                                        background: isActive ? `rgba(${THEME_COLORS[meetingTheme].rgb},0.1)` : 'rgba(255,255,255,0.03)',
+                                                        borderColor: isActive ? THEME_COLORS[meetingTheme].hex : undefined,
+                                                        boxShadow: isActive ? `0 0 12px rgba(${THEME_COLORS[meetingTheme].rgb},0.25)` : undefined,
+                                                    }}
+                                                >
+                                                    <span className="text-lg">{opt.preview}</span>
+                                                    <span className="text-[8px] font-bold text-white/60 group-hover/wp:text-white/80 transition-colors">{opt.label}</span>
+                                                    {isActive && (
+                                                        <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-white flex items-center justify-center shadow-md">
+                                                            <Check size={10} className="text-black" />
+                                                        </div>
+                                                    )}
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             </div>

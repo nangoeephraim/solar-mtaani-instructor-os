@@ -147,6 +147,29 @@ export type LayoutMode = 'grid' | 'spotlight';
 export type ConnectionQuality = 'good' | 'fair' | 'poor';
 export type BlurLevel = 'None' | 'Light' | 'Heavy';
 
+// ─── Premium Customization Types ───
+export type MeetingTheme = 'classic' | 'emerald' | 'cyberpunk' | 'sunset' | 'carbon';
+export type MeetingWallpaper = 'classic' | 'glow' | 'mesh' | 'starfield' | 'boardroom' | 'neon';
+
+/** RGB color values for each accent theme, used for dynamic borders, shadows, rings */
+export const THEME_COLORS: Record<MeetingTheme, { rgb: string; label: string; hex: string; ring: string }> = {
+    classic:   { rgb: '59,130,246',  label: 'Meet Blue',    hex: '#3B82F6', ring: 'rgba(59,130,246,0.5)' },
+    emerald:   { rgb: '16,185,129',  label: 'Emerald Mint', hex: '#10B981', ring: 'rgba(16,185,129,0.5)' },
+    cyberpunk: { rgb: '217,70,239',  label: 'Cyber Fuchsia',hex: '#D946EF', ring: 'rgba(217,70,239,0.5)' },
+    sunset:    { rgb: '249,115,22',  label: 'Sunset Amber', hex: '#F97316', ring: 'rgba(249,115,22,0.5)' },
+    carbon:    { rgb: '148,163,184', label: 'Carbon Steel', hex: '#94A3B8', ring: 'rgba(148,163,184,0.5)' },
+};
+
+/** Wallpaper metadata for display and rendering */
+export const WALLPAPER_OPTIONS: Record<MeetingWallpaper, { label: string; description: string; preview: string }> = {
+    classic:   { label: 'Classic Dark',     description: 'Minimal dark background',      preview: '🌑' },
+    glow:      { label: 'Ambient Glow',     description: 'Soft neon aura backdrop',       preview: '🔮' },
+    mesh:      { label: 'Tech Mesh',        description: 'Sleek geometric grid',          preview: '🕸️' },
+    starfield: { label: 'Starfield',        description: 'Deep space galaxy',             preview: '✨' },
+    boardroom: { label: 'Executive Suite',  description: 'Blurred premium boardroom',     preview: '🏢' },
+    neon:      { label: 'Fluid Neon',       description: 'Dynamic neon gradients',        preview: '🌈' },
+};
+
 /** The full state + handlers exposed by useMeetingEngine */
 export interface MeetingEngine {
     // Auth
