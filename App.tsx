@@ -1,7 +1,27 @@
 import React, { useState, useEffect, Suspense, lazy, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
-import { fetchAppData, addStudent, deleteStudent, addScheduleSlot, deleteScheduleSlot, updateScheduleSlot, addFeePayment, addFeeStructure, deleteFeePayment, deleteFeeStructure } from './services/storageService';
+import {
+  fetchAppData,
+  addStudent,
+  deleteStudent,
+  addScheduleSlot,
+  deleteScheduleSlot,
+  updateScheduleSlot,
+  addFeePayment,
+  addFeeStructure,
+  deleteFeePayment,
+  deleteFeeStructure,
+  updateFeePayment,
+  updateStudent,
+  addLibraryResource,
+  deleteLibraryResource,
+  updateLibraryResource,
+  formatFeePaymentFromDB,
+  formatStudentFromDB,
+  formatScheduleSlot,
+  formatChannelFromDB
+} from './services/storageService';
 import { INITIAL_DATA, DEFAULT_SCHEDULE_TEMPLATE } from './constants';
 import { AppData, Student, ScheduleSlot, Resource, LibraryResource, ChatMessage, FeePayment, FeeStructure } from './types';
 import { ToastProvider, useToast } from './components/Toast';
@@ -29,6 +49,7 @@ const Resources = lazy(() => import('./components/Resources'));
 const Communications = lazy(() => import('./components/Communications'));
 const Fees = lazy(() => import('./components/Fees'));
 const InstructorManagement = lazy(() => import('./components/InstructorManagement'));
+const IconGallery = lazy(() => import('./components/IconGallery'));
 
 // Loading Spinner Component
 const LoadingSpinner: React.FC = () => (
@@ -232,9 +253,6 @@ const AppContent: React.FC = () => {
     let isMounted = true;
     const loadData = async () => {
       try {
-        // Import dynamically to avoid circular dependencies if any
-        const { fetchAppData } = await import('./services/storageService');
-
         // Guard against fetchAppData hanging forever — race with 15s timeout
         const appData = await Promise.race([
           fetchAppData(),
@@ -283,7 +301,6 @@ const AppContent: React.FC = () => {
 
     // Update database and local state
     (async () => {
-      const { updateFeePayment } = await import('./services/storageService');
       for (const p of stalePayments) {
         await updateFeePayment(p.id, { status: 'failed' });
       }
@@ -315,12 +332,7 @@ const AppContent: React.FC = () => {
       startHealthMonitor,
       unsubscribeAll
     }) => {
-      import('./services/storageService').then(({
-        formatFeePaymentFromDB,
-        formatStudentFromDB,
-        formatScheduleSlot,
-        formatChannelFromDB
-      }) => {
+      {
 
         // ─── Chat Messages (INSERT, UPDATE, DELETE) ───
         subscribeToChatMessages(null, (payload) => {
@@ -626,7 +638,7 @@ const AppContent: React.FC = () => {
 
         // Start the health monitor for auto-recovery of dropped connections
         startHealthMonitor();
-      });
+      }
     });
 
     return () => {
@@ -643,7 +655,6 @@ const AppContent: React.FC = () => {
 
   const handleUpdateStudent = async (updatedStudent: Student, notify = false) => {
     if (!data) return;
-    const { updateStudent } = await import('./services/storageService');
     const success = await updateStudent(updatedStudent);
     if (success) {
       const newData = {
@@ -663,7 +674,6 @@ const AppContent: React.FC = () => {
 
   const handleAddStudent = async (studentData: Omit<Student, 'id'>) => {
     if (!data) return;
-    const { addStudent } = await import('./services/storageService');
     const newStudent = await addStudent(studentData);
     if (newStudent) {
       const newData = {
@@ -679,7 +689,6 @@ const AppContent: React.FC = () => {
 
   const handleDeleteStudent = async (studentId: number) => {
     if (!data) return;
-    const { deleteStudent } = await import('./services/storageService');
     const student = data.students.find(s => s.id === studentId);
     const success = await deleteStudent(studentId);
     if (success) {
@@ -701,7 +710,6 @@ const AppContent: React.FC = () => {
     const slotToUpdate = data.schedule.find(s => s.id === slotId);
     if (!slotToUpdate) return;
 
-    const { updateScheduleSlot } = await import('./services/storageService');
     const success = await updateScheduleSlot({ ...slotToUpdate, status });
 
     if (success) {
@@ -718,11 +726,9 @@ const AppContent: React.FC = () => {
 
   const handleAddScheduleSlot = async (slotData: Omit<ScheduleSlot, 'id'>) => {
     if (!data) return;
-    const { addScheduleSlot } = await import('./services/storageService');
     // We trigger a refetch or optimistically update. For now, we'll force a refetch since ID generation is server-side
     const success = await addScheduleSlot({ ...slotData, id: '' } as ScheduleSlot);
     if (success) {
-      const { fetchAppData } = await import('./services/storageService');
       const freshData = await fetchAppData();
       saveDataToState(freshData);
       showToast('New class added to schedule', 'success');
@@ -733,7 +739,6 @@ const AppContent: React.FC = () => {
 
   const handleEditScheduleSlot = async (updatedSlot: ScheduleSlot) => {
     if (!data) return;
-    const { updateScheduleSlot } = await import('./services/storageService');
     const success = await updateScheduleSlot(updatedSlot);
     if (success) {
       const newData = {
@@ -749,7 +754,6 @@ const AppContent: React.FC = () => {
 
   const handleDeleteScheduleSlot = async (slotId: string) => {
     if (!data) return;
-    const { deleteScheduleSlot } = await import('./services/storageService');
     const success = await deleteScheduleSlot(slotId);
     if (success) {
       const newData = {
@@ -777,7 +781,6 @@ const AppContent: React.FC = () => {
 
   const handleAddResource = async (resourceData: Omit<Resource, 'id'>) => {
     if (!data) return;
-    const { fetchAppData } = await import('./services/storageService'); // Use refetch for simplicty on these minor types right now pending full DB crud
     showToast('Resource added (pending DB)', 'info');
   };
 
@@ -793,7 +796,6 @@ const AppContent: React.FC = () => {
 
   const handleAddLibraryResource = async (resourceData: Omit<LibraryResource, 'id'>) => {
     if (!data) return;
-    const { addLibraryResource } = await import('./services/storageService');
     const newDoc = await addLibraryResource(resourceData);
     if (newDoc) {
       const newData = {
@@ -806,7 +808,6 @@ const AppContent: React.FC = () => {
 
   const handleDeleteLibraryResource = async (resourceId: string) => {
     if (!data) return;
-    const { deleteLibraryResource } = await import('./services/storageService');
     const success = await deleteLibraryResource(resourceId);
     if (success) {
       const newData = {
@@ -820,7 +821,6 @@ const AppContent: React.FC = () => {
 
   const handleUpdateLibraryResource = async (updatedResource: LibraryResource) => {
     if (!data) return;
-    const { updateLibraryResource } = await import('./services/storageService');
     const newData = await updateLibraryResource(data, updatedResource);
     saveDataToState(newData);
     showToast('Document updated', 'success');
@@ -928,6 +928,10 @@ const AppContent: React.FC = () => {
     <AnimatePresence mode="wait">
       {currentView === 'dashboard' && (
         <Dashboard key="dashboard" data={data} onNavigate={handleNavigate} />
+      )}
+
+      {currentView === 'icon-gallery' && (
+        <IconGallery key="icon-gallery" onNavigate={handleNavigate} />
       )}
 
       {currentView === 'analytics' && (
@@ -1081,8 +1085,14 @@ const AppContent: React.FC = () => {
               )}>
                 <div className={clsx(
                   "mx-auto w-full transition-all duration-300",
-                  isAppView ? "h-full p-0 max-w-none" : "p-4 md:p-6 lg:p-8 pb-32 lg:pb-8 max-w-[1600px]"
-                )}>
+                  isAppView 
+                    ? clsx(
+                        "h-full p-0 max-w-none",
+                        currentView === 'communications' && "pb-20 md:pb-0",
+                        currentView === 'schedule' && "pb-24 md:pb-0"
+                      )
+                    : "p-4 md:p-6 lg:p-8 pb-32 lg:pb-8 max-w-[1600px]"
+                )} style={{ paddingBottom: isAppView ? undefined : 'var(--safe-area-bottom, env(safe-area-inset-bottom, 0px))' }}>
                   <ErrorBoundary>
                     <Suspense fallback={<LoadingSpinner />}>
                       {renderContent()}

@@ -13,12 +13,13 @@ import {
     AlertTriangle, FileDown, Moon, Sun, Palette, Sparkles,
     Bell, Upload, Database, Eye, Shield, LogOut, Users, ChevronRight,
     Laptop, Check, Info, Keyboard, HardDrive,
-    Zap, Activity, Camera, Phone, Building2, FileText, X, Trash2
+    Zap, Activity, Camera, Phone, Building2, FileText, X, Trash2, BellRing
 } from 'lucide-react';
 import { ToggleSwitch } from './ToggleSwitch';
 import clsx from 'clsx';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { uploadProfileAvatar, removeProfileAvatar, updateProfile, fetchProfile } from '../services/profileService';
+import { notificationService } from '../services/notificationService';
 
 interface SettingsProps { onDataReset: () => void; }
 
@@ -102,6 +103,54 @@ const Settings: React.FC<SettingsProps> = ({ onDataReset }) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const avatarInputRef = useRef<HTMLInputElement>(null);
     const [uploadLimitMB, setUploadLimitMB] = useLocalStorage<number>('admin_upload_limit_mb', 2);
+
+    const [permissionStatus, setPermissionStatus] = useState<NotificationPermission>('default');
+    const [testNotificationDelay, setTestNotificationDelay] = useState<number>(3); // seconds
+    const [isSchedulingTest, setIsSchedulingTest] = useState(false);
+
+    useEffect(() => {
+        if ('Notification' in window) {
+            setPermissionStatus(Notification.permission);
+        }
+    }, []);
+
+    const handleEnableNotifications = async () => {
+        const granted = await notificationService.requestPermission();
+        if ('Notification' in window) {
+            setPermissionStatus(Notification.permission);
+        }
+        if (granted) {
+            showToast('Notification permission granted!', 'success');
+        } else {
+            showToast('Notification permission denied. Please enable them in browser settings.', 'error');
+        }
+    };
+
+    const handleSendTestNotification = () => {
+        setIsSchedulingTest(true);
+        const success = notificationService.scheduleTestNotification(
+            'PRISM OS Class Alert 🔔',
+            `This is a test PWA notification from PRISM OS! Scheduled for ${testNotificationDelay}s.`,
+            testNotificationDelay * 1000
+        );
+
+        if (success) {
+            showToast(`Test notification scheduled in ${testNotificationDelay}s. Lock your screen or minimize the app now!`, 'success');
+        } else {
+            // Fallback for non-SW or foreground notification
+            setTimeout(() => {
+                notificationService.showLocalNotification('PRISM OS Class Alert 🔔', {
+                    body: `This is a foreground test notification since Service Worker is not active yet!`,
+                });
+                setIsSchedulingTest(false);
+            }, testNotificationDelay * 1000);
+            showToast(`Fallback test notification scheduled in ${testNotificationDelay}s.`, 'info');
+        }
+        
+        setTimeout(() => {
+            setIsSchedulingTest(false);
+        }, testNotificationDelay * 1000 + 500);
+    };
 
     const storageInfo = useMemo(() => getStorageUsage(), []);
 
@@ -493,6 +542,80 @@ const Settings: React.FC<SettingsProps> = ({ onDataReset }) => {
                     <SettingsRow icon={<Sparkles size={18} className="text-white" />} iconBg="bg-gradient-to-br from-indigo-500 to-purple-600" title="Smart AI Insights" subtitle="Predictive analytics and intelligent data trends" action={<ToggleSwitch checked={preferences.enableAI} onChange={v => setPreference('enableAI', v)} />} />
                     <SettingsRow icon={<Bell size={18} className="text-white" />} iconBg="bg-gradient-to-br from-amber-400 to-orange-500" title="Notifications" subtitle="Toast notifications for actions and events" action={<ToggleSwitch checked={preferences.notificationsEnabled} onChange={v => setPreference('notificationsEnabled', v)} />} />
                     <SettingsRow icon={<Eye size={18} className="text-white" />} iconBg="bg-gradient-to-br from-teal-400 to-emerald-600" title="Reduced Motion" subtitle="Minimize animations for accessibility" action={<ToggleSwitch checked={preferences.reducedMotion} onChange={v => setPreference('reducedMotion', v)} />} />
+                </div>
+            </motion.div>
+
+            {/* ═══ PWA & MOBILE PUSH NOTIFICATIONS ═══ */}
+            <motion.div className="glass-panel rounded-3xl overflow-hidden" custom={3.5} initial="hidden" animate="visible" variants={cardVariant}>
+                <div className="p-5 pb-2"><SectionHeader icon={<BellRing size={18} />} title="PWA & Mobile Push Notifications" iconColor="text-pink-500" /></div>
+                <div className="px-5 pb-5 pt-1 space-y-4">
+                    <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] leading-relaxed">
+                        Enable native phone notifications from the PRISM Web App. This allows you to receive instant local schedule reminders, M-Pesa STK payment statuses, and chat alerts even when the app is minimized or the screen is locked.
+                    </p>
+
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 rounded-2xl bg-[var(--md-sys-color-surface-variant)] gap-3">
+                        <div>
+                            <p className="text-xs font-bold uppercase tracking-wider text-[var(--md-sys-color-secondary)]">Permission Status</p>
+                            <div className="flex items-center gap-2 mt-1">
+                                <span className={clsx(
+                                    "h-2 w-2 rounded-full",
+                                    permissionStatus === 'granted' ? "bg-emerald-500 animate-pulse" : permissionStatus === 'denied' ? "bg-rose-500" : "bg-amber-500"
+                                )} />
+                                <span className="text-sm font-google font-bold capitalize text-[var(--md-sys-color-on-surface)]">
+                                    {permissionStatus === 'default' ? 'Not Requested (Default)' : permissionStatus}
+                                </span>
+                            </div>
+                        </div>
+
+                        {permissionStatus !== 'granted' && (
+                            <button
+                                type="button"
+                                onClick={handleEnableNotifications}
+                                className="w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-pink-500 to-indigo-600 text-white rounded-xl text-xs font-google font-bold shadow-md hover:brightness-110 active:scale-95 transition-all"
+                            >
+                                Enable Notifications
+                            </button>
+                        )}
+                    </div>
+
+                    {permissionStatus === 'granted' && (
+                        <div className="p-4 rounded-2xl bg-indigo-500/5 dark:bg-indigo-500/10 border border-indigo-500/20 space-y-3">
+                            <div className="flex items-center gap-2">
+                                <Sparkles size={14} className="text-indigo-500 animate-pulse" />
+                                <p className="text-xs font-google font-bold text-indigo-600 dark:text-indigo-400">Background Delayed Test Alert</p>
+                            </div>
+                            <p className="text-[11px] text-[var(--md-sys-color-secondary)] leading-relaxed">
+                                Schedule a mock notification, lock your screen or put the app in the background, and verify that the notification arrives natively on your device.
+                            </p>
+                            
+                            <div className="flex flex-wrap items-center gap-3 pt-1">
+                                <div className="flex items-center gap-2 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline-variant)] rounded-xl px-3 py-1.5">
+                                    <span className="text-xs font-medium text-[var(--md-sys-color-secondary)]">Delay:</span>
+                                    <input 
+                                        type="number" 
+                                        min="1" max="60" 
+                                        value={testNotificationDelay} 
+                                        onChange={e => setTestNotificationDelay(Math.max(1, parseInt(e.target.value) || 1))}
+                                        className="w-12 bg-transparent text-center text-xs font-bold text-[var(--md-sys-color-on-surface)] focus:outline-none"
+                                    />
+                                    <span className="text-xs font-medium text-[var(--md-sys-color-secondary)]">sec</span>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={handleSendTestNotification}
+                                    disabled={isSchedulingTest}
+                                    className="flex-1 min-w-[140px] py-2 px-4 bg-indigo-600 dark:bg-indigo-500 text-white rounded-xl text-xs font-google font-bold shadow-md hover:brightness-110 active:scale-95 transition-all disabled:opacity-60 flex items-center justify-center gap-1.5"
+                                >
+                                    {isSchedulingTest ? (
+                                        <>Scheduling...</>
+                                    ) : (
+                                        <><Bell size={13} /> Test Notification</>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             </motion.div>
 

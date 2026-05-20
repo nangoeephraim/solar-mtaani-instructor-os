@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, Calendar, Users, UserCheck, MoreHorizontal, BarChart3, LineChart, ClipboardCheck, Settings, Box, X, MessageSquare, Wallet, UsersRound } from 'lucide-react';
+import { LayoutDashboard, Calendar, Users, UserCheck, MoreHorizontal, BarChart3, LineChart, ClipboardCheck, Settings, Box, X, MessageSquare, Wallet, UsersRound, Grid, Compass } from 'lucide-react';
 import clsx from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
@@ -20,7 +20,27 @@ const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate }) => {
 
     // ── WhatsApp pattern: hide nav entirely when inside a full-screen chat/comms view ──
     // This prevents accidental tab switches while typing and maximises chat screen space.
-    if (currentView === 'communications') return null;
+    // Fixed lock loop bug: render a floating modern back/home chevron button to escape safely.
+    if (currentView === 'communications') {
+        return (
+            <motion.div
+                initial={{ opacity: 0, y: 50, x: '-50%' }}
+                animate={{ opacity: 1, y: 0, x: '-50%' }}
+                exit={{ opacity: 0, y: 50, x: '-50%' }}
+                transition={{ type: "spring", stiffness: 400, damping: 30 }}
+                className="fixed bottom-6 left-1/2 z-50 lg:hidden hide-on-keyboard"
+            >
+                <button
+                    onClick={() => onNavigate('dashboard')}
+                    className="flex items-center justify-center gap-2 px-6 py-3 bg-[var(--md-sys-color-primary)] text-white rounded-full shadow-lg shadow-indigo-500/20 font-google font-bold text-sm hover:scale-105 active:scale-95 transition-all tap-target-premium"
+                    style={{ minHeight: '48px', minWidth: '150px' }}
+                >
+                    <LayoutDashboard size={18} strokeWidth={2.5} />
+                    <span>Exit Chat</span>
+                </button>
+            </motion.div>
+        );
+    }
 
     const primaryItems: { id: string; label: string; icon: any; minRole: UserRole }[] = [
         { id: 'dashboard', label: 'Home', icon: LayoutDashboard, minRole: 'viewer' },
@@ -30,6 +50,7 @@ const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate }) => {
     ];
 
     const moreItems: { id: string; label: string; icon: any; minRole: UserRole }[] = [
+        { id: 'icon-gallery', label: 'Command Center', icon: Grid, minRole: 'viewer' },
         { id: 'analytics', label: 'Analytics', icon: BarChart3, minRole: 'admin' },
         { id: 'student-analytics', label: 'Student Insights', icon: LineChart, minRole: 'instructor' },
         { id: 'assessment', label: 'Assessment', icon: ClipboardCheck, minRole: 'instructor' },
@@ -61,23 +82,23 @@ const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate }) => {
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
-                            className="fixed inset-0 bg-black/40 z-40 lg:hidden hide-on-keyboard"
+                            className="fixed inset-0 bg-black/50 z-40 lg:hidden hide-on-keyboard backdrop-blur-sm"
                             onClick={() => setShowMore(false)}
                         />
                         <motion.div
                             initial={{ y: '100%', opacity: 0, scale: 0.95 }}
                             animate={{ y: 0, opacity: 1, scale: 1 }}
                             exit={{ y: '100%', opacity: 0, scale: 0.95 }}
-                            transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                            className="fixed bottom-24 left-4 right-4 z-50 lg:hidden bg-[var(--glass-bg)] backdrop-blur-md rounded-3xl shadow-xl border border-[var(--md-sys-color-outline-variant)] overflow-hidden safe-area-bottom hide-on-keyboard"
+                            transition={{ type: "spring", stiffness: 450, damping: 32 }}
+                            className="fixed bottom-24 left-4 right-4 z-50 lg:hidden glass-glassmorphism rounded-[28px] shadow-2xl border border-[var(--md-sys-color-outline-variant)] overflow-hidden safe-area-bottom hide-on-keyboard"
                         >
-                            <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--md-sys-color-outline)]">
-                                <h3 className="text-sm font-google font-bold text-[var(--md-sys-color-on-surface)]">More</h3>
-                                <button onClick={() => setShowMore(false)} title="Close menu" className="p-1 rounded-full hover:bg-[var(--md-sys-color-surface-variant)]">
+                            <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--md-sys-color-outline)] bg-white/20 dark:bg-black/20">
+                                <h3 className="text-sm font-google font-bold text-[var(--md-sys-color-on-surface)] tracking-wide">Command Center</h3>
+                                <button onClick={() => setShowMore(false)} title="Close menu" className="p-1.5 rounded-full hover:bg-[var(--md-sys-color-surface-variant)] transition-all tap-target-premium flex items-center justify-center">
                                     <X size={18} className="text-[var(--md-sys-color-secondary)]" />
                                 </button>
                             </div>
-                            <div className="p-2 grid grid-cols-3 gap-1">
+                            <div className="p-3 grid grid-cols-3 gap-2 bg-white/10 dark:bg-black/10">
                                 {visibleMore.map((item) => {
                                     const isActive = currentView === item.id;
                                     return (
@@ -85,14 +106,14 @@ const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate }) => {
                                             key={item.id}
                                             onClick={() => handleMoreNav(item.id)}
                                             className={clsx(
-                                                "flex flex-col items-center gap-1.5 py-3 px-2 rounded-2xl transition-all tap-target",
+                                                "flex flex-col items-center gap-2 py-4 px-2 rounded-2xl transition-all tap-target-premium justify-center",
                                                 isActive
-                                                    ? "bg-[var(--md-sys-color-primary)] text-white shadow-md shadow-indigo-500/20"
-                                                    : "text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-surface-variant)]"
+                                                    ? "bg-[var(--md-sys-color-primary)] text-white shadow-lg shadow-indigo-500/20"
+                                                    : "text-[var(--md-sys-color-on-surface-variant)] hover:bg-white/25 dark:hover:bg-white/5"
                                             )}
                                         >
                                             <item.icon size={22} strokeWidth={isActive ? 2.5 : 2} />
-                                            <span className={clsx("text-[10px]", isActive ? "font-bold" : "font-medium")}>{item.label}</span>
+                                            <span className={clsx("text-[10px] text-center tracking-tight", isActive ? "font-bold" : "font-medium")}>{item.label}</span>
                                         </button>
                                     );
                                 })}

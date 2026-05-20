@@ -25,11 +25,113 @@ export const SplashScreen: React.FC = () => {
             exit={{ opacity: 0, scale: 1.05, filter: 'blur(8px)' }}
             transition={{ duration: 0.6, ease: "easeInOut" }}
         >
-            {/* Subtle background gradient mesh */}
-            <div className="absolute inset-0 pointer-events-none">
-                <div className="absolute top-1/3 -left-1/4 w-[50vw] h-[50vw] rounded-full bg-indigo-500/10 blur-[120px]" />
-                <div className="absolute bottom-1/3 -right-1/4 w-[40vw] h-[40vw] rounded-full bg-violet-500/8 blur-[100px]" />
+            {/* Dynamic Full-Screen Glass Glow Mesh */}
+            <div className="absolute inset-0 pointer-events-none overflow-hidden select-none">
+                {/* Indigo Blob */}
+                <motion.div
+                    className="absolute w-[80vw] h-[80vw] md:w-[50vw] md:h-[50vw] rounded-full blur-[120px] opacity-[0.25]"
+                    style={{
+                        background: 'radial-gradient(circle, rgba(99,102,241,0.8) 0%, rgba(99,102,241,0.15) 60%, transparent 100%)',
+                        top: '-15%',
+                        left: '-15%',
+                    }}
+                    animate={{
+                        x: [0, 60, -30, 0],
+                        y: [0, -40, 30, 0],
+                        scale: [1, 1.2, 0.9, 1],
+                        rotate: [0, 90, 180, 360],
+                    }}
+                    transition={{
+                        duration: 20,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                    }}
+                />
+
+                {/* Violet Blob */}
+                <motion.div
+                    className="absolute w-[70vw] h-[70vw] md:w-[45vw] md:h-[45vw] rounded-full blur-[110px] opacity-[0.22]"
+                    style={{
+                        background: 'radial-gradient(circle, rgba(139,92,246,0.8) 0%, rgba(139,92,246,0.12) 60%, transparent 100%)',
+                        bottom: '-15%',
+                        right: '-15%',
+                    }}
+                    animate={{
+                        x: [0, -70, 40, 0],
+                        y: [0, 50, -40, 0],
+                        scale: [1, 0.85, 1.15, 1],
+                        rotate: [360, 270, 90, 0],
+                    }}
+                    transition={{
+                        duration: 24,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                    }}
+                />
+
+                {/* Pink/Rose Accent Blob */}
+                <motion.div
+                    className="absolute w-[60vw] h-[60vw] md:w-[35vw] md:h-[35vw] rounded-full blur-[100px] opacity-[0.18]"
+                    style={{
+                        background: 'radial-gradient(circle, rgba(236,72,153,0.7) 0%, rgba(236,72,153,0.1) 60%, transparent 100%)',
+                        top: '25%',
+                        right: '10%',
+                    }}
+                    animate={{
+                        x: [0, -40, 30, 0],
+                        y: [0, 60, -50, 0],
+                        scale: [0.85, 1.15, 0.95, 0.85],
+                    }}
+                    transition={{
+                        duration: 16,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                    }}
+                />
+
+                {/* Cyan/Teal Accent Blob */}
+                <motion.div
+                    className="absolute w-[75vw] h-[75vw] md:w-[45vw] md:h-[45vw] rounded-full blur-[130px] opacity-[0.22]"
+                    style={{
+                        background: 'radial-gradient(circle, rgba(6,182,212,0.7) 0%, rgba(6,182,212,0.1) 60%, transparent 100%)',
+                        bottom: '20%',
+                        left: '10%',
+                    }}
+                    animate={{
+                        x: [0, 40, -50, 0],
+                        y: [0, -30, 60, 0],
+                        scale: [1.15, 0.9, 1.1, 1.15],
+                    }}
+                    transition={{
+                        duration: 22,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                    }}
+                />
             </div>
+
+            {/* Full-Viewport Prism Refraction Sweep */}
+            <motion.div
+                className="absolute inset-0 pointer-events-none prism-glow"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: [0, 0.4, 0.25, 0.4, 0] }}
+                transition={{ duration: 4.5, repeat: Infinity, ease: "easeInOut" }}
+                style={{
+                    mixBlendMode: 'screen',
+                    pointerEvents: 'none',
+                }}
+            />
+
+            {/* High-fidelity blur & vignette blending panel */}
+            <div 
+                className="absolute inset-0 pointer-events-none"
+                style={{
+                    backdropFilter: 'blur(45px) saturate(150%)',
+                    WebkitBackdropFilter: 'blur(45px) saturate(150%)',
+                    background: 'radial-gradient(circle at center, transparent 20%, var(--md-sys-color-background) 100%)',
+                }}
+            />
+
 
             <div className="flex flex-col items-center relative z-10">
                 <motion.div

@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { analyzeData } from '../services/intelligenceService';
 import PageTransition from './PageTransition';
+import WordRotator from './WordRotator';
 
 /* ─────────────────────────────────────────────
    Hooks
@@ -90,37 +91,37 @@ const StatCard: React.FC<{
       {/* Accent top edge */}
       <div className={clsx('h-1 w-full', gradient)} />
 
-      <div className="p-6 flex flex-col justify-between min-h-[160px]">
+      <div className="p-3.5 sm:p-6 flex flex-col justify-between min-h-[125px] sm:min-h-[160px] relative">
         {/* Icon badge + label */}
-        <div className="flex items-center gap-3 mb-4">
+        <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-4">
           <motion.div
-            className={clsx('p-3 rounded-2xl text-white shadow-lg', gradient)}
+            className={clsx('p-1.5 sm:p-3 rounded-xl sm:rounded-2xl text-white shadow-md sm:shadow-lg', gradient)}
             whileHover={{ rotate: [0, -8, 8, 0], transition: { duration: 0.5 } }}
           >
-            {icon}
+            {React.isValidElement(icon) ? React.cloneElement(icon as React.ReactElement, { size: undefined, className: 'w-3.5 h-3.5 sm:w-5.5 sm:h-5.5' }) : icon}
           </motion.div>
-          <span className="text-[11px] font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-[0.12em]">{label}</span>
+          <span className="text-[9px] sm:text-[11px] font-black text-[var(--md-sys-color-secondary)] uppercase tracking-[0.06em] sm:tracking-[0.12em] truncate">{label}</span>
         </div>
 
         {/* Value */}
-        <div className="flex items-baseline gap-1">
-          <span className="text-4xl font-google font-black text-[var(--md-sys-color-on-surface)] tabular-nums">{animatedValue}</span>
-          {suffix && <span className="text-lg font-bold text-[var(--md-sys-color-on-surface-variant)]">{suffix}</span>}
+        <div className="flex items-baseline gap-0.5 sm:gap-1">
+          <span className="text-xl sm:text-4xl font-google font-black text-[var(--md-sys-color-on-surface)] tabular-nums leading-none">{animatedValue}</span>
+          {suffix && <span className="text-[10px] sm:text-lg font-bold text-[var(--md-sys-color-on-surface-variant)]">{suffix}</span>}
         </div>
-        <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] font-medium mt-1">{sub}</p>
+        <p className="text-[9px] sm:text-xs text-[var(--md-sys-color-on-surface-variant)] font-medium mt-1 select-none truncate max-w-[90%]">{sub}</p>
 
         {/* Sparkline */}
         {trendData && (
-          <div className="absolute bottom-3 right-3 w-24 h-10 opacity-30 group-hover:opacity-50 transition-opacity pointer-events-none">
+          <div className="absolute bottom-2 right-2 w-16 sm:w-24 h-6 sm:h-10 opacity-20 sm:opacity-30 group-hover:opacity-50 transition-opacity pointer-events-none">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={trendData}>
                 <defs>
-                  <linearGradient id={`sg-${label}`} x1="0" y1="0" x2="0" y2="1">
+                  <linearGradient id={`sg-${label.replace(/\s+/g, '-')}`} x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor={accentColor} stopOpacity={0.3} />
                     <stop offset="95%" stopColor={accentColor} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <Area type="monotone" dataKey="value" stroke={accentColor} strokeWidth={2.5} fill={`url(#sg-${label})`} isAnimationActive />
+                <Area type="monotone" dataKey="value" stroke={accentColor} strokeWidth={2.5} fill={`url(#sg-${label.replace(/\s+/g, '-')})`} isAnimationActive />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -194,6 +195,8 @@ interface DashboardProps {
 const Dashboard: React.FC<DashboardProps> = ({ data, onNavigate }) => {
   const { user } = useAuth();
   const [currentSettings, setCurrentSettings] = useState<InstructorSettings>(getSettings());
+  const [activeDeckTab, setActiveDeckTab] = useState<'actions' | 'tasks'>('actions');
+  const [expandedRiskId, setExpandedRiskId] = useState<number | null>(null);
 
   useEffect(() => {
     const loaded = getSettings();
@@ -342,7 +345,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onNavigate }) => {
   /* ─────────── RENDER ─────────── */
   return (
     <PageTransition>
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 pb-12 font-sans max-w-[1400px] mx-auto">
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 pb-32 sm:pb-16 px-4 sm:px-0 font-sans max-w-[1400px] mx-auto">
 
         {/* ═══ TOP ROW: HERO (8) + AI INSIGHTS (4) ═══ */}
         <motion.div
@@ -372,7 +375,9 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onNavigate }) => {
                     <h1 className="text-2xl sm:text-3xl font-google font-black text-[var(--md-sys-color-on-surface)] tracking-tight leading-none">
                       {greeting.text}, {currentSettings.name?.split(' ')[0] || 'Instructor'}
                     </h1>
-                    <p className="text-[11px] font-bold tracking-widest text-[var(--md-sys-color-primary)] uppercase mt-1">Illuminating Learning</p>
+                    <div className="text-[11px] font-bold tracking-widest text-[var(--md-sys-color-primary)] uppercase mt-1.5 min-h-[16px] flex items-center">
+                      <WordRotator words={["Empowering Solar Minds", "Advancing ICT Access", "Shaping Community Leaders", "Optimizing Workloads", "Illuminating Futures"]} intervalMs={4000} className="w-full" />
+                    </div>
                   </div>
                 </div>
 
@@ -545,7 +550,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onNavigate }) => {
         )}
 
         {/* ═══ STAT CARDS (Grid 4) ═══ */}
-        <div className="xl:col-span-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="xl:col-span-12 grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
           <StatCard
             icon={<Users size={22} />} label="Total Students" value={data.students.length} sub="Across all grades"
             gradient="bg-gradient-to-r from-blue-500 to-indigo-600" accentColor="#4f46e5" delay={0.25}
@@ -580,62 +585,104 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onNavigate }) => {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.45 }}
-            className="grid grid-cols-1 md:grid-cols-2 gap-6"
+            className="flex flex-col gap-4"
           >
-            <div className="bg-[var(--md-sys-color-surface)] rounded-3xl border border-[var(--md-sys-color-outline-variant)] shadow-sm p-6 flex flex-col">
-              <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center gap-3">
-                  <Zap size={18} className="text-amber-500" />
-                  <h3 className="font-google font-bold text-[var(--md-sys-color-on-surface)] text-sm uppercase tracking-wider">Quick Actions</h3>
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-y-6 gap-x-4 flex-1 content-start">
-                <QuickAction icon={<Calendar size={22} />} label="Schedule" bg="bg-gradient-to-br from-blue-500 to-indigo-500" onClick={() => onNavigate('schedule')} delay={0.1} />
-                <QuickAction icon={<Users size={22} />} label="Students" bg="bg-gradient-to-br from-purple-500 to-pink-500" onClick={() => onNavigate('students')} delay={0.15} />
-                <QuickAction icon={<UserCheck size={22} />} label="Attendance" bg="bg-gradient-to-br from-emerald-500 to-green-500" onClick={() => onNavigate('attendance')} delay={0.2} />
-                <QuickAction icon={<BarChart3 size={22} />} label="Analytics" bg="bg-gradient-to-br from-cyan-500 to-blue-500" onClick={() => onNavigate('analytics')} delay={0.25} />
-                <QuickAction icon={<GraduationCap size={22} />} label="Assess" bg="bg-gradient-to-br from-orange-500 to-red-500" onClick={() => onNavigate('assessment')} delay={0.3} />
-                <QuickAction icon={<Settings size={22} />} label="Settings" bg="bg-gradient-to-br from-gray-500 to-slate-600" onClick={() => onNavigate('settings')} delay={0.35} />
-              </div>
-            </div>
-
-            <div className="bg-[var(--md-sys-color-surface)] rounded-3xl border border-[var(--md-sys-color-outline-variant)] shadow-sm p-6 flex flex-col">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <ListTodo size={18} className="text-emerald-500" />
-                  <h3 className="font-google font-bold text-[var(--md-sys-color-on-surface)] text-sm uppercase tracking-wider">Smart Tasks</h3>
-                </div>
+            {/* Mobile Pill Tabs Header (Hidden on md/desktop) */}
+            <div className="flex md:hidden bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline-variant)]/60 rounded-2xl p-1 gap-1">
+              <button
+                onClick={() => setActiveDeckTab('actions')}
+                className={clsx(
+                  "flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 outline-none tap-target-premium",
+                  activeDeckTab === 'actions'
+                    ? "bg-[var(--md-sys-color-surface)] text-[var(--md-sys-color-primary)] shadow-sm border border-[var(--md-sys-color-outline-variant)]/30 font-black"
+                    : "text-[var(--md-sys-color-secondary)] hover:text-[var(--md-sys-color-on-surface)]"
+                )}
+              >
+                <Zap size={14} /> Actions
+              </button>
+              <button
+                onClick={() => setActiveDeckTab('tasks')}
+                className={clsx(
+                  "flex-1 py-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 outline-none tap-target-premium",
+                  activeDeckTab === 'tasks'
+                    ? "bg-[var(--md-sys-color-surface)] text-[var(--md-sys-color-primary)] shadow-sm border border-[var(--md-sys-color-outline-variant)]/30 font-black"
+                    : "text-[var(--md-sys-color-secondary)] hover:text-[var(--md-sys-color-on-surface)]"
+                )}
+              >
+                <ListTodo size={14} /> Tasks
                 {actionItems.length > 0 && (
-                  <span className="bg-[var(--md-sys-color-surface-variant)] text-[var(--md-sys-color-on-surface-variant)] text-xs font-black px-2.5 py-1 rounded-lg">
+                  <span className="bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-on-primary-container)] text-[9px] font-black px-1.5 py-0.5 rounded-md">
                     {actionItems.length}
                   </span>
                 )}
-              </div>
-              <div className="space-y-3 flex-1 overflow-y-auto pr-1 custom-scrollbar max-h-[220px]">
-                {actionItems.length > 0 ? (
-                  actionItems.map((item, idx) => (
-                    <motion.div
-                      key={item.id}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.1 * idx }}
-                      onClick={item.action}
-                      className={clsx('p-3 rounded-2xl border flex items-center gap-3 cursor-pointer transition-all hover:shadow-sm hover:-translate-y-0.5', item.bg, item.border)}
-                    >
-                      <div className={clsx('p-2 rounded-xl bg-white dark:bg-black/20 shadow-sm', item.color)}>
-                        {item.icon}
-                      </div>
-                      <span className={clsx('font-bold text-sm flex-1', item.color.replace('text-', 'text-').replace('-500', '-700 dark:text-').replace('-700 dark:text-', '-700 dark:text-'))}>{item.title}</span>
-                      <ChevronRight size={16} className="opacity-50" />
-                    </motion.div>
-                  ))
-                ) : (
-                  <div className="h-full flex flex-col items-center justify-center text-center py-4 opacity-60">
-                    <CheckSquare size={32} className="text-emerald-500 mb-2" />
-                    <p className="text-sm font-bold text-[var(--md-sys-color-on-surface)]">All caught up!</p>
-                    <p className="text-[11px] text-[var(--md-sys-color-secondary)]">No pending actions right now.</p>
+              </button>
+            </div>
+
+            {/* PC side-by-side and Mobile selective display */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Quick Actions Panel */}
+              <div className={clsx(
+                "bg-[var(--md-sys-color-surface)] rounded-3xl border border-[var(--md-sys-color-outline-variant)] shadow-sm p-6 flex flex-col transition-all duration-300",
+                activeDeckTab === 'actions' ? 'block animate-fade-in' : 'hidden md:flex'
+              )}>
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <Zap size={18} className="text-amber-500" />
+                    <h3 className="font-google font-bold text-[var(--md-sys-color-on-surface)] text-sm uppercase tracking-wider">Quick Actions</h3>
                   </div>
-                )}
+                </div>
+                <div className="grid grid-cols-3 gap-y-6 gap-x-4 flex-1 content-start">
+                  <QuickAction icon={<Calendar size={22} />} label="Schedule" bg="bg-gradient-to-br from-blue-500 to-indigo-500" onClick={() => onNavigate('schedule')} delay={0.1} />
+                  <QuickAction icon={<Users size={22} />} label="Students" bg="bg-gradient-to-br from-purple-500 to-pink-500" onClick={() => onNavigate('students')} delay={0.15} />
+                  <QuickAction icon={<UserCheck size={22} />} label="Attendance" bg="bg-gradient-to-br from-emerald-500 to-green-500" onClick={() => onNavigate('attendance')} delay={0.2} />
+                  <QuickAction icon={<BarChart3 size={22} />} label="Analytics" bg="bg-gradient-to-br from-cyan-500 to-blue-500" onClick={() => onNavigate('analytics')} delay={0.25} />
+                  <QuickAction icon={<GraduationCap size={22} />} label="Assess" bg="bg-gradient-to-br from-orange-500 to-red-500" onClick={() => onNavigate('assessment')} delay={0.3} />
+                  <QuickAction icon={<Settings size={22} />} label="Settings" bg="bg-gradient-to-br from-gray-500 to-slate-600" onClick={() => onNavigate('settings')} delay={0.35} />
+                </div>
+              </div>
+
+              {/* Smart Tasks Panel */}
+              <div className={clsx(
+                "bg-[var(--md-sys-color-surface)] rounded-3xl border border-[var(--md-sys-color-outline-variant)] shadow-sm p-6 flex flex-col transition-all duration-300",
+                activeDeckTab === 'tasks' ? 'block animate-fade-in' : 'hidden md:flex'
+              )}>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <ListTodo size={18} className="text-emerald-500" />
+                    <h3 className="font-google font-bold text-[var(--md-sys-color-on-surface)] text-sm uppercase tracking-wider">Smart Tasks</h3>
+                  </div>
+                  {actionItems.length > 0 && (
+                    <span className="bg-[var(--md-sys-color-surface-variant)] text-[var(--md-sys-color-on-surface-variant)] text-xs font-black px-2.5 py-1 rounded-lg">
+                      {actionItems.length}
+                    </span>
+                  )}
+                </div>
+                <div className="space-y-3 flex-1 overflow-y-auto pr-1 custom-scrollbar max-h-[220px]">
+                  {actionItems.length > 0 ? (
+                    actionItems.map((item, idx) => (
+                      <motion.div
+                        key={item.id}
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: 0.1 * idx }}
+                        onClick={item.action}
+                        className={clsx('p-3 rounded-2xl border flex items-center gap-3 cursor-pointer transition-all hover:shadow-sm hover:-translate-y-0.5', item.bg, item.border)}
+                      >
+                        <div className={clsx('p-2 rounded-xl bg-white dark:bg-black/20 shadow-sm', item.color)}>
+                          {item.icon}
+                        </div>
+                        <span className={clsx('font-bold text-sm flex-1', item.color.replace('text-', 'text-').replace('-500', '-700 dark:text-').replace('-700 dark:text-', '-700 dark:text-'))}>{item.title}</span>
+                        <ChevronRight size={16} className="opacity-50" />
+                      </motion.div>
+                    ))
+                  ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-center py-4 opacity-60">
+                      <CheckSquare size={32} className="text-emerald-500 mb-2" />
+                      <p className="text-sm font-bold text-[var(--md-sys-color-on-surface)]">All caught up!</p>
+                      <p className="text-[11px] text-[var(--md-sys-color-secondary)]">No pending actions right now.</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </motion.div>
@@ -687,7 +734,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onNavigate }) => {
             initial={{ opacity: 0, x: 16 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.45 }}
-            className="bg-[var(--md-sys-color-surface)] rounded-3xl border border-[var(--md-sys-color-outline-variant)] shadow-sm flex flex-col overflow-hidden max-h-[360px]"
+            className="bg-[var(--md-sys-color-surface)] rounded-3xl border border-[var(--md-sys-color-outline-variant)] shadow-sm flex flex-col overflow-hidden max-h-[460px] transition-all"
           >
             <div className="px-6 py-5 flex items-center justify-between border-b border-[var(--md-sys-color-outline-variant)]/60">
               <div className="flex items-center gap-3">
@@ -702,40 +749,111 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onNavigate }) => {
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 space-y-2.5 hide-scrollbar custom-scrollbar bg-[var(--md-sys-color-surface)]/50">
-              <AnimatePresence>
-                {atRiskStudents.length > 0 ? atRiskStudents.slice(0, 5).map((student, idx) => (
-                  <motion.div
-                    key={student.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: idx * 0.05 }}
-                    onClick={() => onNavigate('student-profile', student.id)}
-                    className="p-3.5 rounded-2xl bg-amber-50/20 dark:bg-amber-900/5 border border-amber-100/30 dark:border-amber-900/10 hover:bg-amber-50/60 dark:hover:bg-amber-900/20 hover:border-amber-200/50 dark:hover:border-amber-800/50 transition-all cursor-pointer group flex items-center justify-between gap-3 relative overflow-hidden"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-bold text-[var(--md-sys-color-on-surface)] text-sm truncate group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors flex items-center gap-1.5">
-                        {student.name}
-                        <ArrowUpRight size={12} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </h4>
-                      <p className="text-[9px] font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-widest mt-1">Grade {student.grade} · {student.subject}</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {student.attendancePct < 80 && (
-                        <div className="flex flex-col items-end flex-shrink-0">
-                          <span className="text-[8px] font-bold text-[var(--md-sys-color-secondary)] uppercase">Attend.</span>
-                          <span className="text-xs font-black text-amber-600 dark:text-amber-400 mt-0.5">{student.attendancePct}%</span>
-                        </div>
+              <AnimatePresence initial={false}>
+                {atRiskStudents.length > 0 ? atRiskStudents.slice(0, 5).map((student, idx) => {
+                  const isExpanded = expandedRiskId === student.id;
+                  const strugglingComp = Object.entries(student.competencies)
+                    .filter(([_, val]) => val < 2.5)
+                    .map(([key, _]) => key.toUpperCase());
+
+                  return (
+                    <motion.div
+                      key={student.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: idx * 0.05 }}
+                      className={clsx(
+                        "p-3.5 rounded-2xl border transition-all cursor-pointer relative overflow-hidden flex flex-col gap-2.5",
+                        isExpanded 
+                          ? "bg-amber-50/40 dark:bg-amber-900/10 border-amber-300 dark:border-amber-700/60 shadow-md"
+                          : "bg-amber-50/20 dark:bg-amber-900/5 border-amber-100/30 dark:border-amber-900/10 hover:bg-amber-50/60 dark:hover:bg-amber-900/20 hover:border-amber-200/50 dark:hover:border-amber-800/50 hover:shadow-sm"
                       )}
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); onNavigate('communications'); }}
-                        className="w-8 h-8 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all hover:bg-amber-200 dark:hover:bg-amber-800 hover:scale-110 shadow-sm"
-                        title="Message Student"
-                      >
-                        <MessageCircle size={14} />
-                      </button>
-                    </div>
-                  </motion.div>
-                )) : (
+                      onClick={() => setExpandedRiskId(isExpanded ? null : student.id)}
+                    >
+                      <div className="flex items-center justify-between gap-3 w-full">
+                        <div className="flex-1 min-w-0">
+                          <h4 className="font-bold text-[var(--md-sys-color-on-surface)] text-sm truncate flex items-center gap-1.5">
+                            {student.name}
+                            <span className={clsx("transition-transform duration-300 text-[var(--md-sys-color-secondary)]", isExpanded && "rotate-90 text-amber-500")}>
+                              <ChevronRight size={14} />
+                            </span>
+                          </h4>
+                          <p className="text-[9px] font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-widest mt-1">Grade {student.grade} · {student.subject}</p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <div className="flex flex-col items-end">
+                            <span className="text-[8px] font-bold text-[var(--md-sys-color-secondary)] uppercase">Score</span>
+                            <span className="text-xs font-black text-amber-600 dark:text-amber-400 mt-0.5">
+                              {Object.values(student.competencies).length > 0 
+                                ? (Object.values(student.competencies).reduce((a, b) => a + b, 0) / Object.values(student.competencies).length).toFixed(1)
+                                : '0.0'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Expanded Details Accordion */}
+                      <AnimatePresence>
+                        {isExpanded && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                            className="overflow-hidden border-t border-amber-100/50 dark:border-amber-900/30 pt-2.5 mt-1 flex flex-col gap-3"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="flex flex-col gap-1.5">
+                              {student.attendancePct < 80 && (
+                                <div className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400 font-medium">
+                                  <AlertTriangle size={12} /> Low Attendance: {student.attendancePct}% (Target: 80%)
+                                </div>
+                              )}
+                              {strugglingComp.length > 0 ? (
+                                <div className="text-xs text-[var(--md-sys-color-on-surface-variant)] leading-relaxed">
+                                  <span className="font-bold text-[var(--md-sys-color-secondary)] uppercase text-[9px] tracking-wider block mb-1">Struggling Competencies:</span>
+                                  <div className="flex flex-wrap gap-1">
+                                    {strugglingComp.map(c => (
+                                      <span key={c} className="px-2 py-0.5 bg-amber-100/50 dark:bg-amber-900/30 text-amber-800 dark:text-amber-400 rounded-md font-bold text-[9px] uppercase tracking-wider">
+                                        {c}
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                                  <CheckCircle size={12} /> Competencies on track.
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Action Buttons Deck */}
+                            <div className="flex gap-2 justify-end border-t border-amber-100/30 dark:border-amber-900/20 pt-2">
+                              <button
+                                onClick={() => onNavigate('student-profile', student.id)}
+                                className="px-2.5 py-1 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] hover:bg-[var(--md-sys-color-surface-variant)] text-[var(--md-sys-color-on-surface)] rounded-xl font-bold text-[10px] tracking-wider uppercase transition-all shadow-sm"
+                              >
+                                Profile
+                              </button>
+                              <button
+                                onClick={() => onNavigate('communications')}
+                                className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:hover:bg-indigo-900/40 border border-indigo-100 dark:border-indigo-900/30 text-indigo-600 dark:text-indigo-400 rounded-xl font-bold text-[10px] tracking-wider uppercase transition-all shadow-sm flex items-center gap-1"
+                              >
+                                <MessageCircle size={10} /> Message
+                              </button>
+                              <button
+                                onClick={() => onNavigate('assessment')}
+                                className="px-2.5 py-1 bg-amber-500 hover:bg-amber-600 text-white border border-transparent rounded-xl font-bold text-[10px] tracking-wider uppercase transition-all shadow-sm"
+                              >
+                                Assess
+                              </button>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </motion.div>
+                  );
+                }) : (
                   <div className="h-full flex flex-col items-center justify-center text-center py-6">
                     <div className="w-12 h-12 bg-green-50 dark:bg-green-900/10 rounded-2xl flex items-center justify-center mb-3 text-emerald-500 opacity-60">
                       <CheckCircle size={24} />

@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { Mail, Lock, ArrowRight, ShieldCheck, Loader2, UserPlus, User, Sparkles, Shield, Video, BarChart3, GraduationCap, Zap } from 'lucide-react';
 import clsx from 'clsx';
 import { SlideshowBackground } from './SlideshowBackground';
+import WordRotator from './WordRotator';
 
 // Feature badges for the scrolling carousel
 const FEATURES = [
@@ -363,9 +364,28 @@ export default function LoginPage() {
                                     </div>
 
                                     {/* Info notice */}
-                                    <div className="bg-amber-50/80 dark:bg-amber-900/15 border border-amber-200/80 dark:border-amber-800/50 p-3.5 rounded-xl text-amber-800 dark:text-amber-400 text-xs mb-5 flex items-start gap-2.5 backdrop-blur-sm">
-                                        <ShieldCheck size={16} className="flex-shrink-0 mt-0.5" />
-                                        <p>You'll start with <strong>view-only access</strong>. The administrator will review and grant you full instructor privileges.</p>
+                                    <div className="glassmorphic-card-premium relative overflow-hidden p-4 rounded-2xl text-slate-700 dark:text-white/80 text-xs mb-5 flex items-start gap-3 backdrop-blur-md shadow-lg shadow-indigo-500/5 dark:shadow-black/20 border border-slate-200/50 dark:border-white/10">
+                                        <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-pink-500/10 opacity-30 dark:opacity-20 animate-pulse pointer-events-none" />
+                                        <div className="relative z-10 w-8 h-8 bg-indigo-100 dark:bg-indigo-500/20 rounded-xl flex items-center justify-center flex-shrink-0 text-indigo-600 dark:text-indigo-400 shadow-inner">
+                                            <ShieldCheck size={18} className="animate-pulse" />
+                                        </div>
+                                        <div className="relative z-10 flex-1 leading-relaxed">
+                                            <p className="font-bold text-slate-800 dark:text-white mb-0.5 flex items-center gap-1.5">
+                                                <span>Instructor Notice</span>
+                                                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-ping" />
+                                            </p>
+                                            <div className="text-slate-500 dark:text-white/60 h-4 overflow-hidden flex items-center">
+                                                <WordRotator 
+                                                    words={[
+                                                        "Starts as view-only access...",
+                                                        "Requires administrator verification...",
+                                                        "Secured via end-to-end encryption..."
+                                                    ]} 
+                                                    className="font-medium text-indigo-600/90 dark:text-indigo-400"
+                                                    intervalMs={3500}
+                                                />
+                                            </div>
+                                        </div>
                                     </div>
 
                                     {registrationSuccess ? (

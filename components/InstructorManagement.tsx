@@ -4,6 +4,7 @@ import clsx from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from './Toast';
 import PageHeader from './PageHeader';
+import WordRotator from './WordRotator';
 import {
     InstructorProfile,
     ClassAssignment,
@@ -98,17 +99,51 @@ const InstructorManagement: React.FC = () => {
 
     return (
         <div className="max-w-7xl mx-auto animate-fade-in space-y-6 pb-10">
-            <PageHeader
-                title="Instructor Management"
-                subtitle="Manage instructors and class assignments"
-                icon={Users}
-                color="bg-gradient-to-br from-violet-500 to-purple-600 text-white shadow-violet-500/20"
-                action={
-                    <div className="text-sm font-medium text-white/80">
-                        {instructors.length} Instructor{instructors.length !== 1 ? 's' : ''} registered
+            {/* Premium Translucent Floating Glass Header Panel */}
+            <motion.div
+                initial={{ opacity: 0, y: -20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ type: 'spring', stiffness: 200, damping: 22 }}
+                className="relative rounded-3xl overflow-hidden bg-[var(--md-sys-color-surface)]/70 backdrop-blur-md border border-[var(--md-sys-color-outline-variant)] shadow-lg p-6 flex flex-col md:flex-row md:items-center justify-between gap-6"
+            >
+                {/* Background glow effects */}
+                <div className="absolute -right-16 -top-16 w-48 h-48 bg-violet-500 opacity-10 rounded-full blur-2xl pointer-events-none" />
+                <div className="absolute left-20 -bottom-20 w-48 h-48 bg-purple-500 opacity-5 rounded-full blur-2xl pointer-events-none" />
+
+                <div className="relative z-10 flex items-center gap-4">
+                    <motion.div
+                        whileHover={{ scale: 1.05, rotate: [0, -5, 5, 0] }}
+                        whileTap={{ scale: 0.95 }}
+                        className="w-14 h-14 rounded-2xl flex items-center justify-center bg-gradient-to-br from-violet-500/20 to-purple-600/20 border border-violet-500/30 text-violet-600 dark:text-violet-400 shadow-sm"
+                    >
+                        <Users size={28} />
+                    </motion.div>
+                    <div>
+                        <h1 className="text-2xl sm:text-3xl font-google font-black text-[var(--md-sys-color-on-surface)] tracking-tight leading-none">
+                            Instructor Management
+                        </h1>
+                        <div className="text-xs sm:text-sm font-semibold text-[var(--md-sys-color-secondary)] mt-2 flex items-center min-h-[18px]">
+                            <span className="mr-1.5 select-none">Configure system access and</span>
+                            <WordRotator 
+                                words={[
+                                    "Assign class workloads...",
+                                    "Update profile credentials...",
+                                    "Review active curriculum...",
+                                    "Authorize school access..."
+                                ]} 
+                                intervalMs={3500} 
+                                className="text-violet-600 dark:text-violet-400 font-bold"
+                            />
+                        </div>
                     </div>
-                }
-            />
+                </div>
+
+                <div className="relative z-10 flex items-center gap-3">
+                    <span className="px-4 py-2 bg-violet-50 dark:bg-violet-950/40 border border-violet-100 dark:border-violet-900/30 text-violet-600 dark:text-violet-400 rounded-xl font-bold text-xs shadow-sm">
+                        {instructors.length} Instructor{instructors.length !== 1 ? 's' : ''} Registered
+                    </span>
+                </div>
+            </motion.div>
 
             {loading ? (
                 <div className="flex items-center justify-center h-64">

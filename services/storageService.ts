@@ -666,7 +666,6 @@ export const fetchAnalyticsSummary = async () => {
 
 // --- DATA EXPORT & IMPORT ---
 export const exportDataAsCSV = async (): Promise<string> => {
-  const { fetchAppData } = await import('./storageService');
   const data = await fetchAppData();
   const headers = ['Name', 'Admission No', 'Subject', 'Grade', 'Lot', 'Attendance %'];
   const rows = data.students.map(s => [
@@ -682,7 +681,6 @@ export const exportDataAsCSV = async (): Promise<string> => {
 
 export const exportFullBackup = async (): Promise<string> => {
   // Try to export full data string from supabase
-  const { fetchAppData } = await import('./storageService');
   const data = await fetchAppData();
   return JSON.stringify(data, null, 2);
 };

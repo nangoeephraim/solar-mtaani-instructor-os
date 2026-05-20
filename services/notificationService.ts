@@ -22,7 +22,7 @@ class NotificationService {
      */
     async requestPermission(): Promise<boolean> {
         if (!('Notification' in window)) {
-            console.warn('This browser does not support desktop notification');
+            console.warn('This browser does not support desktop notifications');
             return false;
         }
 
@@ -40,16 +40,52 @@ class NotificationService {
 
     /**
      * Show a local browser notification immediately.
+     * Uses Service Worker registration.showNotification when available to support PWA/mobile environments.
      */
-    showLocalNotification(title: string, options?: NotificationOptions) {
+    async showLocalNotification(title: string, options?: NotificationOptions) {
         if (!('Notification' in window)) return;
 
         if (Notification.permission === 'granted') {
+            // Check if service worker is active and ready
+            if ('serviceWorker' in navigator) {
+                try {
+                    const reg = await navigator.serviceWorker.ready;
+                    reg.showNotification(title, {
+                        icon: '/logo.png',
+                        badge: '/logo.png',
+                        ...options
+                    });
+                    return;
+                } catch (e) {
+                    console.error('Failed to show notification via service worker, falling back to window Notification:', e);
+                }
+            }
+
+            // Fallback to normal window Notification
             new Notification(title, {
                 icon: '/logo.png',
                 ...options
             });
         }
+    }
+
+    /**
+     * Schedule a timed mock notification via Service Worker in the background.
+     * This will arrive even if the app goes to the background or the screen locks.
+     */
+    scheduleTestNotification(title: string, body: string, delayMs: number = 3000): boolean {
+        if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+            navigator.serviceWorker.controller.postMessage({
+                type: 'SCHEDULE_NOTIFICATION',
+                title,
+                body,
+                delayMs,
+                url: window.location.href,
+                icon: '/logo.png'
+            });
+            return true;
+        }
+        return false;
     }
 
     /**
