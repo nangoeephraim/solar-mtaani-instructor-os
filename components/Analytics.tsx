@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { AppData, Student, InstructorSettings, DEFAULT_SETTINGS } from '../types';
 import { getLevelShortLabel } from '../constants/educationLevels';
 import { getSettings } from '../services/storageService';
@@ -52,8 +52,8 @@ const useAnimatedCounter = (end: number, duration: number = 1000) => {
     return count;
 };
 
-// Mini Sparkline Component
-const MiniSparkline: React.FC<{ data: number[], color: string }> = ({ data, color }) => (
+// Mini Sparkline Component (memoized — pure SVG renderer)
+const MiniSparkline: React.FC<{ data: number[], color: string }> = React.memo(({ data, color }) => (
     <svg viewBox="0 0 100 30" className="w-full h-8 mt-2">
         <defs>
             <linearGradient id={`spark-${color}`} x1="0" y1="0" x2="0" y2="1">
@@ -73,9 +73,9 @@ const MiniSparkline: React.FC<{ data: number[], color: string }> = ({ data, colo
             fill={`url(#spark-${color})`}
         />
     </svg>
-);
+));
 
-// Animated Metric Card with Sparkline
+// Animated Metric Card with Sparkline (memoized — premium glassmorphic)
 const MetricCard: React.FC<{
     title: string;
     value: number;
@@ -86,20 +86,20 @@ const MetricCard: React.FC<{
     icon: React.ReactNode;
     delay?: number;
     sparklineData?: number[];
-}> = ({ title, value, suffix = '', subtitle, trend, color, icon, delay = 0, sparklineData }) => {
+}> = React.memo(({ title, value, suffix = '', subtitle, trend, color, icon, delay = 0, sparklineData }) => {
     const animatedValue = useAnimatedCounter(value, 1500);
 
     const gradients = {
-        blue: 'from-blue-500 to-blue-600',
-        green: 'from-emerald-500 to-green-600',
+        blue: 'from-blue-500 to-indigo-600',
+        green: 'from-emerald-500 to-teal-600',
         yellow: 'from-amber-400 to-orange-500',
         red: 'from-red-500 to-rose-600',
         purple: 'from-purple-500 to-indigo-600'
     };
 
     const colorHex = {
-        blue: '#3b82f6',
-        green: '#22c55e',
+        blue: '#4f46e5',
+        green: '#0d9488',
         yellow: '#f59e0b',
         red: '#ef4444',
         purple: '#8b5cf6'
@@ -110,14 +110,20 @@ const MetricCard: React.FC<{
             initial={{ opacity: 0, y: 20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ delay, type: "spring", stiffness: 300, damping: 25 }}
-            whileHover={{ y: -4, transition: { duration: 0.2 } }}
-            className="bg-[var(--md-sys-color-surface)] rounded-2xl border border-[var(--md-sys-color-outline)] shadow-sm hover:shadow-xl transition-all overflow-hidden group"
+            whileHover={{ y: -5, scale: 1.02, transition: { duration: 0.25 } }}
+            className="relative bg-[var(--md-sys-color-surface)] rounded-3xl border border-[var(--md-sys-color-outline)] shadow-sm hover:shadow-2xl transition-all duration-300 overflow-hidden group"
         >
-            <div className="p-5">
+            {/* Gradient glow orb */}
+            <div
+                className="absolute -top-8 -right-8 w-28 h-28 rounded-full opacity-0 group-hover:opacity-[0.08] blur-2xl transition-opacity duration-500 pointer-events-none"
+                style={{ background: colorHex[color] }}
+            />
+
+            <div className="p-5 relative">
                 <div className="flex items-start justify-between mb-3">
                     <motion.div
                         className={clsx("p-2.5 rounded-xl bg-gradient-to-br text-white shadow-lg", gradients[color])}
-                        whileHover={{ rotate: [0, -10, 10, 0], transition: { duration: 0.5 } }}
+                        whileHover={{ rotate: [0, -10, 10, 0], scale: 1.1, transition: { duration: 0.5 } }}
                     >
                         {icon}
                     </motion.div>
@@ -127,7 +133,7 @@ const MetricCard: React.FC<{
                             animate={{ scale: 1 }}
                             transition={{ delay: delay + 0.3 }}
                             className={clsx(
-                                "flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold",
+                                "flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold",
                                 trend === 'up' ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
                             )}
                         >
@@ -137,27 +143,27 @@ const MetricCard: React.FC<{
                     )}
                 </div>
 
-                <p className="text-[10px] font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-widest mb-0.5">{title}</p>
+                <p className="text-[10px] font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-widest mb-1">{title}</p>
                 <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-black text-[var(--md-sys-color-on-surface)] tabular-nums">{animatedValue}</span>
+                    <span className="text-3xl font-black text-[var(--md-sys-color-on-surface)] tabular-nums font-google">{animatedValue}</span>
                     {suffix && <span className="text-sm font-bold text-[var(--md-sys-color-on-surface-variant)]">{suffix}</span>}
                 </div>
-                <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] font-medium">{subtitle}</p>
+                <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] font-medium mt-0.5">{subtitle}</p>
 
                 {sparklineData && <MiniSparkline data={sparklineData} color={colorHex[color]} />}
             </div>
 
-            <div className={clsx("h-1 w-full bg-gradient-to-r", gradients[color])} />
+            <div className={clsx("h-1.5 w-full bg-gradient-to-r", gradients[color])} />
         </motion.div>
     );
-};
+});
 
-// Quick Insight Chip
+// Quick Insight Chip (memoized — pure presentational)
 const InsightChip: React.FC<{
     type: 'success' | 'warning' | 'info' | 'prediction';
     message: string;
     delay?: number;
-}> = ({ type, message, delay = 0 }) => {
+}> = React.memo(({ type, message, delay = 0 }) => {
     const styles = {
         success: 'bg-green-50 border-green-200 text-green-800',
         warning: 'bg-amber-50 border-amber-200 text-amber-800',
@@ -182,9 +188,9 @@ const InsightChip: React.FC<{
             <span className="text-[var(--md-sys-color-on-surface)]">{message}</span>
         </motion.div>
     );
-};
+});
 
-// Chart Container
+// Chart Container (memoized — pure layout wrapper)
 const ChartCard: React.FC<{
     title: string;
     icon: React.ReactNode;
@@ -192,7 +198,7 @@ const ChartCard: React.FC<{
     delay?: number;
     className?: string;
     action?: React.ReactNode;
-}> = ({ title, icon, children, delay = 0, className, action }) => (
+}> = React.memo(({ title, icon, children, delay = 0, className, action }) => (
     <motion.div
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
@@ -210,7 +216,7 @@ const ChartCard: React.FC<{
         </div>
         {children}
     </motion.div>
-);
+));
 
 const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
     const [selectedMetric, setSelectedMetric] = useState<'performance' | 'attendance' | 'overview' | 'comparison'>('overview');
@@ -257,69 +263,68 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
         }
     }, []);
 
-    // Grade distribution mapping for Recharts
-    const gradeData = gradeDist.map(g => ({
+    // Grade distribution mapping for Recharts (memoized)
+    const gradeData = useMemo(() => gradeDist.map(g => ({
         grade: `${g.grade}`,
         shortGrade: `${g.grade}`,
         students: g.student_count,
         avgScore: g.avg_score,
         attendance: g.avg_attendance
-    }));
+    })), [gradeDist]);
 
-    // Subject data mapping for Recharts
-    const subjectData = subjectComp.map(s => ({
+    // Subject data mapping for Recharts (memoized)
+    const subjectData = useMemo(() => subjectComp.map(s => ({
         name: s.subject,
         score: s.avg_score,
         students: s.student_count,
         color: s.subject === 'Solar' ? '#f97316' : '#3b82f6',
-        icon: s.subject === 'Solar' ? 'âš¡' : 'ðŸ’»'
-    }));
+        icon: s.subject === 'Solar' ? '⚡' : '💻'
+    })), [subjectComp]);
 
-    // Attendance trend
-
-    // Competency helper (must be before first usage)
-    const getAvgCompetency = (students: Student[]) => {
+    // Competency helper (memoized callback)
+    const getAvgCompetency = useMemo(() => (students: Student[]) => {
         if (students.length === 0) return 0;
         const total = students.reduce((acc, s) => {
             const vals = Object.values(s.competencies);
             return acc + (vals.reduce((a, b) => a + b, 0) / vals.length);
         }, 0);
         return parseFloat((total / students.length).toFixed(2));
-    };
+    }, []);
 
-    const attendanceTrend = [
+    // Attendance trend (memoized)
+    const attendanceTrend = useMemo(() => [
         { week: 'W1', fullWeek: 'Week 1', rate: 92, target: 90 },
         { week: 'W2', fullWeek: 'Week 2', rate: 88, target: 90 },
         { week: 'W3', fullWeek: 'Week 3', rate: 95, target: 90 },
         { week: 'W4', fullWeek: 'Week 4', rate: 91, target: 90 },
         { week: 'W5', fullWeek: 'Week 5', rate: data.students.length > 0 ? Math.round(data.students.reduce((acc, s) => acc + s.attendancePct, 0) / data.students.length) : 0, target: 90 }
-    ];
+    ], [data.students]);
 
-    // Sparkline data
-    const performanceSparkline = [2.8, 3.0, 2.9, 3.1, 3.2, getAvgCompetency(data.students)];
-    const attendanceSparkline = attendanceTrend.map(w => w.rate);
-    const studentsSparkline = [8, 10, 12, 14, 16, classAvg.total_students];
-    const atRiskSparkline = [5, 4, 3, 4, 2, atRiskList.length];
+    // Sparkline data (memoized)
+    const performanceSparkline = useMemo(() => [2.8, 3.0, 2.9, 3.1, 3.2, getAvgCompetency(data.students)], [data.students, getAvgCompetency]);
+    const attendanceSparkline = useMemo(() => attendanceTrend.map(w => w.rate), [attendanceTrend]);
+    const studentsSparkline = useMemo(() => [8, 10, 12, 14, 16, classAvg.total_students], [classAvg.total_students]);
+    const atRiskSparkline = useMemo(() => [5, 4, 3, 4, 2, atRiskList.length], [atRiskList.length]);
 
-    // Top performers (Keep client side for now, or move to RPC later)
-    const topPerformers = [...data.students]
+    // Top performers (memoized)
+    const topPerformers = useMemo(() => [...data.students]
         .map(student => ({
             ...student,
             avgScore: Object.values(student.competencies).reduce((x, y) => x + y, 0) / Object.values(student.competencies).length
         }))
         .sort((a, b) => b.avgScore - a.avgScore)
-        .slice(0, 5);
+        .slice(0, 5), [data.students]);
 
     // At-risk students
     const atRiskStudents = atRiskList;
 
-    // Competency distribution
-    const competencyDistribution = [
+    // Competency distribution (memoized)
+    const competencyDistribution = useMemo(() => [
         { name: 'Mastery (3.5-4)', value: data.students.filter(s => getAvgCompetency([s]) >= 3.5).length, color: '#22c55e' },
         { name: 'Proficient (2.5-3.4)', value: data.students.filter(s => getAvgCompetency([s]) >= 2.5 && getAvgCompetency([s]) < 3.5).length, color: '#3b82f6' },
         { name: 'Developing (1.5-2.4)', value: data.students.filter(s => getAvgCompetency([s]) >= 1.5 && getAvgCompetency([s]) < 2.5).length, color: '#f59e0b' },
         { name: 'Needs Support (<1.5)', value: data.students.filter(s => getAvgCompetency([s]) < 1.5).length, color: '#ef4444' }
-    ];
+    ], [data.students, getAvgCompetency]);
 
     // Overall stats
     const overallAvg = classAvg.overall_avg_score;
@@ -832,11 +837,12 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                                                 cursor={{ fill: 'rgba(59, 130, 246, 0.05)' }}
                                                 itemStyle={{ color: 'var(--md-sys-color-on-surface)' }}
                                             />
-                                            <Bar dataKey="avgScore" fill="url(#blueGradient)" radius={[6, 6, 0, 0]} name="Avg Score" />
+                                            <Bar dataKey="avgScore" fill="url(#premiumBarGradient)" radius={[8, 8, 0, 0]} name="Avg Score" />
                                             <defs>
-                                                <linearGradient id="blueGradient" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="0%" stopColor="#3b82f6" />
-                                                    <stop offset="100%" stopColor="#1d4ed8" />
+                                                <linearGradient id="premiumBarGradient" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="0%" stopColor="#818cf8" />
+                                                    <stop offset="50%" stopColor="#6366f1" />
+                                                    <stop offset="100%" stopColor="#4f46e5" />
                                                 </linearGradient>
                                             </defs>
                                         </BarChart>
@@ -866,11 +872,14 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                                         </Pie>
                                         <Tooltip
                                             contentStyle={{
-                                                background: 'white',
-                                                border: 'none',
-                                                borderRadius: '12px',
-                                                boxShadow: '0 10px 40px rgba(0,0,0,0.15)'
+                                                background: 'var(--md-sys-color-surface)',
+                                                border: '1px solid var(--md-sys-color-outline)',
+                                                borderRadius: '16px',
+                                                boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
+                                                padding: '12px 16px',
+                                                color: 'var(--md-sys-color-on-surface)'
                                             }}
+                                            itemStyle={{ color: 'var(--md-sys-color-on-surface)' }}
                                         />
                                     </PieChart>
                                 </ResponsiveContainer>
@@ -1018,38 +1027,42 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                                     <AreaChart data={attendanceTrend}>
                                         <defs>
                                             <linearGradient id="attendanceGradient" x1="0" y1="0" x2="0" y2="1">
-                                                <stop offset="0%" stopColor="#22c55e" stopOpacity={0.3} />
-                                                <stop offset="100%" stopColor="#22c55e" stopOpacity={0} />
+                                                <stop offset="0%" stopColor="#10b981" stopOpacity={0.35} />
+                                                <stop offset="50%" stopColor="#14b8a6" stopOpacity={0.15} />
+                                                <stop offset="100%" stopColor="#0d9488" stopOpacity={0} />
                                             </linearGradient>
                                         </defs>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-                                        <XAxis dataKey="fullWeek" tick={{ fill: '#6b7280', fontSize: 12 }} axisLine={false} tickLine={false} />
-                                        <YAxis domain={[70, 100]} tick={{ fill: '#6b7280', fontSize: 12 }} axisLine={false} tickLine={false} />
+                                        <CartesianGrid strokeDasharray="3 3" stroke="var(--md-sys-color-outline-variant)" vertical={false} />
+                                        <XAxis dataKey="fullWeek" tick={{ fill: 'var(--md-sys-color-secondary)', fontSize: 12, fontWeight: 600 }} axisLine={false} tickLine={false} />
+                                        <YAxis domain={[70, 100]} tick={{ fill: 'var(--md-sys-color-secondary)', fontSize: 12 }} axisLine={false} tickLine={false} />
                                         <Tooltip
                                             contentStyle={{
-                                                background: 'white',
-                                                border: 'none',
-                                                borderRadius: '12px',
-                                                boxShadow: '0 10px 40px rgba(0,0,0,0.15)'
+                                                background: 'var(--md-sys-color-surface)',
+                                                border: '1px solid var(--md-sys-color-outline)',
+                                                borderRadius: '16px',
+                                                boxShadow: '0 10px 40px rgba(0,0,0,0.15)',
+                                                padding: '12px 16px',
+                                                color: 'var(--md-sys-color-on-surface)'
                                             }}
+                                            itemStyle={{ color: 'var(--md-sys-color-on-surface)' }}
                                         />
                                         <Legend />
                                         <Area
                                             type="monotone"
                                             dataKey="rate"
-                                            stroke="#22c55e"
+                                            stroke="#10b981"
                                             strokeWidth={3}
                                             fill="url(#attendanceGradient)"
-                                            dot={{ fill: '#22c55e', strokeWidth: 2, r: 5 }}
-                                            activeDot={{ r: 8, fill: '#22c55e' }}
+                                            dot={{ fill: '#10b981', strokeWidth: 2, r: 5, stroke: 'var(--md-sys-color-surface)' }}
+                                            activeDot={{ r: 8, fill: '#10b981', stroke: 'var(--md-sys-color-surface)', strokeWidth: 3 }}
                                             name="Attendance %"
                                         />
                                         <Line
                                             type="monotone"
                                             dataKey="target"
-                                            stroke="#ef4444"
+                                            stroke="#f43f5e"
                                             strokeWidth={2}
-                                            strokeDasharray="5 5"
+                                            strokeDasharray="8 4"
                                             dot={false}
                                             name="Target (90%)"
                                         />
@@ -1213,4 +1226,4 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
         </div >
     );
 };
-export default Analytics;
+export default React.memo(Analytics);

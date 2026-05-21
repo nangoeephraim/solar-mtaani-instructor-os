@@ -44,8 +44,8 @@ const useAnimatedCounter = (end: number, duration = 1200) => {
    Sub-Components
    ───────────────────────────────────────────── */
 
-// ── Live Clock ──
-const LiveClock: React.FC = () => {
+// ── Live Clock (memoized — owns its own interval, no props) ──
+const LiveClock: React.FC = React.memo(() => {
   const [time, setTime] = useState(new Date());
   useEffect(() => {
     const id = setInterval(() => setTime(new Date()), 1000);
@@ -62,9 +62,9 @@ const LiveClock: React.FC = () => {
       </p>
     </div>
   );
-};
+});
 
-// ── Animated Stat Card ──
+// ── Animated Stat Card (memoized — premium glassmorphic) ──
 const StatCard: React.FC<{
   icon: React.ReactNode;
   label: string;
@@ -76,7 +76,7 @@ const StatCard: React.FC<{
   delay?: number;
   onClick?: () => void;
   trendData?: { value: number }[];
-}> = ({ icon, label, value, suffix = '', sub, gradient, accentColor, delay = 0, onClick, trendData }) => {
+}> = React.memo(({ icon, label, value, suffix = '', sub, gradient, accentColor, delay = 0, onClick, trendData }) => {
   const animatedValue = useAnimatedCounter(value);
 
   return (
@@ -84,40 +84,46 @@ const StatCard: React.FC<{
       initial={{ opacity: 0, y: 24, scale: 0.96 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ delay, type: 'spring', stiffness: 260, damping: 24 }}
-      whileHover={{ y: -6, transition: { duration: 0.25 } }}
+      whileHover={{ y: -6, scale: 1.02, transition: { duration: 0.25 } }}
       onClick={onClick}
-      className="relative bg-[var(--md-sys-color-surface)] rounded-3xl border border-[var(--md-sys-color-outline-variant)] shadow-sm hover:shadow-xl transition-all cursor-pointer overflow-hidden group"
+      className="relative bg-[var(--md-sys-color-surface)] rounded-3xl border border-[var(--md-sys-color-outline-variant)] shadow-sm hover:shadow-2xl transition-all duration-300 cursor-pointer overflow-hidden group"
     >
-      {/* Accent top edge */}
-      <div className={clsx('h-1 w-full', gradient)} />
+      {/* Gradient glow orb — visible on hover */}
+      <div
+        className="absolute -top-10 -right-10 w-32 h-32 rounded-full opacity-0 group-hover:opacity-[0.08] blur-2xl transition-opacity duration-500 pointer-events-none"
+        style={{ background: accentColor }}
+      />
 
-      <div className="p-3.5 sm:p-6 flex flex-col justify-between min-h-[125px] sm:min-h-[160px] relative">
+      {/* Accent top edge with gradient */}
+      <div className={clsx('h-1.5 w-full', gradient)} />
+
+      <div className="p-3.5 sm:p-6 flex flex-col justify-between min-h-[130px] sm:min-h-[170px] relative">
         {/* Icon badge + label */}
         <div className="flex items-center gap-2 sm:gap-3 mb-2 sm:mb-4">
           <motion.div
-            className={clsx('p-1.5 sm:p-3 rounded-xl sm:rounded-2xl text-white shadow-md sm:shadow-lg', gradient)}
-            whileHover={{ rotate: [0, -8, 8, 0], transition: { duration: 0.5 } }}
+            className={clsx('p-2 sm:p-3 rounded-xl sm:rounded-2xl text-white shadow-lg', gradient)}
+            whileHover={{ rotate: [0, -8, 8, 0], scale: 1.1, transition: { duration: 0.5 } }}
           >
-            {React.isValidElement(icon) ? React.cloneElement(icon as React.ReactElement, { size: undefined, className: 'w-3.5 h-3.5 sm:w-5.5 sm:h-5.5' }) : icon}
+            {React.isValidElement(icon) ? React.cloneElement(icon as React.ReactElement, { size: undefined, className: 'w-4 h-4 sm:w-5 sm:h-5' }) : icon}
           </motion.div>
           <span className="text-[9px] sm:text-[11px] font-black text-[var(--md-sys-color-secondary)] uppercase tracking-[0.06em] sm:tracking-[0.12em] truncate">{label}</span>
         </div>
 
         {/* Value */}
         <div className="flex items-baseline gap-0.5 sm:gap-1">
-          <span className="text-xl sm:text-4xl font-google font-black text-[var(--md-sys-color-on-surface)] tabular-nums leading-none">{animatedValue}</span>
-          {suffix && <span className="text-[10px] sm:text-lg font-bold text-[var(--md-sys-color-on-surface-variant)]">{suffix}</span>}
+          <span className="text-2xl sm:text-4xl font-google font-black text-[var(--md-sys-color-on-surface)] tabular-nums leading-none">{animatedValue}</span>
+          {suffix && <span className="text-xs sm:text-lg font-bold text-[var(--md-sys-color-on-surface-variant)]">{suffix}</span>}
         </div>
         <p className="text-[9px] sm:text-xs text-[var(--md-sys-color-on-surface-variant)] font-medium mt-1 select-none truncate max-w-[90%]">{sub}</p>
 
         {/* Sparkline */}
         {trendData && (
-          <div className="absolute bottom-2 right-2 w-16 sm:w-24 h-6 sm:h-10 opacity-20 sm:opacity-30 group-hover:opacity-50 transition-opacity pointer-events-none">
+          <div className="absolute bottom-2 right-2 w-20 sm:w-28 h-8 sm:h-12 opacity-15 sm:opacity-25 group-hover:opacity-50 transition-opacity duration-300 pointer-events-none">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={trendData}>
                 <defs>
                   <linearGradient id={`sg-${label.replace(/\s+/g, '-')}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={accentColor} stopOpacity={0.3} />
+                    <stop offset="5%" stopColor={accentColor} stopOpacity={0.4} />
                     <stop offset="95%" stopColor={accentColor} stopOpacity={0} />
                   </linearGradient>
                 </defs>
@@ -129,10 +135,10 @@ const StatCard: React.FC<{
       </div>
     </motion.div>
   );
-};
+});
 
-// ── Circular Progress Ring ──
-const ProgressRing: React.FC<{ pct: number; size?: number; stroke?: number }> = ({ pct, size = 56, stroke = 5 }) => {
+// ── Circular Progress Ring (memoized — pure component) ──
+const ProgressRing: React.FC<{ pct: number; size?: number; stroke?: number }> = React.memo(({ pct, size = 56, stroke = 5 }) => {
   const r = (size - stroke) / 2;
   const c = 2 * Math.PI * r;
   return (
@@ -154,16 +160,16 @@ const ProgressRing: React.FC<{ pct: number; size?: number; stroke?: number }> = 
       </defs>
     </svg>
   );
-};
+});
 
-// ── Quick Action Button ──
+// ── Quick Action Button (memoized — pure presentational) ──
 const QuickAction: React.FC<{
   icon: React.ReactNode;
   label: string;
   bg: string;
   onClick: () => void;
   delay?: number;
-}> = ({ icon, label, bg, onClick, delay = 0 }) => (
+}> = React.memo(({ icon, label, bg, onClick, delay = 0 }) => (
   <motion.button
     initial={{ opacity: 0, scale: 0.85 }}
     animate={{ opacity: 1, scale: 1 }}
@@ -181,7 +187,68 @@ const QuickAction: React.FC<{
     </div>
     <span className="text-[11px] font-bold text-[var(--md-sys-color-on-surface-variant)] group-hover:text-[var(--md-sys-color-on-surface)] transition-colors">{label}</span>
   </motion.button>
-);
+));
+
+// ── Connection Status Indicator ──
+const ConnectionStatus: React.FC = React.memo(() => {
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    const goOnline = () => setIsOnline(true);
+    const goOffline = () => setIsOnline(false);
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+
+    // Check pending mutations count
+    const checkPending = async () => {
+      try {
+        const { getPendingMutations } = await import('../services/offlineSyncService');
+        const mutations = await getPendingMutations();
+        setPendingCount(mutations.length);
+      } catch { /* silent */ }
+    };
+    checkPending();
+    const id = setInterval(checkPending, 10000);
+
+    return () => {
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
+      clearInterval(id);
+    };
+  }, []);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.8 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className={clsx(
+        "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-wider border transition-colors",
+        isOnline && pendingCount === 0
+          ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/40"
+          : isOnline && pendingCount > 0
+          ? "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800/40"
+          : "bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border-red-200 dark:border-red-800/40"
+      )}
+    >
+      <span className="relative flex h-2 w-2">
+        {isOnline && pendingCount === 0 && (
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+        )}
+        <span className={clsx(
+          "relative inline-flex rounded-full h-2 w-2",
+          isOnline && pendingCount === 0 ? "bg-emerald-500" : isOnline ? "bg-amber-500" : "bg-red-500"
+        )} />
+      </span>
+      {isOnline && pendingCount === 0
+        ? "Synced"
+        : isOnline
+        ? `${pendingCount} pending`
+        : "Offline"
+      }
+    </motion.div>
+  );
+});
 
 /* ─────────────────────────────────────────────
    Main Dashboard Component
@@ -277,19 +344,22 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onNavigate }) => {
     return { total, completed, pct: total > 0 ? Math.round((completed / total) * 100) : 0 };
   }, [data.schedule]);
 
-  // ── At-Risk Students ──
-  const atRiskStudents = data.students.filter(s => {
+  // ── At-Risk Students (memoized — expensive O(n) filter with nested reduce) ──
+  const atRiskStudents = useMemo(() => data.students.filter(s => {
     const vals = Object.values(s.competencies);
     const avg = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
     return avg < 2.5 || s.attendancePct < 80;
-  });
+  }), [data.students]);
 
-  // ── Aggregate Stats ──
-  const avgAttendance = Math.round(data.students.reduce((a, s) => a + s.attendancePct, 0) / Math.max(data.students.length, 1));
-  const avgCompetency = parseFloat((data.students.reduce((a, s) => {
+  // ── Aggregate Stats (memoized — O(n) reduce on every render otherwise) ──
+  const avgAttendance = useMemo(() => Math.round(
+    data.students.reduce((a, s) => a + s.attendancePct, 0) / Math.max(data.students.length, 1)
+  ), [data.students]);
+
+  const avgCompetency = useMemo(() => parseFloat((data.students.reduce((a, s) => {
     const v = Object.values(s.competencies);
     return a + (v.reduce((x, y) => x + y, 0) / Math.max(v.length, 1));
-  }, 0) / Math.max(data.students.length, 1)).toFixed(1));
+  }, 0) / Math.max(data.students.length, 1)).toFixed(1)), [data.students]);
 
   // ── AI Insights ──
   const insights = useMemo(() => {
@@ -352,7 +422,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onNavigate }) => {
           initial={{ opacity: 0, y: -16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ type: 'spring', stiffness: 200, damping: 22 }}
-          className="xl:col-span-8 relative rounded-3xl overflow-hidden bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline-variant)] shadow-sm"
+          className="xl:col-span-8 relative rounded-3xl overflow-hidden bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline-variant)] shadow-sm hover:shadow-xl transition-shadow duration-500"
         >
           {/* Glassmorphic Background Overlays */}
           <div className="absolute inset-0 bg-gradient-to-br from-[var(--md-sys-color-surface)] via-[var(--md-sys-color-surface-variant)] to-[var(--md-sys-color-primary-container)] opacity-40 mix-blend-overlay z-0" />
@@ -423,8 +493,11 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onNavigate }) => {
                 </div>
               </div>
 
-              {/* Right: Clock */}
-              <LiveClock />
+              {/* Right: Clock + Connection Status */}
+              <div className="flex flex-col items-end gap-2">
+                <LiveClock />
+                <ConnectionStatus />
+              </div>
             </div>
 
             {/* Horizontal Timeline */}
