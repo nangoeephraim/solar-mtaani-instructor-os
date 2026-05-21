@@ -266,45 +266,45 @@ const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
             {/* Left Sidebar - Candidate Selection */}
             <div className="lg:col-span-3 space-y-4">
                {/* Filters */}
-               <div className="glass-panel p-4 rounded-xl bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)]">
+               <div className="glass-panel p-5 rounded-[28px] shadow-elevation-1">
                   <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-wider block mb-3">Filter Candidates</label>
                   <div className="space-y-3">
-                     <div className="flex bg-[var(--md-sys-color-surface-variant)] rounded-lg p-1">
+                     <div className="flex bg-[var(--md-sys-color-surface-variant)]/60 border border-[var(--md-sys-color-outline-variant)] rounded-xl p-1">
                         {(['Solar', 'ICT'] as const).map(sub => (
                            <button
                               key={sub}
                               onClick={() => { setSelectedSubject(sub); setSelectedStudentId(null); setActiveUnit(null); }}
                               className={clsx(
-                                 "flex-1 py-1.5 text-xs font-bold rounded-md transition-all",
-                                 selectedSubject === sub ? "bg-white shadow text-black" : "text-gray-500"
+                                 "flex-1 py-1.5 text-xs font-bold rounded-lg transition-all",
+                                 selectedSubject === sub ? "bg-[var(--md-sys-color-surface)] text-[var(--md-sys-color-primary)] shadow-sm" : "text-[var(--md-sys-color-secondary)] hover:text-[var(--md-sys-color-on-surface)]"
                               )}
                            >
                               {sub}
                            </button>
                         ))}
                      </div>
-                     <div className="flex bg-[var(--md-sys-color-surface-variant)] rounded-lg p-1 overflow-x-auto custom-scrollbar">
+                     <div className="flex bg-[var(--md-sys-color-surface-variant)]/60 border border-[var(--md-sys-color-outline-variant)] rounded-xl p-1 overflow-x-auto custom-scrollbar">
                         {STUDENT_GROUPS.map(grp => (
                            <button
                               key={grp}
                               onClick={() => { setSelectedGroup(grp); setSelectedGrade(getDefaultLevel(grp)); setSelectedStudentId(null); }}
                               className={clsx(
-                                 "flex-1 py-1.5 text-xs font-bold rounded-md transition-all",
-                                 selectedGroup === grp ? "bg-white shadow text-black" : "text-gray-500"
+                                 "flex-1 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap px-3",
+                                 selectedGroup === grp ? "bg-[var(--md-sys-color-surface)] text-[var(--md-sys-color-primary)] shadow-sm" : "text-[var(--md-sys-color-secondary)] hover:text-[var(--md-sys-color-on-surface)]"
                               )}
                            >
                               {grp}
                            </button>
                         ))}
                      </div>
-                     <div className="flex bg-[var(--md-sys-color-surface-variant)] rounded-lg p-1 overflow-x-auto">
+                     <div className="flex bg-[var(--md-sys-color-surface-variant)]/60 border border-[var(--md-sys-color-outline-variant)] rounded-xl p-1 overflow-x-auto custom-scrollbar">
                         {getLevelsForGroup(selectedGroup).map(lvl => (
                            <button
                               key={lvl.id}
                               onClick={() => { setSelectedGrade(lvl.id); setSelectedStudentId(null); }}
                               className={clsx(
-                                 "flex-1 py-1.5 text-xs font-bold rounded-md transition-all min-w-[30px]",
-                                 selectedGrade === lvl.id ? "bg-white shadow text-black" : "text-gray-500"
+                                 "flex-1 py-1.5 text-xs font-bold rounded-lg transition-all min-w-[30px] px-2",
+                                 selectedGrade === lvl.id ? "bg-[var(--md-sys-color-surface)] text-[var(--md-sys-color-primary)] shadow-sm" : "text-[var(--md-sys-color-secondary)] hover:text-[var(--md-sys-color-on-surface)]"
                               )}
                            >
                               {lvl.shortLabel}
@@ -315,7 +315,7 @@ const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
                </div>
 
                {/* Student List */}
-               <div className="glass-panel p-4 rounded-xl bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] h-[300px] md:h-[500px] flex flex-col">
+               <div className="glass-panel p-5 rounded-[28px] h-[300px] md:h-[500px] flex flex-col shadow-elevation-1">
                   <div className="flex items-center justify-between mb-3">
                      <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-wider">
                         Candidates ({studentsInClass.length})
@@ -327,30 +327,32 @@ const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
                               generateBulkReportCards(studentsInClass, data, { term: 1 });
                               showToast(`Downloading ${studentsInClass.length} report cards...`, 'success');
                            }}
-                           className="flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 rounded-lg text-[10px] font-bold hover:bg-blue-200 transition-all"
+                           className="flex items-center gap-1.5 px-3 py-1 bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 rounded-full text-[10px] font-bold hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-all"
                            title="Download all report cards"
                         >
-                           <Download size={10} /> All PDFs
+                           <Download size={12} /> All PDFs
                         </button>
                      )}
                   </div>
-                  <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
+                  <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-1">
                      {studentsInClass.map(s => (
                         <button
                            key={s.id}
                            onClick={() => setSelectedStudentId(s.id)}
                            className={clsx(
-                              "w-full text-left p-3 rounded-xl border transition-all text-sm font-medium flex items-center justify-between group",
+                              "w-full text-left p-3.5 rounded-2xl border transition-all text-sm font-medium flex items-center justify-between group",
                               selectedStudentId === s.id
-                                 ? "bg-blue-600 border-blue-600 text-white shadow-md"
-                                 : "bg-[var(--md-sys-color-surface)] border-[var(--md-sys-color-outline)] hover:border-blue-300"
+                                 ? "bg-gradient-to-r from-blue-600 to-indigo-600 border-transparent text-white shadow-elevation-2 scale-[1.01]"
+                                 : "bg-[var(--md-sys-color-surface)] border-[var(--md-sys-color-outline)] hover:border-blue-500/50 hover:bg-[var(--md-sys-color-surface-variant)]/45"
                            )}
                         >
                            <div>
                               <p className="font-bold">{s.name}</p>
-                              <p className="text-[10px] opacity-80">{s.admissionNumber || 'No Adm No'}</p>
+                              <p className={clsx("text-[10px] transition-colors", selectedStudentId === s.id ? "text-blue-100" : "text-[var(--md-sys-color-secondary)]")}>
+                                 {s.admissionNumber || 'No Adm No'}
+                              </p>
                            </div>
-                           {selectedStudentId === s.id && <ChevronRight size={16} />}
+                           <ChevronRight size={16} className={clsx("transition-transform group-hover:translate-x-1", selectedStudentId === s.id ? "text-white" : "text-[var(--md-sys-color-secondary)]")} />
                         </button>
                      ))}
                   </div>
@@ -360,33 +362,33 @@ const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
             {/* Main Area */}
             <div className="lg:col-span-9">
                {selectedStudent ? (
-                  <div className="glass-panel rounded-2xl bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] overflow-hidden min-h-[600px] flex flex-col">
+                  <div className="glass-panel rounded-[28px] overflow-hidden min-h-[600px] flex flex-col shadow-elevation-2">
                      {/* Dashboard Header */}
-                     <div className="p-6 border-b border-[var(--md-sys-color-outline)] bg-[var(--md-sys-color-surface-variant)]/30">
-                        <div className="flex items-center justify-between">
+                     <div className="p-6 md:p-8 border-b border-[var(--md-sys-color-outline)] bg-[var(--md-sys-color-surface-variant)]/30 backdrop-blur-md">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                            <div>
                               <p className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-wider">Candidate Dashboard</p>
-                              <h2 className="text-2xl font-google font-bold text-[var(--md-sys-color-on-surface)]">{selectedStudent.name}</h2>
-                              <div className="flex gap-4 mt-2 text-sm text-[var(--md-sys-color-on-surface-variant)]">
-                                 <span className="flex items-center gap-1"><GraduationCap size={14} /> {selectedStudent.admissionNumber || 'N/A'}</span>
-                                 <span className="flex items-center gap-1"><CheckCircle2 size={14} /> {selectedStudent.nitaNumber || 'No NITA Reg'}</span>
+                              <h2 className="text-2xl font-google font-bold text-[var(--md-sys-color-on-surface)] mt-1">{selectedStudent.name}</h2>
+                              <div className="flex flex-wrap gap-4 mt-2 text-sm text-[var(--md-sys-color-on-surface-variant)]">
+                                 <span className="flex items-center gap-1.5"><GraduationCap size={15} className="text-[var(--md-sys-color-primary)]" /> {selectedStudent.admissionNumber || 'N/A'}</span>
+                                 <span className="flex items-center gap-1.5"><CheckCircle2 size={15} className="text-green-500" /> {selectedStudent.nitaNumber || 'No NITA Reg'}</span>
                               </div>
                            </div>
-                           <div className="flex items-center gap-4">
+                           <div className="flex items-center gap-4 self-end sm:self-auto">
                               <button
                                  onClick={async () => {
                                     const { generateReportCard } = await import('../services/reportCardService');
                                     generateReportCard(selectedStudent, data, { term: 1 });
                                  }}
-                                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-all shadow-sm"
+                                 className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white hover:bg-blue-700 rounded-full text-xs font-bold transition-all shadow-sm active:scale-95"
                                  title="Download Report Card PDF"
                               >
                                  <FileDown size={14} /> Report Card
                               </button>
-                              <div className="text-right">
+                              <div className="text-right hidden sm:block">
                                  <p className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase">Overall Status</p>
-                                 <div className="text-xl font-bold text-[var(--md-sys-color-on-surface)]">
-                                    {Object.keys(selectedStudent.assessment?.units || {}).length} / {Object.keys(competencies).length} Units Attempted
+                                 <div className="text-xl font-bold text-[var(--md-sys-color-on-surface)] mt-0.5">
+                                    {Object.keys(selectedStudent.assessment?.units || {}).length} / {Object.keys(competencies).length} Units
                                  </div>
                               </div>
                            </div>
@@ -405,13 +407,13 @@ const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
                               return (
                                  <motion.div
                                     key={key}
-                                    whileHover={{ y: -4 }}
+                                    whileHover={{ y: -4, scale: 1.01 }}
                                     onClick={() => setActiveUnit(key)}
                                     className={clsx(
-                                       "p-5 rounded-2xl border cursor-pointer transition-all relative overflow-hidden flex flex-col min-h-[220px]",
+                                       "p-6 rounded-[24px] cursor-pointer transition-all relative overflow-hidden flex flex-col min-h-[230px] glass-card",
                                        isComplete
-                                          ? "bg-green-50/50 border-green-200 dark:bg-green-900/10 dark:border-green-800"
-                                          : "bg-[var(--md-sys-color-surface)] border-[var(--md-sys-color-outline)] hover:border-blue-400"
+                                          ? "border-green-500/30 bg-green-500/5 hover:border-green-500/50"
+                                          : "hover:border-[var(--md-sys-color-primary)]"
                                     )}
                                  >
                                     {isComplete && <div className="absolute top-0 right-0 w-24 h-24 bg-green-500/10 rounded-bl-[100px] z-0" />}
@@ -475,8 +477,8 @@ const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
                      </div>
                   </div>
                ) : (
-                  <div className="glass-panel h-96 rounded-2xl bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] flex items-center justify-center text-[var(--md-sys-color-secondary)]">
-                     <p className="font-bold">Select a candidate to begin assessment</p>
+                  <div className="glass-panel h-96 rounded-[28px] flex items-center justify-center text-[var(--md-sys-color-secondary)] shadow-elevation-1">
+                     <p className="font-bold font-google">Select a candidate to begin assessment</p>
                   </div>
                )}
             </div>
@@ -485,26 +487,26 @@ const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
          {/* Assessment Grading Modal */}
          <AnimatePresence>
             {activeUnit && selectedStudent && (
-               <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/50 backdrop-blur-sm">
+               <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/60 backdrop-blur-md">
                   <motion.div
                      initial={{ opacity: 0, scale: 0.95, y: 20 }}
                      animate={{ opacity: 1, scale: 1, y: 0 }}
                      exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                     className="bg-[var(--md-sys-color-surface)] w-full max-w-2xl max-h-[90vh] rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-[var(--md-sys-color-outline)] relative"
+                     className="bg-[var(--md-sys-color-surface)] w-full max-w-2xl max-h-[90vh] rounded-[28px] shadow-2xl flex flex-col overflow-hidden border border-[var(--md-sys-color-outline)] relative glass-panel"
                   >
                      {/* Close Button */}
                      <button
                         title="Close Grading Modal"
                         aria-label="Close Grading Modal"
                         onClick={() => setActiveUnit(null)}
-                        className="absolute top-4 right-4 p-2 rounded-full bg-white/20 hover:bg-white/40 transition-colors text-white z-10"
+                        className="absolute top-4 right-4 p-2.5 rounded-full bg-black/20 hover:bg-black/40 hover:scale-105 transition-all text-white z-10"
                      >
                         <X size={20} />
                      </button>
 
                      {/* Modal Header */}
                      <div className={clsx(
-                        "px-8 py-6 text-white shrink-0",
+                        "px-8 py-7 text-white shrink-0 shadow-md",
                         assessmentSystem === 'KNEC' ? "bg-gradient-to-br from-blue-600 to-indigo-700" : "bg-gradient-to-br from-violet-600 to-fuchsia-700"
                      )}>
                         <div className="flex items-center gap-2 mb-2">
@@ -571,7 +573,7 @@ const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
                                                 placeholder="0"
                                                 value={marks.cat1}
                                                 onChange={e => setMarks({ ...marks, cat1: parseFloat(e.target.value) || 0 })}
-                                                className="w-full pl-4 pr-12 py-3 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-xl font-mono text-lg focus:ring-2 focus:ring-blue-500 text-[var(--md-sys-color-on-surface)]"
+                                                className="w-full pl-4 pr-12 py-3 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-xl font-mono text-lg focus:outline-none input-glow transition-all text-[var(--md-sys-color-on-surface)]"
                                              />
                                              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--md-sys-color-on-surface-variant)] text-sm">/ 100</span>
                                           </div>
@@ -586,7 +588,7 @@ const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
                                                 placeholder="0"
                                                 value={marks.cat2}
                                                 onChange={e => setMarks({ ...marks, cat2: parseFloat(e.target.value) || 0 })}
-                                                className="w-full pl-4 pr-12 py-3 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-xl font-mono text-lg focus:ring-2 focus:ring-blue-500 text-[var(--md-sys-color-on-surface)]"
+                                                className="w-full pl-4 pr-12 py-3 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-xl font-mono text-lg focus:outline-none input-glow transition-all text-[var(--md-sys-color-on-surface)]"
                                              />
                                              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--md-sys-color-on-surface-variant)] text-sm">/ 100</span>
                                           </div>
@@ -601,7 +603,7 @@ const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
                                                 placeholder="0"
                                                 value={marks.practical}
                                                 onChange={e => setMarks({ ...marks, practical: parseFloat(e.target.value) || 0 })}
-                                                className="w-full pl-4 pr-12 py-3 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-xl font-mono text-lg focus:ring-2 focus:ring-blue-500 text-[var(--md-sys-color-on-surface)]"
+                                                className="w-full pl-4 pr-12 py-3 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-xl font-mono text-lg focus:outline-none input-glow transition-all text-[var(--md-sys-color-on-surface)]"
                                              />
                                              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--md-sys-color-on-surface-variant)] text-sm">/ 100</span>
                                           </div>
@@ -616,7 +618,7 @@ const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
                                                 placeholder="0"
                                                 value={marks.exam}
                                                 onChange={e => setMarks({ ...marks, exam: parseFloat(e.target.value) || 0 })}
-                                                className="w-full pl-4 pr-12 py-3 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-xl font-mono text-lg focus:ring-2 focus:ring-blue-500 text-[var(--md-sys-color-on-surface)]"
+                                                className="w-full pl-4 pr-12 py-3 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-xl font-mono text-lg focus:outline-none input-glow transition-all text-[var(--md-sys-color-on-surface)]"
                                              />
                                              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--md-sys-color-on-surface-variant)] text-sm">/ 100</span>
                                           </div>
@@ -628,7 +630,7 @@ const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
                                        <textarea
                                           value={marks.remarks}
                                           onChange={e => setMarks({ ...marks, remarks: e.target.value })}
-                                          className="w-full p-4 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-xl text-sm min-h-[100px] focus:ring-2 focus:ring-blue-500 text-[var(--md-sys-color-on-surface)]"
+                                          className="w-full p-4 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-xl text-sm min-h-[100px] focus:outline-none input-glow transition-all text-[var(--md-sys-color-on-surface)] resize-none"
                                           placeholder="Enter qualitative feedback..."
                                        />
                                     </div>
@@ -636,13 +638,13 @@ const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
                                     <div className="pt-6 border-t border-[var(--md-sys-color-outline)] flex justify-end gap-3">
                                        <button
                                           onClick={() => setActiveUnit(null)}
-                                          className="px-6 py-3 bg-[var(--md-sys-color-surface-variant)] text-[var(--md-sys-color-on-surface)] rounded-xl font-bold transition-all"
+                                          className="px-6 py-3 bg-[var(--md-sys-color-surface-variant)] text-[var(--md-sys-color-on-surface)] rounded-xl font-bold transition-all hover:bg-[var(--md-sys-color-outline)]"
                                        >
                                           Cancel
                                        </button>
                                        <button
                                           onClick={handleSaveAssessment}
-                                          className="px-6 py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg hover:shadow-xl hover:bg-blue-700 transition-all flex items-center gap-2"
+                                          className="px-6 py-3 bg-blue-600 text-white rounded-full font-bold shadow-lg hover:shadow-xl hover:bg-blue-700 transition-all flex items-center gap-2 active:scale-95"
                                        >
                                           <Save size={18} /> Save Grade
                                        </button>

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LayoutDashboard, Calendar, Users, UserCheck, MoreHorizontal, BarChart3, LineChart, ClipboardCheck, Settings, Box, X, MessageSquare, Wallet, UsersRound, Grid, Compass } from 'lucide-react';
 import clsx from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -13,15 +13,65 @@ interface MobileNavProps {
 // Role hierarchy: admin > instructor > viewer
 const ROLE_LEVEL: Record<string, number> = { admin: 3, instructor: 2, viewer: 1 };
 
+const containerVariants = {
+    hidden: { opacity: 0 },
+    show: {
+        opacity: 1,
+        transition: {
+            staggerChildren: 0.04,
+            delayChildren: 0.05
+        }
+    }
+};
+
+const itemVariants = {
+    hidden: { opacity: 0, y: 15, scale: 0.9 },
+    show: { 
+        opacity: 1, 
+        y: 0, 
+        scale: 1,
+        transition: { 
+            type: "spring", 
+            stiffness: 300, 
+            damping: 24 
+        } 
+    }
+};
+
 const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate }) => {
     const [showMore, setShowMore] = useState(false);
+    const [commsMobileView, setCommsMobileView] = useState<'list' | 'chat'>('list');
     const { user } = useAuth();
     const userLevel = ROLE_LEVEL[user?.role || 'viewer'] || 1;
+
+    useEffect(() => {
+        const handleViewChange = (e: Event) => {
+            const customEvent = e as CustomEvent<'list' | 'chat'>;
+            if (customEvent.detail === 'list' || customEvent.detail === 'chat') {
+                setCommsMobileView(customEvent.detail);
+            }
+        };
+
+        window.addEventListener('communications-mobile-view-change', handleViewChange);
+        return () => {
+            window.removeEventListener('communications-mobile-view-change', handleViewChange);
+        };
+    }, []);
+
+    const triggerHaptics = () => {
+        if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+            try {
+                navigator.vibrate(15);
+            } catch (e) {
+                // Ignore vibration errors
+            }
+        }
+    };
 
     // ── WhatsApp pattern: hide nav entirely when inside a full-screen chat/comms view ──
     // This prevents accidental tab switches while typing and maximises chat screen space.
     // Fixed lock loop bug: render a floating modern back/home chevron button to escape safely.
-    if (currentView === 'communications') {
+    if (currentView === 'communications' && commsMobileView === 'chat') {
         return (
             <motion.div
                 initial={{ opacity: 0, y: 50, x: '-50%' }}
@@ -30,14 +80,18 @@ const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate }) => {
                 transition={{ type: "spring", stiffness: 400, damping: 30 }}
                 className="fixed bottom-6 left-1/2 z-50 lg:hidden hide-on-keyboard"
             >
-                <button
-                    onClick={() => onNavigate('dashboard')}
+                <motion.button
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => {
+                        triggerHaptics();
+                        onNavigate('dashboard');
+                    }}
                     className="flex items-center justify-center gap-2 px-6 py-3 bg-[var(--md-sys-color-primary)] text-white rounded-full shadow-lg shadow-indigo-500/20 font-google font-bold text-sm hover:scale-105 active:scale-95 transition-all tap-target-premium"
                     style={{ minHeight: '48px', minWidth: '150px' }}
                 >
                     <LayoutDashboard size={18} strokeWidth={2.5} />
                     <span>Exit Chat</span>
-                </button>
+                </motion.button>
             </motion.div>
         );
     }
@@ -94,17 +148,35 @@ const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate }) => {
                         >
                             <div className="flex items-center justify-between px-5 py-4 border-b border-[var(--md-sys-color-outline)] bg-white/20 dark:bg-black/20">
                                 <h3 className="text-sm font-google font-bold text-[var(--md-sys-color-on-surface)] tracking-wide">Command Center</h3>
-                                <button onClick={() => setShowMore(false)} title="Close menu" className="p-1.5 rounded-full hover:bg-[var(--md-sys-color-surface-variant)] transition-all tap-target-premium flex items-center justify-center">
+                                <motion.button
+                                    whileTap={{ scale: 0.9 }}
+                                    onClick={() => {
+                                        triggerHaptics();
+                                        setShowMore(false);
+                                    }}
+                                    title="Close menu"
+                                    className="p-1.5 rounded-full hover:bg-[var(--md-sys-color-surface-variant)] transition-all tap-target-premium flex items-center justify-center"
+                                >
                                     <X size={18} className="text-[var(--md-sys-color-secondary)]" />
-                                </button>
+                                </motion.button>
                             </div>
-                            <div className="p-3 grid grid-cols-3 gap-2 bg-white/10 dark:bg-black/10">
+                            <motion.div
+                                variants={containerVariants}
+                                initial="hidden"
+                                animate="show"
+                                className="p-3 grid grid-cols-3 gap-2 bg-white/10 dark:bg-black/10"
+                            >
                                 {visibleMore.map((item) => {
                                     const isActive = currentView === item.id;
                                     return (
-                                        <button
+                                        <motion.button
                                             key={item.id}
-                                            onClick={() => handleMoreNav(item.id)}
+                                            variants={itemVariants}
+                                            whileTap={{ scale: 0.94 }}
+                                            onClick={() => {
+                                                triggerHaptics();
+                                                handleMoreNav(item.id);
+                                            }}
                                             className={clsx(
                                                 "flex flex-col items-center gap-2 py-4 px-2 rounded-2xl transition-all tap-target-premium justify-center",
                                                 isActive
@@ -114,10 +186,10 @@ const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate }) => {
                                         >
                                             <item.icon size={22} strokeWidth={isActive ? 2.5 : 2} />
                                             <span className={clsx("text-[10px] text-center tracking-tight", isActive ? "font-bold" : "font-medium")}>{item.label}</span>
-                                        </button>
+                                        </motion.button>
                                     );
                                 })}
-                            </div>
+                            </motion.div>
                         </motion.div>
                     </>
                 )}
@@ -134,9 +206,13 @@ const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate }) => {
                     {visiblePrimary.map((item) => {
                         const isActive = currentView === item.id;
                         return (
-                            <button
+                            <motion.button
+                                whileTap={{ scale: 0.92 }}
                                 key={item.id}
-                                onClick={() => onNavigate(item.id)}
+                                onClick={() => {
+                                    triggerHaptics();
+                                    onNavigate(item.id);
+                                }}
                                 className={clsx(
                                     "flex flex-col items-center justify-center gap-1 min-w-[64px] h-[54px] rounded-full transition-all tap-target relative z-10",
                                     isActive
@@ -162,13 +238,17 @@ const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate }) => {
                                 )}>
                                     {item.label}
                                 </span>
-                            </button>
+                            </motion.button>
                         );
                     })}
 
                     {/* More Button */}
-                    <button
-                        onClick={() => setShowMore(prev => !prev)}
+                    <motion.button
+                        whileTap={{ scale: 0.92 }}
+                        onClick={() => {
+                            triggerHaptics();
+                            setShowMore(prev => !prev);
+                        }}
                         className={clsx(
                             "flex flex-col items-center justify-center gap-1 min-w-[64px] h-[54px] rounded-full transition-all tap-target relative z-10",
                             isMoreActive || showMore
@@ -193,7 +273,7 @@ const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate }) => {
                         )}>
                             More
                         </span>
-                    </button>
+                    </motion.button>
                 </div>
             </motion.nav>
         </>

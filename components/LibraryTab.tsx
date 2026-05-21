@@ -196,11 +196,11 @@ export default function LibraryTab({ data, onAddLibraryResource, onDeleteLibrary
                             placeholder="Search documents..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-9 pr-3 py-2 text-sm bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-lg text-[var(--md-sys-color-on-surface)] w-48 focus:w-64 transition-all focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
+                            className="pl-9 pr-3 py-2 text-sm bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-lg text-[var(--md-sys-color-on-surface)] w-48 focus:w-64 transition-all outline-none input-glow shadow-sm"
                         />
                     </div>
 
-                    <div className="flex items-center bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-lg shadow-sm overflow-hidden">
+                    <div className="flex items-center bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-lg shadow-sm overflow-hidden input-glow transition-shadow">
                         <div className="pl-3 py-2 border-r border-[var(--md-sys-color-outline)] text-[var(--md-sys-color-secondary)]">
                             <Filter size={14} />
                         </div>
@@ -242,7 +242,7 @@ export default function LibraryTab({ data, onAddLibraryResource, onDeleteLibrary
                                         animate={{ opacity: 1, scale: 1 }}
                                         exit={{ opacity: 0, scale: 0.85 }}
                                         transition={{ delay: idx * 0.02 }}
-                                        className="relative group bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-xl overflow-hidden hover:shadow-lg hover:border-indigo-400 dark:hover:border-indigo-600 transition-all cursor-pointer"
+                                        className="relative group glass-card rounded-xl overflow-hidden shadow-elevation-1 hover:shadow-elevation-3 transition-all cursor-pointer"
                                         title={`${resource.title}\n${resource.fileName}\nCategory: ${catInfo.label}\n${formatBytes(resource.size)} · ${resource.uploadedBy}\n${new Date(resource.uploadedAt).toLocaleDateString()}`}
                                     >
                                         {/* Pending ribbon */}
@@ -271,7 +271,7 @@ export default function LibraryTab({ data, onAddLibraryResource, onDeleteLibrary
                                         </div>
 
                                         {/* Hover action overlay (Desktop) */}
-                                        <div className="hidden md:flex absolute inset-0 bg-[var(--md-sys-color-surface)]/95 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity flex-col items-center justify-center gap-1.5 p-2 z-10">
+                                        <div className="hidden md:flex absolute inset-0 bg-[var(--md-sys-color-surface)]/90 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity flex-col items-center justify-center gap-1.5 p-2 z-10">
                                             <p className="text-[10px] font-bold text-[var(--md-sys-color-on-surface)] text-center truncate w-full mb-1">{resource.title}</p>
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); handleDownload(resource); }}
@@ -380,9 +380,9 @@ export default function LibraryTab({ data, onAddLibraryResource, onDeleteLibrary
                             initial={{ scale: 0.95, y: 20 }}
                             animate={{ scale: 1, y: 0 }}
                             exit={{ scale: 0.95, y: 20 }}
-                            className="bg-[var(--md-sys-color-surface)] rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col"
+                            className="glass-panel shadow-elevation-3 w-full max-w-md overflow-hidden flex flex-col"
                         >
-                            <div className="p-5 border-b border-[var(--md-sys-color-outline)] flex items-center justify-between bg-indigo-600 text-white">
+                            <div className="p-5 border-b border-[var(--md-sys-color-outline)] flex items-center justify-between bg-indigo-600 text-white rounded-t-3xl">
                                 <div className="flex items-center gap-2">
                                     <Upload size={20} />
                                     <h3 className="font-bold text-lg">Upload to Library</h3>
@@ -441,7 +441,7 @@ export default function LibraryTab({ data, onAddLibraryResource, onDeleteLibrary
                                         type="text"
                                         required
                                         placeholder="e.g. Week 4 Introduction to Solar"
-                                        className="w-full px-4 py-2.5 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-[var(--md-sys-color-on-surface)]"
+                                        className="w-full px-4 py-2.5 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl focus:outline-none input-glow text-[var(--md-sys-color-on-surface)] transition-all font-google"
                                         value={uploadTitle}
                                         onChange={e => setUploadTitle(e.target.value)}
                                     />

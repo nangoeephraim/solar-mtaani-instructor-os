@@ -623,7 +623,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onNavigate }) => {
         )}
 
         {/* ═══ STAT CARDS (Grid 4) ═══ */}
-        <div className="xl:col-span-12 grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+        <div className="xl:col-span-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
           <StatCard
             icon={<Users size={22} />} label="Total Students" value={data.students.length} sub="Across all grades"
             gradient="bg-gradient-to-r from-blue-500 to-indigo-600" accentColor="#4f46e5" delay={0.25}

@@ -359,23 +359,23 @@ const Settings: React.FC<SettingsProps> = ({ onDataReset }) => {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
                             <label className="text-[11px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-widest block mb-1.5 px-1">Display Name</label>
-                            <input type="text" value={localName} onChange={e => { setLocalName(e.target.value); markChanged(); }} placeholder="Your name" className="w-full px-4 py-3 bg-[var(--md-sys-color-surface-variant)] border-2 border-transparent rounded-xl text-sm font-medium text-[var(--md-sys-color-on-surface)] focus:outline-none focus:border-[var(--accent-primary)] focus:bg-[var(--md-sys-color-surface)] transition-all font-google" />
+                            <input type="text" value={localName} onChange={e => { setLocalName(e.target.value); markChanged(); }} placeholder="Your name" className="w-full px-4 py-3 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl text-sm font-medium text-[var(--md-sys-color-on-surface)] focus:outline-none input-glow transition-all font-google" />
                         </div>
                         <div>
                             <label className="text-[11px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-widest block mb-1.5 px-1">Organization</label>
-                            <input type="text" value={localOrg} onChange={e => { setLocalOrg(e.target.value); markChanged(); }} placeholder="Organization name" className="w-full px-4 py-3 bg-[var(--md-sys-color-surface-variant)] border-2 border-transparent rounded-xl text-sm font-medium text-[var(--md-sys-color-on-surface)] focus:outline-none focus:border-[var(--accent-primary)] focus:bg-[var(--md-sys-color-surface)] transition-all font-google" />
+                            <input type="text" value={localOrg} onChange={e => { setLocalOrg(e.target.value); markChanged(); }} placeholder="Organization name" className="w-full px-4 py-3 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl text-sm font-medium text-[var(--md-sys-color-on-surface)] focus:outline-none input-glow transition-all font-google" />
                         </div>
                         <div>
                             <label className="text-[11px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-widest block mb-1.5 px-1">
                                 <Phone size={11} className="inline mr-1 -mt-0.5" />Phone
                             </label>
-                            <input type="tel" value={localPhone} onChange={e => { setLocalPhone(e.target.value); markChanged(); }} placeholder="+254 700 000000" className="w-full px-4 py-3 bg-[var(--md-sys-color-surface-variant)] border-2 border-transparent rounded-xl text-sm font-medium text-[var(--md-sys-color-on-surface)] focus:outline-none focus:border-[var(--accent-primary)] focus:bg-[var(--md-sys-color-surface)] transition-all font-google" />
+                            <input type="tel" value={localPhone} onChange={e => { setLocalPhone(e.target.value); markChanged(); }} placeholder="+254 700 000000" className="w-full px-4 py-3 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl text-sm font-medium text-[var(--md-sys-color-on-surface)] focus:outline-none input-glow transition-all font-google" />
                         </div>
                         <div>
                             <label className="text-[11px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-widest block mb-1.5 px-1">
                                 <Building2 size={11} className="inline mr-1 -mt-0.5" />Department
                             </label>
-                            <input type="text" value={localDepartment} onChange={e => { setLocalDepartment(e.target.value); markChanged(); }} placeholder="e.g. Solar Installation" className="w-full px-4 py-3 bg-[var(--md-sys-color-surface-variant)] border-2 border-transparent rounded-xl text-sm font-medium text-[var(--md-sys-color-on-surface)] focus:outline-none focus:border-[var(--accent-primary)] focus:bg-[var(--md-sys-color-surface)] transition-all font-google" />
+                            <input type="text" value={localDepartment} onChange={e => { setLocalDepartment(e.target.value); markChanged(); }} placeholder="e.g. Solar Installation" className="w-full px-4 py-3 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl text-sm font-medium text-[var(--md-sys-color-on-surface)] focus:outline-none input-glow transition-all font-google" />
                         </div>
                     </div>
                     <div>
@@ -387,7 +387,7 @@ const Settings: React.FC<SettingsProps> = ({ onDataReset }) => {
                             onChange={e => { if (e.target.value.length <= 160) { setLocalBio(e.target.value); markChanged(); } }}
                             placeholder="A brief description about yourself..."
                             rows={2}
-                            className="w-full px-4 py-3 bg-[var(--md-sys-color-surface-variant)] border-2 border-transparent rounded-xl text-sm font-medium text-[var(--md-sys-color-on-surface)] focus:outline-none focus:border-[var(--accent-primary)] focus:bg-[var(--md-sys-color-surface)] transition-all font-google resize-none"
+                            className="w-full px-4 py-3 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl text-sm font-medium text-[var(--md-sys-color-on-surface)] focus:outline-none input-glow transition-all font-google resize-none"
                         />
                         <p className="text-[10px] text-[var(--md-sys-color-secondary)] text-right mt-0.5 px-1">{localBio.length}/160</p>
                     </div>
@@ -589,7 +589,7 @@ const Settings: React.FC<SettingsProps> = ({ onDataReset }) => {
                             </p>
                             
                             <div className="flex flex-wrap items-center gap-3 pt-1">
-                                <div className="flex items-center gap-2 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline-variant)] rounded-xl px-3 py-1.5">
+                                <div className="flex items-center gap-2 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline-variant)] rounded-xl px-3 py-1.5 input-glow transition-shadow">
                                     <span className="text-xs font-medium text-[var(--md-sys-color-secondary)]">Delay:</span>
                                     <input 
                                         type="number" 

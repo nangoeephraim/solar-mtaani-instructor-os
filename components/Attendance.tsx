@@ -201,7 +201,7 @@ const Attendance: React.FC<AttendanceProps> = ({ data, onUpdateStudent, onNaviga
             <motion.div
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
-                className="hidden md:flex w-80 flex-shrink-0 bg-[var(--md-sys-color-surface)] rounded-2xl border border-[var(--md-sys-color-outline)] shadow-sm flex-col overflow-hidden"
+                className="hidden md:flex w-80 flex-shrink-0 glass-panel flex-col overflow-hidden"
             >
                 {/* Header */}
                 <div className="p-5 border-b border-[var(--md-sys-color-outline)]">
@@ -319,14 +319,14 @@ const Attendance: React.FC<AttendanceProps> = ({ data, onUpdateStudent, onNaviga
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: 20 }}
                         className={clsx(
-                            "flex-1 bg-[var(--md-sys-color-surface)] rounded-2xl border border-[var(--md-sys-color-outline)] shadow-sm flex flex-col overflow-hidden",
+                            "flex-1 glass-panel flex-col overflow-hidden",
                             !mobileShowSheet && "hidden md:flex"
                         )}
                     >
                         {/* Header */}
                         <div className={clsx(
                             "p-6 text-white relative overflow-hidden",
-                            selectedClass.subject === 'Solar' ? "bg-gradient-to-br from-orange-500 to-red-500" : "bg-gradient-to-br from-blue-600 to-indigo-600"
+                            selectedClass.subject === 'Solar' ? "bg-gradient-to-br from-orange-600 to-red-600" : "bg-gradient-to-br from-blue-600 to-indigo-700"
                         )}>
                             <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10" />
 
@@ -334,11 +334,11 @@ const Attendance: React.FC<AttendanceProps> = ({ data, onUpdateStudent, onNaviga
                                 {/* Action Header */}
                                 <div className="flex items-center justify-between mb-6">
                                     <div>
-                                        <h3 className="text-xl font-google font-bold text-[var(--md-sys-color-on-surface)] flex items-center gap-2">
-                                            <Users size={20} className="text-blue-500" />
+                                        <h3 className="text-xl font-google font-bold text-white flex items-center gap-2">
+                                            <Users size={20} className="text-white/90" />
                                             {getLevelShortLabel(selectedClass.studentGroup || 'Academy', String(selectedClass.grade))} - {selectedClass.subject}
                                         </h3>
-                                        <p className="text-sm text-[var(--md-sys-color-on-surface-variant)] mt-1">
+                                        <p className="text-sm text-white/80 mt-1">
                                             {getSlotDate()} • {selectedClass.startTime} • {selectedClass.durationMinutes}min
                                         </p>
                                     </div>
@@ -385,7 +385,7 @@ const Attendance: React.FC<AttendanceProps> = ({ data, onUpdateStudent, onNaviga
                                             placeholder="Search students..."
                                             value={searchQuery}
                                             onChange={(e) => setSearchQuery(e.target.value)}
-                                            className="w-full pl-10 pr-4 py-2.5 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 text-[var(--md-sys-color-on-surface)] placeholder-[var(--md-sys-color-on-surface-variant)]"
+                                            className="w-full pl-10 pr-4 py-2.5 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl text-sm focus:outline-none input-glow text-[var(--md-sys-color-on-surface)] placeholder-[var(--md-sys-color-on-surface-variant)]"
                                         />
                                     </div>
 
@@ -435,10 +435,10 @@ const Attendance: React.FC<AttendanceProps> = ({ data, onUpdateStudent, onNaviga
                                                 animate={{ opacity: 1, y: 0 }}
                                                 transition={{ delay: idx * 0.02 }}
                                                 className={clsx(
-                                                    "flex items-center justify-between p-4 rounded-xl border transition-all",
-                                                    status === 'present' ? "bg-green-50/50 dark:bg-green-900/10 border-green-200 dark:border-green-900/30" :
-                                                        status === 'absent' ? "bg-red-50/50 dark:bg-red-900/10 border-red-200 dark:border-red-900/30" :
-                                                            "bg-[var(--md-sys-color-surface-variant)] border-[var(--md-sys-color-outline)] hover:border-[var(--md-sys-color-outline)]"
+                                                    "flex items-center justify-between p-4 rounded-xl border transition-all hover:translate-y-[-2px] hover:shadow-md",
+                                                    status === 'present' ? "bg-green-50/40 dark:bg-green-950/15 border-green-200 dark:border-green-900/30" :
+                                                        status === 'absent' ? "bg-red-50/40 dark:bg-red-950/15 border-red-200 dark:border-red-900/30" :
+                                                            "glass-card border-[var(--md-sys-color-outline)] hover:border-[var(--md-sys-color-primary)]"
                                                 )}
                                             >
                                                 <div className="flex items-center gap-4">

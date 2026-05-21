@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 /* ======================================================
    PRISM Design System — Modern Glassmorphic UI 
@@ -107,7 +107,7 @@ html {
 }
 
 body {
-  font-family: 'Inter', sans-serif;
+  font-family: 'Plus Jakarta Sans', sans-serif;
   background-color: var(--md-sys-color-background);
   color: var(--md-sys-color-on-surface);
   height: 100vh;
@@ -129,7 +129,7 @@ h4,
 h5,
 h6,
 .font-google {
-  font-family: 'Outfit', sans-serif;
+  font-family: 'Space Grotesk', sans-serif;
   letter-spacing: -0.02em;
 }
 
@@ -198,7 +198,7 @@ h6,
   border: 1px solid var(--md-sys-color-outline);
   border-radius: 9999px; /* Fully rounded pill */
   transition: all 0.3s var(--transition-smooth);
-  font-family: 'Inter', sans-serif;
+  font-family: 'Plus Jakarta Sans', sans-serif;
   font-weight: 600;
   color: var(--md-sys-color-primary);
   position: relative;

@@ -91,7 +91,7 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                         initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2 }}
                         className="w-full max-w-2xl"
                     >
-                        <div className="relative rounded-3xl overflow-hidden shadow-2xl shadow-black/50 border border-white/10 bg-[#111214]">
+                        <div className="relative overflow-hidden glass-card shadow-elevation-3">
                             {/* Video preview */}
                             <div className="aspect-video relative flex items-center justify-center">
                                 {previewStream ? (
@@ -184,7 +184,7 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                                         value={meetingId}
                                         onChange={(e) => setMeetingId(e.target.value)}
                                         onKeyDown={(e) => e.key === 'Enter' && meetingId && handleJoinWithPreviewCleanup()}
-                                        className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-4 pr-16 text-sm font-google outline-none focus:border-blue-500/50 transition-colors text-white placeholder:text-white/30"
+                                        className="w-full bg-white/5 border border-white/10 rounded-2xl py-3.5 pl-4 pr-16 text-sm font-google outline-none input-glow transition-all text-white placeholder:text-white/30"
                                     />
                                     <button 
                                         onClick={() => meetingId && handleJoinWithPreviewCleanup()}
@@ -441,7 +441,7 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                             initial={{ opacity: 0, scale: 0.9, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 bg-[#1a1b1e] border border-white/10 rounded-2xl p-5 shadow-[0_20px_60px_rgba(0,0,0,0.7)] w-[90%] max-w-md"
+                            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 glass-card p-5 shadow-elevation-3 w-[90%] max-w-md"
                         >
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
@@ -461,7 +461,7 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                                     <select
                                         value={selectedAudioIn}
                                         onChange={(e) => switchDevice('audio', e.target.value)}
-                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-blue-500/50 appearance-none cursor-pointer"
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none input-glow transition-all appearance-none cursor-pointer"
                                     >
                                         {availableDevices.audioin.map(d => (
                                             <option key={d.deviceId} value={d.deviceId} className="bg-[#1a1b1e]">
@@ -479,7 +479,7 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                                     <select
                                         value={selectedVideoIn}
                                         onChange={(e) => switchDevice('video', e.target.value)}
-                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none focus:border-blue-500/50 appearance-none cursor-pointer"
+                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none input-glow transition-all appearance-none cursor-pointer"
                                     >
                                         {availableDevices.videoin.map(d => (
                                             <option key={d.deviceId} value={d.deviceId} className="bg-[#1a1b1e]">

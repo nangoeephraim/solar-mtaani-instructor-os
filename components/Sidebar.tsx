@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { LayoutDashboard, Calendar, Users, ClipboardCheck, Settings, BarChart3, UserCheck, LineChart, Box, MessageSquare, Wallet, UsersRound } from 'lucide-react';
 import clsx from 'clsx';
 import { motion } from 'framer-motion';
@@ -34,6 +34,18 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, data }) => {
   const { user } = useAuth();
   const unreadCount = data && user ? (data.communications?.channels || []).reduce((sum, ch) => sum + getUnreadCount(data, ch.id, user.id || 'sys-user'), 0) : 0;
   const userLevel = ROLE_LEVEL[user?.role || 'viewer'] || 1;
+
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  useEffect(() => {
+    const handleStatus = () => setIsOnline(navigator.onLine);
+    window.addEventListener('online', handleStatus);
+    window.addEventListener('offline', handleStatus);
+    return () => {
+      window.removeEventListener('online', handleStatus);
+      window.removeEventListener('offline', handleStatus);
+    };
+  }, []);
 
   // Preload the chunk for a view on hover to speed up navigation
   const handlePreload = useCallback((viewId: string) => {
@@ -155,14 +167,19 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, data }) => {
         >
           <div className="flex items-center gap-3 mb-2">
             <motion.div
-              className="w-2 h-2 rounded-full bg-emerald-500"
-              animate={{ scale: [1, 1.2, 1], opacity: [1, 0.7, 1] }}
+              className={clsx(
+                "w-2 h-2 rounded-full",
+                isOnline ? "bg-emerald-500" : "bg-red-500"
+              )}
+              animate={isOnline ? { scale: [1, 1.2, 1], opacity: [1, 0.7, 1] } : {}}
               transition={{ repeat: Infinity, duration: 2 }}
             />
-            <p className="text-xs font-bold text-[var(--md-sys-color-on-surface)] uppercase tracking-wider">System Online</p>
+            <p className="text-xs font-bold text-[var(--md-sys-color-on-surface)] uppercase tracking-wider">
+              {isOnline ? 'System Online' : 'System Offline'}
+            </p>
           </div>
           <p className="text-[10px] text-[var(--md-sys-color-secondary)] leading-relaxed">
-            All data is locally synced.
+            {isOnline ? 'All data is locally synced.' : 'Offline mode. Changes will queue.'}
           </p>
           <p className="text-[9px] text-[var(--md-sys-color-secondary)] mt-1 opacity-60">
             PRISM v2.0.0
@@ -170,8 +187,11 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, data }) => {
         </motion.div>
         <div className="lg:hidden flex justify-center py-2">
           <motion.div
-            className="w-2 h-2 rounded-full bg-emerald-500"
-            animate={{ scale: [1, 1.2, 1], opacity: [1, 0.7, 1] }}
+            className={clsx(
+              "w-2 h-2 rounded-full",
+              isOnline ? "bg-emerald-500" : "bg-red-500"
+            )}
+            animate={isOnline ? { scale: [1, 1.2, 1], opacity: [1, 0.7, 1] } : {}}
             transition={{ repeat: Infinity, duration: 2 }}
           />
         </div>

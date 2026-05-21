@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import {
   DndContext, DragOverlay, useDraggable, useDroppable,
-  DragEndEvent, useSensors, useSensor, PointerSensor,
+  DragEndEvent, useSensors, useSensor, PointerSensor, TouchSensor,
   DragStartEvent
 } from '@dnd-kit/core';
 import clsx from 'clsx';
@@ -100,16 +100,12 @@ const Schedule: React.FC<ScheduleProps> = ({ data, onUpdateSchedule, onUpdateStu
   const [classColors, setClassColors] = useLocalStorage<Record<string, number>>('schedule_colors', {});
   const [enableAnimations, setEnableAnimations] = useLocalStorage<boolean>('schedule_animations', true);
 
-  // Auto-detect mobile and force day-view
+  // Auto-detect mobile screen size
   useEffect(() => {
     const handleResize = () => {
-      const mobile = window.innerWidth < 768;
-      setIsMobile(mobile);
-      if (mobile && view === 'week') setView('day');
+      setIsMobile(window.innerWidth < 768);
     };
     window.addEventListener('resize', handleResize);
-    // Force day-view on initial mobile load
-    if (window.innerWidth < 768 && view === 'week') setView('day');
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
@@ -218,9 +214,18 @@ const Schedule: React.FC<ScheduleProps> = ({ data, onUpdateSchedule, onUpdateStu
 
   const { showToast } = useToast();
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
-  );
+  const pointerSensor = useSensor(PointerSensor, {
+    activationConstraint: {
+      distance: 8,
+    },
+  });
+  const touchSensor = useSensor(TouchSensor, {
+    activationConstraint: {
+      delay: 250,
+      tolerance: 5,
+    },
+  });
+  const sensors = useSensors(pointerSensor, touchSensor);
 
   const handleSuggestSlot = () => {
     const bestTime = findBestSlot(newSlot.durationMinutes || 60, data.schedule);
@@ -542,9 +547,7 @@ const Schedule: React.FC<ScheduleProps> = ({ data, onUpdateSchedule, onUpdateStu
             <div className="flex items-center gap-2 md:gap-3 w-full md:w-auto overflow-x-auto pb-1 md:pb-0 hide-scrollbar">
               <div className="flex items-center bg-[var(--md-sys-color-surface-variant)] p-0.5 md:p-1 rounded-lg md:rounded-xl">
                 <button onClick={() => setView('day')} aria-label="Day View" className={clsx("px-3 md:px-4 py-1.5 md:py-2 rounded-md md:rounded-lg text-xs md:text-sm font-bold transition-all", view === 'day' ? "bg-[var(--md-sys-color-surface)] shadow-sm text-[var(--md-sys-color-on-surface)]" : "text-[var(--md-sys-color-secondary)]")}>Day</button>
-                {!isMobile && (
-                  <button onClick={() => setView('week')} aria-label="Week View" className={clsx("px-3 md:px-4 py-1.5 md:py-2 rounded-md md:rounded-lg text-xs md:text-sm font-bold transition-all", view === 'week' ? "bg-[var(--md-sys-color-surface)] shadow-sm text-[var(--md-sys-color-on-surface)]" : "text-[var(--md-sys-color-secondary)]")}>Week</button>
-                )}
+                <button onClick={() => setView('week')} aria-label="Week View" className={clsx("px-3 md:px-4 py-1.5 md:py-2 rounded-md md:rounded-lg text-xs md:text-sm font-bold transition-all", view === 'week' ? "bg-[var(--md-sys-color-surface)] shadow-sm text-[var(--md-sys-color-on-surface)]" : "text-[var(--md-sys-color-secondary)]")}>Week</button>
               </div>
               <div className="w-px h-6 md:h-8 bg-[var(--md-sys-color-outline-variant)]" />
               <button onClick={handlePrint} aria-label="Print Schedule" className="p-2 md:p-2.5 rounded-lg md:rounded-xl text-[var(--md-sys-color-secondary)] hover:bg-[var(--md-sys-color-surface-variant)] transition-colors"><Printer size={isMobile ? 18 : 20} /></button>
@@ -731,7 +734,9 @@ const Schedule: React.FC<ScheduleProps> = ({ data, onUpdateSchedule, onUpdateStu
           {/* === TIME GRID CONTAINER === */}
           <main className="flex-1 flex flex-col bg-[var(--md-sys-color-surface)] rounded-2xl md:rounded-3xl border border-[var(--md-sys-color-outline-variant)] shadow-sm overflow-hidden relative">
             <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
-              {/* Day Headers (Sticky) */}
+              <div className="flex-1 flex flex-col overflow-x-auto overflow-y-hidden select-none touch-pan-x">
+                <div className={clsx("flex-1 flex flex-col", view === 'week' && "min-w-[850px] md:min-w-0")}>
+                  {/* Day Headers (Sticky) */}
               <div className={clsx("grid border-b border-[var(--md-sys-color-outline-variant)] flex-shrink-0 bg-[var(--md-sys-color-surface)] z-10", view === 'week' ? "grid-cols-[50px_repeat(7,1fr)] md:grid-cols-[70px_repeat(7,1fr)]" : "grid-cols-[50px_1fr] md:grid-cols-[70px_1fr]")}>
                 <div className="h-12 md:h-16 border-r border-[var(--md-sys-color-outline-variant)] flex items-center justify-center">
                   <span className="text-[9px] md:text-[10px] font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-widest">GMT+3</span>
@@ -893,7 +898,9 @@ const Schedule: React.FC<ScheduleProps> = ({ data, onUpdateSchedule, onUpdateStu
                   })}
                 </div>
               </div>
-            </DndContext>
+            </div>
+          </div>
+        </DndContext>
           </main>
         </div>
 

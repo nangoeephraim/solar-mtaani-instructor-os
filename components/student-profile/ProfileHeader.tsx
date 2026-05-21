@@ -24,7 +24,7 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
     const [showAlertModal, setShowAlertModal] = React.useState(false);
 
     return (
-        <div className="relative w-full overflow-hidden bg-[var(--md-sys-color-surface)]">
+        <div className="relative w-full overflow-hidden glass-panel rounded-t-none rounded-b-3xl shadow-lg border-t-0">
             {/* Banner Background */}
             <div className="h-32 md:h-48 w-full bg-gradient-to-r from-blue-600 via-indigo-600 to-violet-600 relative overflow-hidden">
                 <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 2px 2px, rgba(255,255,255,0.4) 1px, transparent 0)', backgroundSize: '24px 24px' }} />
@@ -41,7 +41,7 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
 
                     {/* Avatar */}
                     <motion.div
-                        className="w-32 h-32 md:w-40 md:h-40 rounded-2xl border-4 border-[var(--md-sys-color-surface)] shadow-2xl overflow-hidden bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/40 dark:to-indigo-900/40 flex-shrink-0 z-10 flex items-center justify-center relative group"
+                        className="w-32 h-32 md:w-40 md:h-40 rounded-2xl border-4 border-[var(--md-sys-color-surface)] shadow-[0_0_30px_rgba(99,102,241,0.25)] overflow-hidden bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/40 dark:to-indigo-900/40 flex-shrink-0 z-10 flex items-center justify-center relative group"
                         initial={{ y: 20, opacity: 0 }}
                         animate={{ y: 0, opacity: 1 }}
                         transition={{ type: "spring", stiffness: 300, damping: 25 }}
@@ -101,21 +101,21 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
                         >
                             <button
                                 onClick={() => setShowAlertModal(true)}
-                                className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-500/10 dark:hover:bg-indigo-500/20 text-indigo-600 dark:text-indigo-400 rounded-xl font-bold text-sm transition-all border border-indigo-100 dark:border-indigo-500/20"
+                                className="flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-50/70 dark:bg-indigo-500/10 hover:bg-indigo-500 dark:hover:bg-indigo-500/30 text-indigo-600 dark:text-indigo-400 hover:text-white dark:hover:text-indigo-200 rounded-xl font-bold text-sm transition-all duration-300 border border-indigo-100/50 dark:border-indigo-500/20 active:scale-95"
                             >
                                 <Bell size={16} /> <span className="md:hidden lg:inline">Alert Flow</span>
                             </button>
                             {onEditRequest && (
                                 <button
                                     onClick={onEditRequest}
-                                    className="flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-500/10 dark:hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-xl font-bold text-sm transition-all border border-emerald-100 dark:border-emerald-500/20 md:w-auto"
+                                    className="flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-50/70 dark:bg-emerald-500/10 hover:bg-emerald-500 dark:hover:bg-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:text-white dark:hover:text-indigo-200 rounded-xl font-bold text-sm transition-all duration-300 border border-emerald-100/50 dark:border-emerald-500/20 md:w-auto active:scale-95"
                                 >
                                     <Edit3 size={16} /> <span className="md:hidden lg:inline">Edit</span>
                                 </button>
                             )}
                             <button
                                 onClick={onDeleteRequest}
-                                className="flex items-center justify-center px-4 py-2.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-500/10 dark:hover:bg-rose-500/20 text-rose-600 dark:text-rose-400 rounded-xl font-bold text-sm transition-all border border-rose-100 dark:border-rose-500/20 md:w-12 lg:w-auto"
+                                className="flex items-center justify-center px-4 py-2.5 bg-rose-50/70 dark:bg-rose-500/10 hover:bg-rose-500 dark:hover:bg-rose-500/30 text-rose-600 dark:text-rose-400 hover:text-white dark:hover:text-indigo-200 rounded-xl font-bold text-sm transition-all duration-300 border border-rose-100/50 dark:border-rose-500/20 md:w-12 lg:w-auto active:scale-95"
                                 title="Remove Profile"
                             >
                                 <Trash2 size={16} />
@@ -124,14 +124,14 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
                     </div>
                 </div>
 
-                {/* Performance KPIs - Glass Panel Look */}
+                {/* Performance KPIs - Glass Card Look */}
                 <motion.div
                     className="grid grid-cols-3 gap-4 mt-8"
                     initial={{ y: 20, opacity: 0 }}
                     animate={{ y: 0, opacity: 1 }}
                     transition={{ delay: 0.3 }}
                 >
-                    <div className="bg-[var(--md-sys-color-surface-variant)]/50 backdrop-blur-md p-4 rounded-2xl border border-[var(--md-sys-color-outline)] relative overflow-hidden group">
+                    <div className="glass-card p-4 rounded-2xl border border-[var(--md-sys-color-outline)]/60 relative overflow-hidden group">
                         <div className="absolute -right-4 -top-4 w-16 h-16 bg-blue-500/10 rounded-full blur-xl group-hover:scale-150 transition-transform duration-500" />
                         <div className="flex items-center gap-2 text-[var(--md-sys-color-secondary)] mb-1">
                             <Award size={14} />
@@ -142,7 +142,7 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
                         </span>
                     </div>
 
-                    <div className="bg-[var(--md-sys-color-surface-variant)]/50 backdrop-blur-md p-4 rounded-2xl border border-[var(--md-sys-color-outline)] relative overflow-hidden group">
+                    <div className="glass-card p-4 rounded-2xl border border-[var(--md-sys-color-outline)]/60 relative overflow-hidden group">
                         <div className={clsx(
                             "absolute -right-4 -top-4 w-16 h-16 rounded-full blur-xl group-hover:scale-150 transition-transform duration-500",
                             student.attendancePct >= 85 ? "bg-emerald-500/10" : student.attendancePct >= 70 ? "bg-amber-500/10" : "bg-rose-500/10"
@@ -160,7 +160,7 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
                         </span>
                     </div>
 
-                    <div className="bg-[var(--md-sys-color-surface-variant)]/50 backdrop-blur-md p-4 rounded-2xl border border-[var(--md-sys-color-outline)] relative overflow-hidden group">
+                    <div className="glass-card p-4 rounded-2xl border border-[var(--md-sys-color-outline)]/60 relative overflow-hidden group">
                         <div className={clsx(
                             "absolute -right-4 -top-4 w-16 h-16 rounded-full blur-xl group-hover:scale-150 transition-transform duration-500",
                             performanceVsClass >= 0 ? "bg-emerald-500/10" : "bg-rose-500/10"
@@ -187,3 +187,4 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
         </div >
     );
 };
+

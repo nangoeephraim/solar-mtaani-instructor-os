@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { AppData, Student, StudentGroup } from '../types';
 import { getLevelShortLabel, getLevelsForGroup, getDefaultLevel } from '../constants/educationLevels';
 import {
@@ -12,6 +12,7 @@ import { useToast } from './Toast';
 import { useAuth } from '../contexts/AuthContext';
 import PageHeader from './PageHeader';
 import EditStudentModal from './EditStudentModal';
+import VirtualList from './VirtualList';
 
 interface StudentsProps {
     data: AppData;
@@ -41,6 +42,23 @@ const Students: React.FC<StudentsProps> = ({
     const [showAddModal, setShowAddModal] = useState(false);
     const { showToast } = useToast();
     const { user } = useAuth();
+
+    const [listHeight, setListHeight] = useState(500);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const updateHeight = () => {
+            if (containerRef.current) {
+                const rect = containerRef.current.getBoundingClientRect();
+                const calculated = window.innerHeight - rect.top - 24;
+                setListHeight(Math.max(calculated, 300));
+            }
+        };
+        // Run with layout paint
+        setTimeout(updateHeight, 50);
+        window.addEventListener('resize', updateHeight);
+        return () => window.removeEventListener('resize', updateHeight);
+    }, [viewMode, data.students]);
 
     const filteredStudents = data.students.filter(s => {
         const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -139,13 +157,13 @@ const Students: React.FC<StudentsProps> = ({
                 </div>
 
                 {/* Filters Bar */}
-                <div className="bg-[var(--md-sys-color-surface)] rounded-2xl border border-[var(--md-sys-color-outline)] shadow-sm p-3 sm:p-4 mb-6 flex flex-col sm:flex-row flex-wrap gap-3 sm:gap-4 items-stretch sm:items-center justify-between">
-                    <div className="relative flex-1 min-w-[200px]">
+                <div className="glass-panel p-3 sm:p-4 mb-6 flex flex-col sm:flex-row flex-wrap gap-3 sm:gap-4 items-stretch sm:items-center justify-between bg-[var(--md-sys-color-surface)]/80 backdrop-blur-md">
+                    <div className="relative flex-1 min-w-[200px] input-glow rounded-xl border border-[var(--md-sys-color-outline)] transition-all bg-[var(--md-sys-color-surface-variant)]">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-[var(--md-sys-color-outline)]" size={18} />
                         <input
                             type="text"
                             placeholder="Search by name, lot, or email..."
-                            className="w-full pl-11 pr-4 py-2 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition-all text-[var(--md-sys-color-on-surface)] placeholder-[var(--md-sys-color-on-surface-variant)]"
+                            className="w-full pl-11 pr-4 py-2 bg-transparent rounded-xl text-sm focus:outline-none transition-all text-[var(--md-sys-color-on-surface)] placeholder-[var(--md-sys-color-on-surface-variant)]"
                             value={searchTerm}
                             onChange={e => setSearchTerm(e.target.value)}
                         />
@@ -153,16 +171,16 @@ const Students: React.FC<StudentsProps> = ({
 
                     <div className="flex gap-2 sm:gap-3 overflow-x-auto custom-scrollbar pb-1 sm:pb-0">
                         {/* Subject Filter Pills */}
-                        <div className="flex bg-[var(--md-sys-color-surface-variant)] rounded-lg p-1 border border-[var(--md-sys-color-outline)]">
+                        <div className="flex bg-[var(--md-sys-color-surface-variant)]/60 rounded-lg p-1 border border-[var(--md-sys-color-outline)]">
                             {(['All', 'Solar', 'ICT'] as const).map(sub => (
                                 <button
                                     key={sub}
                                     onClick={() => setSubjectFilter(sub)}
                                     className={clsx(
-                                        "px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1.5",
+                                        "px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1.5 active:scale-95",
                                         subjectFilter === sub
-                                            ? "bg-[var(--md-sys-color-surface)] shadow-sm text-[var(--md-sys-color-on-surface)]"
-                                            : "text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)]"
+                                            ? "glass-card bg-[var(--md-sys-color-surface)] text-[var(--md-sys-color-on-surface)] shadow-sm"
+                                            : "text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)] hover:bg-white/5"
                                     )}
                                 >
                                     {sub === 'Solar' && <Zap size={12} />}
@@ -173,16 +191,16 @@ const Students: React.FC<StudentsProps> = ({
                         </div>
 
                         {/* Group Filter Pills */}
-                        <div className="flex bg-[var(--md-sys-color-surface-variant)] rounded-lg p-1 border border-[var(--md-sys-color-outline)] overflow-x-auto custom-scrollbar flex-shrink-0">
+                        <div className="flex bg-[var(--md-sys-color-surface-variant)]/60 rounded-lg p-1 border border-[var(--md-sys-color-outline)] overflow-x-auto custom-scrollbar flex-shrink-0">
                             {(['All', 'Campus', 'Academy', 'CBC', 'High School'] as const).map(grp => (
                                 <button
                                     key={grp}
                                     onClick={() => setGroupFilter(grp as any)}
                                     className={clsx(
-                                        "px-2 sm:px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1 whitespace-nowrap flex-shrink-0",
+                                        "px-2 sm:px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1 whitespace-nowrap flex-shrink-0 active:scale-95",
                                         groupFilter === grp
-                                            ? "bg-[var(--md-sys-color-surface)] shadow-sm text-indigo-600 dark:text-indigo-400"
-                                            : "text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)]"
+                                            ? "glass-card bg-[var(--md-sys-color-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm"
+                                            : "text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)] hover:bg-white/5"
                                     )}
                                 >
                                     {grp === 'Campus' && <Building2 size={12} />}
@@ -195,14 +213,14 @@ const Students: React.FC<StudentsProps> = ({
                         </div>
 
                         {/* View Toggle - hidden on small mobile */}
-                        <div className="hidden sm:flex bg-[var(--md-sys-color-surface-variant)] rounded-lg p-1 border border-[var(--md-sys-color-outline)]">
+                        <div className="hidden sm:flex bg-[var(--md-sys-color-surface-variant)]/60 rounded-lg p-1 border border-[var(--md-sys-color-outline)]">
                             <button
                                 onClick={() => setViewMode('grid')}
                                 aria-label="Grid view"
                                 title="Grid view"
                                 className={clsx(
-                                    "p-1.5 rounded-md transition-all",
-                                    viewMode === 'grid' ? "bg-[var(--md-sys-color-surface)] shadow-sm text-violet-600" : "text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)]"
+                                    "p-1.5 rounded-md transition-all active:scale-90",
+                                    viewMode === 'grid' ? "glass-card bg-[var(--md-sys-color-surface)] text-violet-600 shadow-sm" : "text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)] hover:bg-white/5"
                                 )}
                             >
                                 <Grid3X3 size={16} />
@@ -212,8 +230,8 @@ const Students: React.FC<StudentsProps> = ({
                                 aria-label="List view"
                                 title="List view"
                                 className={clsx(
-                                    "p-1.5 rounded-md transition-all",
-                                    viewMode === 'list' ? "bg-[var(--md-sys-color-surface)] shadow-sm text-violet-600" : "text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)]"
+                                    "p-1.5 rounded-md transition-all active:scale-90",
+                                    viewMode === 'list' ? "glass-card bg-[var(--md-sys-color-surface)] text-violet-600 shadow-sm" : "text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)] hover:bg-white/5"
                                 )}
                             >
                                 <List size={16} />
@@ -223,7 +241,10 @@ const Students: React.FC<StudentsProps> = ({
                 </div>
 
                 {/* Students Grid/List */}
-                <div className="flex-1 overflow-y-auto custom-scrollbar">
+                <div ref={containerRef} className={clsx(
+                    "flex-1 custom-scrollbar",
+                    viewMode === 'grid' ? "overflow-y-auto" : "overflow-hidden"
+                )}>
                     {viewMode === 'grid' ? (
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                             <AnimatePresence>
@@ -243,10 +264,10 @@ const Students: React.FC<StudentsProps> = ({
                                             whileTap={{ scale: 0.98 }}
                                             onClick={() => setSelectedStudent(student)}
                                             className={clsx(
-                                                "bg-[var(--md-sys-color-surface)] rounded-2xl border-2 p-5 text-left transition-all relative overflow-hidden group",
+                                                "glass-card p-5 text-left transition-all relative overflow-hidden group hover:shadow-xl",
                                                 isSelected
-                                                    ? "border-[var(--md-sys-color-primary)] shadow-lg shadow-[var(--md-sys-color-primary-container)]"
-                                                    : "border-[var(--md-sys-color-outline)] hover:border-[var(--md-sys-color-primary)] hover:shadow-md"
+                                                    ? "border-[var(--md-sys-color-primary)] ring-2 ring-[var(--md-sys-color-primary)]/20 shadow-lg shadow-[var(--md-sys-color-primary)]/10"
+                                                    : "border-[var(--md-sys-color-outline)]"
                                             )}
                                         >
                                             {/* Risk Indicator */}
@@ -318,25 +339,25 @@ const Students: React.FC<StudentsProps> = ({
                         </div>
                     ) : (
                         // List View
-                        <div className="space-y-2">
-                            <AnimatePresence>
-                                {filteredStudents.map((student, index) => {
-                                    const avg = getStudentAvg(student);
-                                    const isSelected = selectedStudent?.id === student.id;
+                        <VirtualList
+                            items={filteredStudents}
+                            itemHeight={88}
+                            height={listHeight}
+                            keyExtractor={(student) => student.id.toString()}
+                            className="custom-scrollbar"
+                            renderItem={(student) => {
+                                const avg = getStudentAvg(student);
+                                const isSelected = selectedStudent?.id === student.id;
 
-                                    return (
-                                        <motion.button
-                                            key={student.id}
-                                            initial={{ opacity: 0, x: -20 }}
-                                            animate={{ opacity: 1, x: 0 }}
-                                            transition={{ delay: index * 0.02 }}
-                                            whileHover={{ x: 4 }}
+                                return (
+                                    <div style={{ paddingBottom: '8px', height: '100%' }}>
+                                        <button
                                             onClick={() => setSelectedStudent(student)}
                                             className={clsx(
-                                                "w-full bg-[var(--md-sys-color-surface)] rounded-xl border-2 p-4 text-left flex items-center gap-4 transition-all",
+                                                "w-full h-full glass-panel px-4 py-3 text-left flex items-center gap-4 transition-all active:scale-[0.99]",
                                                 isSelected
-                                                    ? "border-violet-500 shadow-md"
-                                                    : "border-[var(--md-sys-color-outline)] hover:border-violet-200"
+                                                    ? "border-violet-500 shadow-md ring-1 ring-violet-500/20 bg-violet-500/5"
+                                                    : "border-[var(--md-sys-color-outline)] hover:border-violet-400/50 hover:bg-violet-500/5"
                                             )}
                                         >
                                             {student.photo ? (
@@ -371,11 +392,11 @@ const Students: React.FC<StudentsProps> = ({
                                                 <span className="font-bold text-violet-600 dark:text-violet-400">{avg.toFixed(1)}</span>
                                                 <ChevronRight size={18} className="text-[var(--md-sys-color-secondary)]" />
                                             </div>
-                                        </motion.button>
-                                    );
-                                })}
-                            </AnimatePresence>
-                        </div>
+                                        </button>
+                                    </div>
+                                );
+                            }}
+                        />
                     )}
 
                     {filteredStudents.length === 0 && (
@@ -409,10 +430,10 @@ const Students: React.FC<StudentsProps> = ({
                             animate={{ x: 0 }}
                             exit={{ x: '100%' }}
                             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                            className="fixed top-0 right-0 bottom-0 w-full max-w-md bg-[var(--md-sys-color-surface)] shadow-2xl z-50 flex flex-col overflow-hidden border-l border-[var(--md-sys-color-outline)]"
+                            className="fixed top-0 right-0 bottom-0 w-full max-w-md glass-panel !rounded-none !rounded-l-[32px] shadow-2xl z-50 flex flex-col overflow-hidden border-l border-[var(--md-sys-color-outline)] !backdrop-blur-xl bg-[var(--md-sys-color-surface)]/80"
                         >
                             {/* Detail Header - ID Card Style */}
-                            <div className="p-6 bg-gradient-to-br from-slate-100 to-white dark:from-slate-800 dark:to-slate-900 border-b border-[var(--md-sys-color-outline)] relative overflow-hidden group">
+                            <div className="p-6 bg-gradient-to-br from-white/40 to-white/10 dark:from-slate-900/60 dark:to-slate-900/20 border-b border-[var(--md-sys-color-outline)] relative overflow-hidden group">
                                 {/* Watermark/Pattern - Subtle Tech Texture */}
                                 <div className="absolute inset-0 opacity-[0.03] dark:opacity-[0.05] pointer-events-none bg-[radial-gradient(#6366f1_1px,transparent_1px)] [background-size:16px_16px]"></div>
 
@@ -523,25 +544,25 @@ const Students: React.FC<StudentsProps> = ({
 
                                     <div className="space-y-2">
                                         {/* Email */}
-                                        <div className="flex items-center gap-3 p-3 bg-[var(--md-sys-color-surface-variant)] rounded-xl">
+                                        <div className="flex items-center gap-3 p-3 glass-panel rounded-xl bg-[var(--md-sys-color-surface-variant)]/40 border-[var(--md-sys-color-outline)]">
                                             <Mail size={16} className="text-[var(--md-sys-color-on-surface-variant)]" />
                                             <span className="text-sm text-[var(--md-sys-color-on-surface)]">{selectedStudent.email || 'No email'}</span>
                                         </div>
 
                                         {/* Phone */}
-                                        <div className="flex items-center gap-3 p-3 bg-[var(--md-sys-color-surface-variant)] rounded-xl">
+                                        <div className="flex items-center gap-3 p-3 glass-panel rounded-xl bg-[var(--md-sys-color-surface-variant)]/40 border-[var(--md-sys-color-outline)]">
                                             <Phone size={16} className="text-[var(--md-sys-color-on-surface-variant)]" />
                                             <span className="text-sm text-[var(--md-sys-color-on-surface)]">{selectedStudent.phone || 'No phone'}</span>
                                         </div>
 
                                         {/* Date of Birth */}
-                                        <div className="flex items-center gap-3 p-3 bg-[var(--md-sys-color-surface-variant)] rounded-xl">
+                                        <div className="flex items-center gap-3 p-3 glass-panel rounded-xl bg-[var(--md-sys-color-surface-variant)]/40 border-[var(--md-sys-color-outline)]">
                                             <Calendar size={16} className="text-[var(--md-sys-color-on-surface-variant)]" />
                                             <span className="text-sm text-[var(--md-sys-color-on-surface)]">{selectedStudent.dateOfBirth || 'No DOB'}</span>
                                         </div>
 
                                         {/* Address */}
-                                        <div className="flex items-center gap-3 p-3 bg-[var(--md-sys-color-surface-variant)] rounded-xl">
+                                        <div className="flex items-center gap-3 p-3 glass-panel rounded-xl bg-[var(--md-sys-color-surface-variant)]/40 border-[var(--md-sys-color-outline)]">
                                             <MapPin size={16} className="text-[var(--md-sys-color-on-surface-variant)]" />
                                             <span className="text-sm text-[var(--md-sys-color-on-surface)]">{selectedStudent.address || 'No address'}</span>
                                         </div>
@@ -552,7 +573,7 @@ const Students: React.FC<StudentsProps> = ({
                                 <div className="space-y-3">
                                     <h4 className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-wider">Guardian Information</h4>
 
-                                    <div className="p-4 bg-[var(--md-sys-color-surface-variant)] rounded-xl border border-[var(--md-sys-color-outline)] space-y-3">
+                                    <div className="p-4 glass-panel rounded-xl bg-[var(--md-sys-color-surface-variant)]/40 border border-[var(--md-sys-color-outline)] space-y-3">
                                         <div>
                                             <label className="text-[10px] text-[var(--md-sys-color-secondary)] uppercase font-bold">Name</label>
                                             <p className="text-sm font-medium text-[var(--md-sys-color-on-surface)]">{selectedStudent.guardianName || 'Not specified'}</p>
@@ -568,7 +589,7 @@ const Students: React.FC<StudentsProps> = ({
                                 <div className="space-y-3">
                                     <h4 className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-wider">Performance Summary</h4>
                                     <div className="grid grid-cols-2 gap-3">
-                                        <div className="p-4 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 rounded-xl border border-green-100 dark:border-green-900/30 text-center">
+                                        <div className="p-4 glass-card bg-gradient-to-br from-green-505/10 to-emerald-500/5 rounded-xl border border-green-500/20 text-center hover:shadow-lg transition-all duration-300">
                                             <p className={clsx(
                                                 "text-2xl font-bold",
                                                 selectedStudent.attendancePct >= 85 ? "text-green-600 dark:text-green-400" : "text-orange-500 dark:text-orange-400"
@@ -577,7 +598,7 @@ const Students: React.FC<StudentsProps> = ({
                                             </p>
                                             <p className="text-[10px] text-green-700 dark:text-green-400 font-bold uppercase">Attendance</p>
                                         </div>
-                                        <div className="p-4 bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20 rounded-xl border border-violet-100 dark:border-violet-900/30 text-center">
+                                        <div className="p-4 glass-card bg-gradient-to-br from-violet-500/10 to-purple-500/5 rounded-xl border border-violet-500/20 text-center hover:shadow-lg transition-all duration-300">
                                             <p className="text-2xl font-bold text-violet-600 dark:text-violet-400">{getStudentAvg(selectedStudent).toFixed(1)}</p>
                                             <p className="text-[10px] text-violet-700 dark:text-violet-400 font-bold uppercase">Avg Score</p>
                                         </div>
@@ -586,18 +607,18 @@ const Students: React.FC<StudentsProps> = ({
                             </div>
 
                             {/* Actions Footer */}
-                            <div className="p-4 border-t border-[var(--md-sys-color-outline)] bg-[var(--md-sys-color-surface)] space-y-3 pb-safe z-10 relative">
+                            <div className="p-4 border-t border-[var(--md-sys-color-outline)] bg-[var(--md-sys-color-surface)]/90 backdrop-blur-md space-y-3 pb-safe z-10 relative">
                                 <div className="grid grid-cols-2 gap-3">
                                     <button
                                         onClick={() => onNavigate('students', selectedStudent.id)}
-                                        className="w-full py-3 bg-[var(--md-sys-color-surface-variant)] text-[var(--md-sys-color-on-surface)] rounded-xl font-bold text-sm hover:bg-[var(--md-sys-color-surface-container-highest)] transition-colors flex flex-col items-center justify-center gap-1 border border-[var(--md-sys-color-outline)] shadow-sm hover:shadow-md"
+                                        className="w-full py-3 glass-button text-[var(--md-sys-color-on-surface)] rounded-xl font-bold text-sm hover:bg-[var(--md-sys-color-surface-container-highest)] transition-colors flex flex-col items-center justify-center gap-1 border border-[var(--md-sys-color-outline)] shadow-sm hover:shadow-md active:scale-95"
                                     >
                                         <User size={18} />
                                         Full Profile
                                     </button>
                                     <button
                                         onClick={handleViewAnalytics}
-                                        className="w-full py-3 bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] rounded-xl font-bold text-sm hover:opacity-90 transition-all flex flex-col items-center justify-center gap-1 shadow-md hover:shadow-lg"
+                                        className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold text-sm hover:opacity-90 transition-all flex flex-col items-center justify-center gap-1 shadow-md hover:shadow-lg active:scale-95"
                                     >
                                         <BarChart3 size={18} />
                                         Deep Insights
@@ -660,10 +681,10 @@ const Students: React.FC<StudentsProps> = ({
                             initial={{ scale: 0.9, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
                             exit={{ scale: 0.9, opacity: 0 }}
-                            className="bg-[var(--md-sys-color-surface)] rounded-2xl shadow-2xl w-[calc(100%-2rem)] max-w-md max-h-[85vh] flex flex-col overflow-hidden"
+                            className="glass-panel backdrop-blur-xl bg-[var(--md-sys-color-surface)]/95 rounded-2xl shadow-2xl w-[calc(100%-2rem)] max-w-md max-h-[85vh] flex flex-col overflow-hidden border border-[var(--md-sys-color-outline)]/40"
                             onClick={e => e.stopPropagation()}
                         >
-                            <div className="p-6 bg-[var(--md-sys-color-primary)] flex-shrink-0">
+                            <div className="p-6 bg-gradient-to-r from-blue-600 to-indigo-600 flex-shrink-0">
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-3">
                                         <div className="p-2 bg-white/20 rounded-lg">
@@ -677,38 +698,44 @@ const Students: React.FC<StudentsProps> = ({
                                 </div>
                             </div>
 
-                            <div className="p-6 space-y-4 overflow-y-auto">
+                            <div className="p-6 space-y-4 overflow-y-auto bg-[var(--md-sys-color-surface)]/80 backdrop-blur-md">
                                 <div>
                                     <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase">Full Name *</label>
-                                    <input
-                                        value={newStudent.name}
-                                        onChange={e => setNewStudent(prev => ({ ...prev, name: e.target.value }))}
-                                        className="w-full mt-1 px-4 py-3 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl text-sm focus:ring-2 focus:ring-violet-500 focus:border-transparent text-[var(--md-sys-color-on-surface)]"
-                                        placeholder="Enter student name"
-                                    />
+                                    <div className="input-glow rounded-xl border border-[var(--md-sys-color-outline)] transition-all bg-[var(--md-sys-color-surface-variant)] mt-1">
+                                        <input
+                                            value={newStudent.name}
+                                            onChange={e => setNewStudent(prev => ({ ...prev, name: e.target.value }))}
+                                            className="w-full px-4 py-3 bg-transparent rounded-xl text-sm focus:outline-none text-[var(--md-sys-color-on-surface)]"
+                                            placeholder="Enter student name"
+                                        />
+                                    </div>
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase">Lot Number *</label>
-                                        <input
-                                            value={newStudent.lot}
-                                            onChange={e => setNewStudent(prev => ({ ...prev, lot: e.target.value }))}
-                                            className="w-full mt-1 px-4 py-3 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl text-sm focus:ring-2 focus:ring-violet-500 text-[var(--md-sys-color-on-surface)]"
-                                            placeholder="e.g., L001"
-                                        />
+                                        <div className="input-glow rounded-xl border border-[var(--md-sys-color-outline)] transition-all bg-[var(--md-sys-color-surface-variant)] mt-1">
+                                            <input
+                                                value={newStudent.lot}
+                                                onChange={e => setNewStudent(prev => ({ ...prev, lot: e.target.value }))}
+                                                className="w-full px-4 py-3 bg-transparent rounded-xl text-sm focus:outline-none text-[var(--md-sys-color-on-surface)]"
+                                                placeholder="e.g., L001"
+                                            />
+                                        </div>
                                     </div>
                                     <div>
                                         <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase">Level</label>
-                                        <select
-                                            value={newStudent.grade}
-                                            onChange={e => setNewStudent(prev => ({ ...prev, grade: e.target.value }))}
-                                            aria-label="Education Level"
-                                            title="Education Level"
-                                            className="w-full mt-1 px-4 py-3 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl text-sm focus:ring-2 focus:ring-violet-500 text-[var(--md-sys-color-on-surface)]"
-                                        >
-                                            {getLevelsForGroup(newStudent.studentGroup || 'Academy').map(lvl => <option key={lvl.id} value={lvl.id}>{lvl.label}</option>)}
-                                        </select>
+                                        <div className="input-glow rounded-xl border border-[var(--md-sys-color-outline)] transition-all bg-[var(--md-sys-color-surface-variant)] mt-1">
+                                            <select
+                                                value={newStudent.grade}
+                                                onChange={e => setNewStudent(prev => ({ ...prev, grade: e.target.value }))}
+                                                aria-label="Education Level"
+                                                title="Education Level"
+                                                className="w-full px-4 py-3 bg-transparent rounded-xl text-sm focus:outline-none text-[var(--md-sys-color-on-surface)]"
+                                            >
+                                                {getLevelsForGroup(newStudent.studentGroup || 'Academy').map(lvl => <option key={lvl.id} value={lvl.id}>{lvl.label}</option>)}
+                                            </select>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -721,10 +748,10 @@ const Students: React.FC<StudentsProps> = ({
                                                     key={s}
                                                     onClick={() => setNewStudent(prev => ({ ...prev, subject: s }))}
                                                     className={clsx(
-                                                        "flex-1 py-3 rounded-xl border-2 text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all",
+                                                        "flex-1 py-3 rounded-xl border-2 text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all active:scale-95",
                                                         newStudent.subject === s
-                                                            ? s === 'Solar' ? "border-orange-500 bg-orange-50 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400" : "border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400"
-                                                            : "border-[var(--md-sys-color-outline)] hover:border-violet-200 text-[var(--md-sys-color-on-surface-variant)]"
+                                                            ? s === 'Solar' ? "border-orange-500 bg-orange-50/15 dark:bg-orange-950/20 text-orange-700 dark:text-orange-400 shadow-sm" : "border-blue-500 bg-blue-50/15 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400 shadow-sm"
+                                                            : "border-[var(--md-sys-color-outline)] hover:border-violet-200 text-[var(--md-sys-color-on-surface-variant)] bg-[var(--md-sys-color-surface-variant)]/40"
                                                     )}
                                                 >
                                                     {s === 'Solar' ? <Zap size={14} /> : <Monitor size={14} />}
@@ -736,41 +763,47 @@ const Students: React.FC<StudentsProps> = ({
 
                                     <div>
                                         <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase">Group *</label>
-                                        <select
-                                            value={newStudent.studentGroup}
-                                            onChange={e => setNewStudent(prev => ({ ...prev, studentGroup: e.target.value as any }))}
-                                            aria-label="Student Group"
-                                            title="Student Group"
-                                            className="w-full mt-2 px-4 py-3 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl text-sm focus:ring-2 focus:ring-violet-500 text-[var(--md-sys-color-on-surface)] h-[68px]"
-                                        >
-                                            <option value="Campus">Campus</option>
-                                            <option value="Academy">Academy</option>
-                                            <option value="CBC">CBC</option>
-                                            <option value="High School">High School</option>
-                                        </select>
+                                        <div className="input-glow rounded-xl border border-[var(--md-sys-color-outline)] transition-all bg-[var(--md-sys-color-surface-variant)] mt-2">
+                                            <select
+                                                value={newStudent.studentGroup}
+                                                onChange={e => setNewStudent(prev => ({ ...prev, studentGroup: e.target.value as any }))}
+                                                aria-label="Student Group"
+                                                title="Student Group"
+                                                className="w-full px-4 py-4 bg-transparent rounded-xl text-sm focus:outline-none text-[var(--md-sys-color-on-surface)]"
+                                            >
+                                                <option value="Campus">Campus</option>
+                                                <option value="Academy">Academy</option>
+                                                <option value="CBC">CBC</option>
+                                                <option value="High School">High School</option>
+                                            </select>
+                                        </div>
                                     </div>
                                 </div>
 
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
                                         <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase">Email</label>
-                                        <input
-                                            type="email"
-                                            value={newStudent.email}
-                                            onChange={e => setNewStudent(prev => ({ ...prev, email: e.target.value }))}
-                                            className="w-full mt-1 px-4 py-3 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl text-sm focus:ring-2 focus:ring-violet-500 text-[var(--md-sys-color-on-surface)]"
-                                            placeholder="Optional"
-                                        />
+                                        <div className="input-glow rounded-xl border border-[var(--md-sys-color-outline)] transition-all bg-[var(--md-sys-color-surface-variant)] mt-1">
+                                            <input
+                                                type="email"
+                                                value={newStudent.email}
+                                                onChange={e => setNewStudent(prev => ({ ...prev, email: e.target.value }))}
+                                                className="w-full px-4 py-3 bg-transparent rounded-xl text-sm focus:outline-none text-[var(--md-sys-color-on-surface)]"
+                                                placeholder="Optional"
+                                            />
+                                        </div>
                                     </div>
                                     <div>
                                         <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase">Phone</label>
-                                        <input
-                                            type="tel"
-                                            value={newStudent.phone}
-                                            onChange={e => setNewStudent(prev => ({ ...prev, phone: e.target.value }))}
-                                            className="w-full mt-1 px-4 py-3 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl text-sm focus:ring-2 focus:ring-violet-500 text-[var(--md-sys-color-on-surface)]"
-                                            placeholder="Optional"
-                                        />
+                                        <div className="input-glow rounded-xl border border-[var(--md-sys-color-outline)] transition-all bg-[var(--md-sys-color-surface-variant)] mt-1">
+                                            <input
+                                                type="tel"
+                                                value={newStudent.phone}
+                                                onChange={e => setNewStudent(prev => ({ ...prev, phone: e.target.value }))}
+                                                className="w-full px-4 py-3 bg-transparent rounded-xl text-sm focus:outline-none text-[var(--md-sys-color-on-surface)]"
+                                                placeholder="Optional"
+                                            />
+                                        </div>
                                     </div>
                                 </div>
 
@@ -782,54 +815,62 @@ const Students: React.FC<StudentsProps> = ({
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
                                             <label className="text-[10px] font-bold text-[var(--md-sys-color-secondary)] uppercase">Admission No.</label>
-                                            <input
-                                                value={newStudent.admissionNumber || ''}
-                                                onChange={e => setNewStudent(prev => ({ ...prev, admissionNumber: e.target.value }))}
-                                                className="w-full mt-1 px-3 py-2 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-lg text-sm"
-                                                placeholder="e.g. ADM2023/001"
-                                            />
+                                            <div className="input-glow rounded-xl border border-[var(--md-sys-color-outline)] transition-all bg-[var(--md-sys-color-surface)] mt-1">
+                                                <input
+                                                    value={newStudent.admissionNumber || ''}
+                                                    onChange={e => setNewStudent(prev => ({ ...prev, admissionNumber: e.target.value }))}
+                                                    className="w-full px-3 py-2 bg-transparent rounded-xl text-sm focus:outline-none text-[var(--md-sys-color-on-surface)]"
+                                                    placeholder="e.g. ADM2023/001"
+                                                />
+                                            </div>
                                         </div>
                                         <div>
                                             <label className="text-[10px] font-bold text-[var(--md-sys-color-secondary)] uppercase">NITA Reg No.</label>
-                                            <input
-                                                value={newStudent.nitaNumber || ''}
-                                                onChange={e => setNewStudent(prev => ({ ...prev, nitaNumber: e.target.value }))}
-                                                className="w-full mt-1 px-3 py-2 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-lg text-sm"
-                                                placeholder="NITA/..."
-                                            />
+                                            <div className="input-glow rounded-xl border border-[var(--md-sys-color-outline)] transition-all bg-[var(--md-sys-color-surface)] mt-1">
+                                                <input
+                                                    value={newStudent.nitaNumber || ''}
+                                                    onChange={e => setNewStudent(prev => ({ ...prev, nitaNumber: e.target.value }))}
+                                                    className="w-full px-3 py-2 bg-transparent rounded-xl text-sm focus:outline-none text-[var(--md-sys-color-on-surface)]"
+                                                    placeholder="NITA/..."
+                                                />
+                                            </div>
                                         </div>
                                         <div>
                                             <label className="text-[10px] font-bold text-[var(--md-sys-color-secondary)] uppercase">EPRA License</label>
-                                            <select
-                                                value={newStudent.epraLicenseStatus || 'None'}
-                                                onChange={e => setNewStudent(prev => ({ ...prev, epraLicenseStatus: e.target.value as any }))}
-                                                aria-label="EPRA License"
-                                                title="EPRA License"
-                                                className="w-full mt-1 px-3 py-2 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-lg text-sm"
-                                            >
-                                                <option value="None">None</option>
-                                                <option value="T1">PV T1</option>
-                                                <option value="T2">PV T2</option>
-                                                <option value="T3">PV T3</option>
-                                            </select>
+                                            <div className="input-glow rounded-xl border border-[var(--md-sys-color-outline)] transition-all bg-[var(--md-sys-color-surface)] mt-1">
+                                                <select
+                                                    value={newStudent.epraLicenseStatus || 'None'}
+                                                    onChange={e => setNewStudent(prev => ({ ...prev, epraLicenseStatus: e.target.value as any }))}
+                                                    aria-label="EPRA License"
+                                                    title="EPRA License"
+                                                    className="w-full px-3 py-2 bg-transparent rounded-xl text-sm focus:outline-none text-[var(--md-sys-color-on-surface)]"
+                                                >
+                                                    <option value="None">None</option>
+                                                    <option value="T1">PV T1</option>
+                                                    <option value="T2">PV T2</option>
+                                                    <option value="T3">PV T3</option>
+                                                </select>
+                                            </div>
                                         </div>
                                         <div>
                                             <label className="text-[10px] font-bold text-[var(--md-sys-color-secondary)] uppercase">KCSE Grade</label>
-                                            <input
-                                                value={newStudent.kcseGrade || ''}
-                                                onChange={e => setNewStudent(prev => ({ ...prev, kcseGrade: e.target.value }))}
-                                                className="w-full mt-1 px-3 py-2 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-lg text-sm"
-                                                placeholder="e.g. C-"
-                                            />
+                                            <div className="input-glow rounded-xl border border-[var(--md-sys-color-outline)] transition-all bg-[var(--md-sys-color-surface)] mt-1">
+                                                <input
+                                                    value={newStudent.kcseGrade || ''}
+                                                    onChange={e => setNewStudent(prev => ({ ...prev, kcseGrade: e.target.value }))}
+                                                    className="w-full px-3 py-2 bg-transparent rounded-xl text-sm focus:outline-none text-[var(--md-sys-color-on-surface)]"
+                                                    placeholder="e.g. C-"
+                                                />
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="p-6 bg-[var(--md-sys-color-surface-variant)] border-t border-[var(--md-sys-color-outline)]">
+                            <div className="p-6 bg-[var(--md-sys-color-surface-variant)]/90 backdrop-blur-md border-t border-[var(--md-sys-color-outline)]">
                                 <button
                                     onClick={handleAddNewStudent}
-                                    className="w-full py-3 bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] rounded-xl font-bold text-sm hover:shadow-lg transition-all"
+                                    className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-95"
                                 >
                                     Add Student
                                 </button>

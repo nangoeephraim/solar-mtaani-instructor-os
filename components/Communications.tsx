@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import {
     MessageSquare, Hash, Megaphone, Search, MoreVertical, Paperclip, Send,
     Image as ImageIcon, FileText, Smile, X, Edit2, Pencil, Trash2, Pin, CornerUpLeft,
-    Reply, ShieldAlert, Check, CheckCheck, Clock, Download, Bold, Italic, Code, Menu, Users, AtSign, UserPlus, User, Mic, Square, Video, Plus
+    Reply, ShieldAlert, Check, CheckCheck, Clock, Download, Bold, Italic, Code, Menu, Users, AtSign, UserPlus, User, Mic, Square, Video, Plus, ChevronLeft
 } from 'lucide-react';
 import { useToast } from './Toast';
 import clsx from 'clsx';
@@ -564,6 +564,12 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
     const [isInputFocused, setIsInputFocused] = useState(false);
     const [showMobileSidebar, setShowMobileSidebar] = useState(false);
     const [showInfoDrawer, setShowInfoDrawer] = useState(false);
+    const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
+
+    useEffect(() => {
+        const event = new CustomEvent('communications-mobile-view-change', { detail: mobileView });
+        window.dispatchEvent(event);
+    }, [mobileView]);
     const [showMentions, setShowMentions] = useState(false);
     const [mentionFilter, setMentionFilter] = useState('');
     const [avatarMap, setAvatarMap] = useState<Record<string, string>>(() => {
@@ -618,6 +624,13 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
     const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     // Mobile: whether the formatting toolbar is expanded (hidden by default like WhatsApp)
     const [showMobileFormats, setShowMobileFormats] = useState(false);
+
+    const [visibleGroupsCount, setVisibleGroupsCount] = useState(30);
+
+    // Reset visible count when channel changes
+    useEffect(() => {
+        setVisibleGroupsCount(30);
+    }, [activeChannelId]);
 
     // Fetch users for DM directory AND eagerly pre-load all their avatars
     useEffect(() => {
@@ -1139,6 +1152,41 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
         return groups;
     }, [activeMessages, activeChannel]);
 
+    const hasMoreMessages = useMemo(() => {
+        if (!activeChannel) return false;
+        if (activeChannel.type === 'announcement') {
+            return activeMessages.filter(m => !m.isDeleted).length > visibleGroupsCount;
+        } else {
+            return groupedMessages.length > visibleGroupsCount;
+        }
+    }, [activeChannel, activeMessages, groupedMessages, visibleGroupsCount]);
+
+    const loadMoreMessages = useCallback(() => {
+        if (!hasMoreMessages) return;
+        const container = scrollContainerRef.current;
+        if (!container) return;
+
+        const previousScrollHeight = container.scrollHeight;
+        const previousScrollTop = container.scrollTop;
+
+        setVisibleGroupsCount(prev => prev + 30);
+
+        // Maintain scroll position after state updates and DOM renders
+        setTimeout(() => {
+            if (container) {
+                const newScrollHeight = container.scrollHeight;
+                container.scrollTop = previousScrollTop + (newScrollHeight - previousScrollHeight);
+            }
+        }, 10);
+    }, [hasMoreMessages]);
+
+    const handleScroll = useCallback(() => {
+        const container = scrollContainerRef.current;
+        if (container && container.scrollTop < 50 && hasMoreMessages) {
+            loadMoreMessages();
+        }
+    }, [hasMoreMessages, loadMoreMessages]);
+
     /* ─── Render Helpers ─── */
     const renderReactions = (msg: ChatMessage) => {
         if (!msg.reactions || Object.keys(msg.reactions).length === 0) return null;
@@ -1203,17 +1251,37 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
     return (
         <div className="flex h-full w-full glass-panel overflow-hidden animate-fade-in relative">
             {/* Sidebar */}
-            <ChannelSidebar channels={channels} activeChannelId={activeChannelId} onSelectChannel={(id) => { setActiveChannelId(id); setShowMobileSidebar(false); }} onCreateChannel={() => setShowNewChannel(true)} onStartDM={() => setShowNewDM(true)} avatarMap={avatarMap} userProfileMap={userProfileMap} onDeleteChannel={handleDeleteChannel} getUnreadCount={(chId) => getUnreadCount(data, chId, userId)} isAdmin={user?.role === 'admin'} user={user} isOpen={showMobileSidebar} onToggle={() => setShowMobileSidebar(p => !p)} />
+            <ChannelSidebar 
+                channels={channels} 
+                activeChannelId={activeChannelId} 
+                onSelectChannel={(id) => { 
+                    setActiveChannelId(id); 
+                    setShowMobileSidebar(false); 
+                    setMobileView('chat');
+                }} 
+                onCreateChannel={() => setShowNewChannel(true)} 
+                onStartDM={() => setShowNewDM(true)} 
+                avatarMap={avatarMap} 
+                userProfileMap={userProfileMap} 
+                onDeleteChannel={handleDeleteChannel} 
+                getUnreadCount={(chId) => getUnreadCount(data, chId, userId)} 
+                isAdmin={user?.role === 'admin'} 
+                user={user} 
+                isOpen={showMobileSidebar} 
+                onToggle={() => setShowMobileSidebar(p => !p)} 
+                onNavigate={onNavigate}
+                mobileView={mobileView}
+            />
 
             {/* ═══ MAIN CHAT AREA ═══ */}
             {activeChannelId === 'video_meetings' ? (
-                <div className="flex-1 flex flex-col relative overflow-hidden" style={{ background: 'var(--md-sys-color-background)' }}>
+                <div className={clsx("flex-1 flex flex-col relative overflow-hidden", mobileView === 'chat' ? "flex" : "hidden lg:flex")} style={{ background: 'var(--md-sys-color-background)' }}>
                     <Meetings pendingMeetCode={internalMeetCode || pendingMeetCode} />
                 </div>
             ) : activeChannel ? (
                 <>
                     <div
-                        className="flex-1 flex flex-col relative overflow-hidden"
+                        className={clsx("flex-1 flex flex-col relative overflow-hidden", mobileView === 'chat' ? "flex" : "hidden lg:flex")}
                         style={{ background: 'var(--md-sys-color-background)' }}
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
@@ -1235,21 +1303,13 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                         {/* Header */}
                         <div className="h-14 px-4 flex items-center justify-between flex-shrink-0 z-10 sidebar-glass" style={{ borderBottom: '1px solid var(--md-sys-color-outline-variant)' }}>
                             <div className="flex items-center gap-2">
-                                {/* Mobile: back-to-app arrow (replaces hamburger trap) */}
-                                {onNavigate && (
-                                    <button
-                                        onClick={() => onNavigate('dashboard')}
-                                        className="lg:hidden p-2 rounded-xl hover:bg-[var(--md-sys-color-surface-variant)] transition-colors"
-                                        title="Back to app"
-                                    >
-                                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ color: 'var(--md-sys-color-on-surface)' }}>
-                                            <polyline points="15 18 9 12 15 6" />
-                                        </svg>
-                                    </button>
-                                )}
-                                {/* Channel sidebar toggle */}
-                                <button onClick={() => setShowMobileSidebar(true)} className="lg:hidden p-2 rounded-xl hover:bg-[var(--md-sys-color-surface-variant)]">
-                                    <Menu size={20} style={{ color: 'var(--md-sys-color-on-surface)' }} />
+                                {/* Mobile back button (returns to channel list view) */}
+                                <button
+                                    onClick={() => setMobileView('list')}
+                                    className="lg:hidden p-2 rounded-xl hover:bg-[var(--md-sys-color-surface-variant)] transition-colors -ml-2"
+                                    title="Back to channel list"
+                                >
+                                    <ChevronLeft size={20} style={{ color: 'var(--md-sys-color-on-surface)' }} />
                                 </button>
                                 <div className="p-1.5 rounded-xl" style={{ background: 'var(--md-sys-color-primary-container)' }}>
                                     {activeChannel.type === 'announcement' ? <Megaphone size={16} style={{ color: 'var(--md-sys-color-primary)' }} /> : activeChannel.type === 'dm' ? <User size={16} style={{ color: 'var(--md-sys-color-primary)' }} /> : <Hash size={16} style={{ color: 'var(--md-sys-color-primary)' }} />}
@@ -1300,7 +1360,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
 
                         <div className="flex flex-1 overflow-hidden relative">
                             {/* Messages Feed */}
-                            <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-5 custom-scrollbar pb-4" style={{ minHeight: 0 }}>
+                            <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-5 custom-scrollbar pb-4" style={{ minHeight: 0 }}>
                                 {/* Channel Intro */}
                                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="pb-6 pt-4 text-center">
                                     <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-3 mx-auto" style={{ background: 'var(--md-sys-color-primary-container)' }}>
@@ -1316,7 +1376,23 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
 
                                 {activeChannel.type === 'announcement' ? (
                                     <div className="space-y-4 max-w-3xl mx-auto">
-                                        {activeMessages.filter(m => !m.isDeleted).map((msg, i, arr) => (
+                                        {hasMoreMessages && (
+                                            <div className="text-center py-4">
+                                                <button
+                                                    onClick={loadMoreMessages}
+                                                    className="px-4 py-2 text-xs font-bold rounded-full transition-all flex items-center gap-1.5 mx-auto border hover:scale-105 active:scale-95"
+                                                    style={{
+                                                        background: 'var(--md-sys-color-surface-variant)',
+                                                        borderColor: 'var(--md-sys-color-outline-variant)',
+                                                        color: 'var(--md-sys-color-primary)'
+                                                    }}
+                                                >
+                                                    <Calendar size={12} />
+                                                    Load earlier announcements
+                                                </button>
+                                            </div>
+                                        )}
+                                        {activeMessages.filter(m => !m.isDeleted).slice(-visibleGroupsCount).map((msg, i, arr) => (
                                             <React.Fragment key={msg.id}>
                                                 {(i === 0 || !isSameDay(msg.timestamp, arr[i - 1].timestamp)) && <DateSeparator date={msg.timestamp} />}
                                                 <motion.div layout initial={{ opacity: 0, y: 10, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} className="relative glass-card p-5 group/msg animate-fade-in break-words hover:shadow-lg transition-all duration-300" style={{ animationFillMode: 'both' }}
@@ -1359,48 +1435,67 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                     </div>
                                 ) : (
                                     <div className="space-y-1 max-w-3xl mx-auto">
-                                        {groupedMessages.map((group, gIdx) => {
-                                            const first = group[0];
-                                            const prevGroup = gIdx > 0 ? groupedMessages[gIdx - 1] : null;
-                                            const prevMsg = prevGroup ? prevGroup[prevGroup.length - 1] : null;
-                                            const showDateSep = !prevMsg || !isSameDay(first.timestamp, prevMsg.timestamp);
-                                            return (
-                                                <React.Fragment key={`g - ${gIdx} -${first.id} `}>
-                                                    {showDateSep && <DateSeparator date={first.timestamp} />}
-                                                    {firstUnreadIdx >= 0 && allActiveMessages.indexOf(first) === firstUnreadIdx && <UnreadSeparator />}
-                                                    <MessageGroupRenderer
-                                                        group={group}
-                                                        userId={userId}
-                                                        mIdxOffset={0}
-                                                        avatarMap={avatarMap}
-                                                        hoveredMsgId={hoveredMsgId}
-                                                        setHoveredMsgId={setHoveredMsgId}
-                                                        showEmojiPicker={showEmojiPicker}
-                                                        setShowEmojiPicker={setShowEmojiPicker}
-                                                        editingMsgId={editingMsgId}
-                                                        setEditingMsgId={setEditingMsgId}
-                                                        editContent={editContent}
-                                                        setEditContent={setEditContent}
-                                                        handleEditSave={handleEditSave}
-                                                        renderMsgActions={renderMsgActions}
-                                                        renderEmojiPicker={renderEmojiPicker}
-                                                        renderReplyPreview={renderReplyPreview}
-                                                        renderReactions={renderReactions}
-                                                        activeChannelId={activeChannelId}
-                                                        onLongPress={setMobileActionMsg}
-                                                        onSwipeReply={(msg: any) => {
-                                                            setReplyToMsg(msg);
-                                                            setTimeout(() => textareaRef.current?.focus(), 80);
-                                                        }}
-                                                        onSwipeEdit={(msg: any) => {
-                                                            setEditingMsgId(msg.id);
-                                                            setEditContent(msg.content);
-                                                        }}
-                                                        channelData={activeChannel}
-                                                    />
-                                                </React.Fragment>
-                                            );
-                                        })}
+                                        {hasMoreMessages && (
+                                            <div className="text-center py-4">
+                                                <button
+                                                    onClick={loadMoreMessages}
+                                                    className="px-4 py-2 text-xs font-bold rounded-full transition-all flex items-center gap-1.5 mx-auto border hover:scale-105 active:scale-95"
+                                                    style={{
+                                                        background: 'var(--md-sys-color-surface-variant)',
+                                                        borderColor: 'var(--md-sys-color-outline-variant)',
+                                                        color: 'var(--md-sys-color-primary)'
+                                                    }}
+                                                >
+                                                    <Calendar size={12} />
+                                                    Load earlier messages
+                                                </button>
+                                            </div>
+                                        )}
+                                        {(() => {
+                                            const slicedGroups = groupedMessages.slice(-visibleGroupsCount);
+                                            return slicedGroups.map((group, gIdx) => {
+                                                const first = group[0];
+                                                const prevGroup = gIdx > 0 ? slicedGroups[gIdx - 1] : null;
+                                                const prevMsg = prevGroup ? prevGroup[prevGroup.length - 1] : null;
+                                                const showDateSep = !prevMsg || !isSameDay(first.timestamp, prevMsg.timestamp);
+                                                return (
+                                                    <React.Fragment key={`g - ${gIdx} -${first.id} `}>
+                                                        {showDateSep && <DateSeparator date={first.timestamp} />}
+                                                        {firstUnreadIdx >= 0 && allActiveMessages.indexOf(first) === firstUnreadIdx && <UnreadSeparator />}
+                                                        <MessageGroupRenderer
+                                                            group={group}
+                                                            userId={userId}
+                                                            mIdxOffset={0}
+                                                            avatarMap={avatarMap}
+                                                            hoveredMsgId={hoveredMsgId}
+                                                            setHoveredMsgId={setHoveredMsgId}
+                                                            showEmojiPicker={showEmojiPicker}
+                                                            setShowEmojiPicker={setShowEmojiPicker}
+                                                            editingMsgId={editingMsgId}
+                                                            setEditingMsgId={setEditingMsgId}
+                                                            editContent={editContent}
+                                                            setEditContent={setEditContent}
+                                                            handleEditSave={handleEditSave}
+                                                            renderMsgActions={renderMsgActions}
+                                                            renderEmojiPicker={renderEmojiPicker}
+                                                            renderReplyPreview={renderReplyPreview}
+                                                            renderReactions={renderReactions}
+                                                            activeChannelId={activeChannelId}
+                                                            onLongPress={setMobileActionMsg}
+                                                            onSwipeReply={(msg: any) => {
+                                                                setReplyToMsg(msg);
+                                                                setTimeout(() => textareaRef.current?.focus(), 80);
+                                                            }}
+                                                            onSwipeEdit={(msg: any) => {
+                                                                setEditingMsgId(msg.id);
+                                                                setEditContent(msg.content);
+                                                            }}
+                                                            channelData={activeChannel}
+                                                        />
+                                                    </React.Fragment>
+                                                );
+                                            });
+                                        })()}
                                     </div>
                                 )}
                                 <div ref={messagesEndRef} />
@@ -1546,7 +1641,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                         {showMobileAttachSheet && (
                                             <>
                                                 <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-40 bg-black/40" onClick={() => setShowMobileAttachSheet(false)} />
-                                                <motion.div initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 60, opacity: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 35 }} className="fixed bottom-0 left-0 right-0 z-50 rounded-t-3xl p-6 pb-8 grid grid-cols-4 gap-4" style={{ background: 'var(--md-sys-color-surface)', boxShadow: 'var(--shadow-elevation-3)' }}>
+                                                <motion.div initial={{ y: 60, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 60, opacity: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 35 }} className="fixed bottom-0 left-0 right-0 z-50 rounded-t-3xl p-6 grid grid-cols-4 gap-4" style={{ background: 'var(--md-sys-color-surface)', boxShadow: 'var(--shadow-elevation-3)', paddingBottom: 'calc(2rem + env(safe-area-inset-bottom))' }}>
                                                     {[
                                                         { icon: <ImageIcon size={22} />, label: 'Photos', color: '#3b82f6', action: () => imageInputRef.current?.click() },
                                                         { icon: <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="3"/><path d="M20 7h-3.5l-1.5-2h-6L7.5 7H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/></svg>, label: 'Camera', color: '#10b981', action: () => cameraInputRef.current?.click() },
@@ -1612,7 +1707,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                     </div>
                 </>
             ) : (
-                <div className="flex-1 flex items-center justify-center" style={{ background: 'var(--md-sys-color-background)' }}>
+                <div className={clsx("flex-1 flex items-center justify-center", mobileView === 'chat' ? "flex" : "hidden lg:flex")} style={{ background: 'var(--md-sys-color-background)' }}>
                     <div className="text-center">
                         <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-4" style={{ background: 'var(--md-sys-color-primary-container)' }}>
                             <MessageSquare className="w-10 h-10" style={{ color: 'var(--md-sys-color-primary)' }} />
@@ -1883,7 +1978,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                             </div>
 
                             {/* Safe area bottom padding */}
-                            <div className="pb-6" />
+                            <div style={{ paddingBottom: 'env(safe-area-inset-bottom, 24px)' }} />
                         </motion.div>
                     </>
                 )}

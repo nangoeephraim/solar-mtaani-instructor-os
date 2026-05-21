@@ -37,9 +37,10 @@ const SummaryCard: React.FC<{
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay, type: 'spring', stiffness: 260, damping: 24 }}
-        className="bg-[var(--md-sys-color-surface)] rounded-3xl border border-[var(--md-sys-color-outline-variant)] shadow-sm overflow-hidden"
+        whileHover={{ y: -4, scale: 1.02 }}
+        className="glass-card overflow-hidden cursor-pointer"
     >
-        <div className={clsx('h-1 w-full', gradient)} />
+        <div className={clsx('h-1.5 w-full', gradient)} />
         <div className="p-5">
             <div className="flex items-center gap-2.5 mb-3">
                 <div className={clsx('p-2.5 rounded-xl text-white shadow-md', gradient)}>{icon}</div>
@@ -283,13 +284,13 @@ const Fees: React.FC<FeesProps> = ({
                         placeholder="Search students or receipts..."
                         value={search}
                         onChange={e => setSearch(e.target.value)}
-                        className="w-full pl-11 pr-4 py-3 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline-variant)] rounded-2xl text-sm text-[var(--md-sys-color-on-surface)] placeholder:text-[var(--md-sys-color-secondary)] outline-none focus:ring-2 focus:ring-[var(--md-sys-color-primary)] transition-shadow"
+                        className="w-full pl-11 pr-4 py-3 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline-variant)] rounded-2xl text-sm text-[var(--md-sys-color-on-surface)] placeholder:text-[var(--md-sys-color-secondary)] outline-none input-glow transition-shadow"
                     />
                 </div>
 
                 {/* ═══ TAB: OVERVIEW ═══ */}
                 {tab === 'overview' && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-[var(--md-sys-color-surface)] rounded-3xl border border-[var(--md-sys-color-outline-variant)] shadow-sm overflow-hidden">
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="glass-panel overflow-hidden">
                         <div className="px-6 py-5 border-b border-[var(--md-sys-color-outline-variant)] flex items-center justify-between">
                             <h3 className="font-google font-bold text-[var(--md-sys-color-on-surface)]">Student Balances</h3>
                             <span className="text-xs text-[var(--md-sys-color-secondary)]">{filteredBalances.length} students</span>
@@ -357,7 +358,7 @@ const Fees: React.FC<FeesProps> = ({
 
                 {/* ═══ TAB: PAYMENTS ═══ */}
                 {tab === 'payments' && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="bg-[var(--md-sys-color-surface)] rounded-3xl border border-[var(--md-sys-color-outline-variant)] shadow-sm overflow-hidden">
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="glass-panel overflow-hidden">
                         <div className="px-6 py-5 border-b border-[var(--md-sys-color-outline-variant)] flex flex-wrap items-center justify-between gap-3">
                             <h3 className="font-google font-bold text-[var(--md-sys-color-on-surface)]">Payment History</h3>
                             <div className="flex gap-2 flex-wrap">
@@ -423,7 +424,7 @@ const Fees: React.FC<FeesProps> = ({
                                 initial={{ opacity: 0, y: 16 }}
                                 animate={{ opacity: 1, y: 0 }}
                                 transition={{ delay: idx * 0.05 }}
-                                className="bg-[var(--md-sys-color-surface)] rounded-2xl border border-[var(--md-sys-color-outline-variant)] shadow-sm p-5 hover:shadow-md transition-shadow"
+                                className="glass-card p-5"
                             >
                                 <div className="flex items-start justify-between mb-3">
                                     <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/20">
@@ -461,10 +462,10 @@ const Fees: React.FC<FeesProps> = ({
                 <AnimatePresence>
                     {showAddPayment && (
                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                            className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
+                            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-4"
                             onClick={() => setShowAddPayment(false)}>
-                            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
-                                className="bg-[var(--md-sys-color-surface)] rounded-3xl shadow-xl border border-[var(--md-sys-color-outline-variant)] w-full max-w-md max-h-[90vh] overflow-y-auto"
+                            <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }}
+                                className="glass-panel w-full max-w-md max-h-[90vh] overflow-y-auto shadow-elevation-3"
                                 onClick={e => e.stopPropagation()}>
                                 <div className="p-6 border-b border-[var(--md-sys-color-outline-variant)] flex items-center justify-between">
                                     <h3 className="font-google font-bold text-lg text-[var(--md-sys-color-on-surface)]">Record Payment</h3>
@@ -477,7 +478,7 @@ const Fees: React.FC<FeesProps> = ({
                                     <div>
                                         <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-wider mb-1.5 block">Student</label>
                                         <select value={payStudentId === '' ? '' : payStudentId.toString()} onChange={e => setPayStudentId(e.target.value)} title="Select student"
-                                            className="w-full p-3 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline-variant)] rounded-xl text-sm text-[var(--md-sys-color-on-surface)] outline-none focus:ring-2 focus:ring-[var(--md-sys-color-primary)]">
+                                            className="w-full p-3 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline-variant)] rounded-xl text-sm text-[var(--md-sys-color-on-surface)] outline-none input-glow">
                                             <option value="">Select student...</option>
                                             {students.map(s => <option key={s.id} value={s.id.toString()}>{s.name} ({s.grade} - {s.subject})</option>)}
                                         </select>
@@ -487,7 +488,7 @@ const Fees: React.FC<FeesProps> = ({
                                     <div>
                                         <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-wider mb-1.5 block">Amount (KES)</label>
                                         <input type="number" value={payAmount} onChange={e => setPayAmount(e.target.value)} placeholder="5000"
-                                            className="w-full p-3 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline-variant)] rounded-xl text-sm text-[var(--md-sys-color-on-surface)] outline-none focus:ring-2 focus:ring-[var(--md-sys-color-primary)]" />
+                                            className="w-full p-3 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline-variant)] rounded-xl text-sm text-[var(--md-sys-color-on-surface)] outline-none input-glow" />
                                     </div>
 
                                     {/* Method */}
@@ -515,7 +516,7 @@ const Fees: React.FC<FeesProps> = ({
                                         <div>
                                             <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-wider mb-1.5 block">M-Pesa Phone Number</label>
                                             <input type="tel" value={payPhone} onChange={e => setPayPhone(e.target.value)} placeholder="07XX XXX XXX"
-                                                className="w-full p-3 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline-variant)] rounded-xl text-sm text-[var(--md-sys-color-on-surface)] outline-none focus:ring-2 focus:ring-green-500" />
+                                                className="w-full p-3 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline-variant)] rounded-xl text-sm text-[var(--md-sys-color-on-surface)] outline-none input-glow" />
                                             <p className="text-[10px] text-[var(--md-sys-color-secondary)] mt-1.5 flex items-center gap-1">
                                                 <Smartphone size={10} /> An STK push will be sent to this phone
                                             </p>
@@ -564,10 +565,10 @@ const Fees: React.FC<FeesProps> = ({
                 <AnimatePresence>
                     {showAddFee && (
                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                            className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4"
+                            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-md flex items-center justify-center p-4"
                             onClick={() => setShowAddFee(false)}>
-                            <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
-                                className="bg-[var(--md-sys-color-surface)] rounded-3xl shadow-xl border border-[var(--md-sys-color-outline-variant)] w-full max-w-md"
+                            <motion.div initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }}
+                                className="glass-panel w-full max-w-md shadow-elevation-3"
                                 onClick={e => e.stopPropagation()}>
                                 <div className="p-6 border-b border-[var(--md-sys-color-outline-variant)] flex items-center justify-between">
                                     <h3 className="font-google font-bold text-lg text-[var(--md-sys-color-on-surface)]">Add Fee Type</h3>

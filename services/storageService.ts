@@ -1,6 +1,6 @@
 import { AppData, Student, InstructorSettings, DEFAULT_SETTINGS, ScheduleSlot, Resource, ChatChannel, ChatMessage, LibraryResource, FeePayment, FeeStructure } from '../types';
 import { supabase } from './supabase';
-import { getCache, setCache, isOnline, enqueueMutation } from './offlineSyncService';
+import { getCache, setCache, isOnline, enqueueMutation, syncQueue } from './offlineSyncService';
 
 const SETTINGS_KEY = 'prism_instructor_settings_v1';
 
@@ -225,6 +225,11 @@ export const updateStudent = async (student: Student): Promise<boolean> => {
 };
 
 export const deleteStudent = async (studentId: string | number): Promise<boolean> => {
+  if (!isOnline()) {
+    await enqueueMutation('deleteStudent', { id: studentId });
+    return true;
+  }
+
   const { error } = await supabase.from('students').delete().eq('id', studentId);
   if (error) {
     console.error("Error deleting student:", error);
@@ -258,6 +263,11 @@ export const addScheduleSlot = async (slot: Omit<ScheduleSlot, 'id'> & { title?:
 };
 
 export const updateScheduleSlot = async (slot: ScheduleSlot & { title?: string, type?: string, location?: string, instructor?: string, color?: string }): Promise<boolean> => {
+  if (!isOnline()) {
+    await enqueueMutation('updateScheduleSlot', slot);
+    return true;
+  }
+
   const { error } = await supabase.from('schedule_slots').update({
     title: slot.title || `${slot.subject || 'Solar'} Class`,
     start_time: slot.startTime,
@@ -278,6 +288,11 @@ export const updateScheduleSlot = async (slot: ScheduleSlot & { title?: string, 
 };
 
 export const deleteScheduleSlot = async (slotId: string): Promise<boolean> => {
+  if (!isOnline()) {
+    await enqueueMutation('deleteScheduleSlot', { id: slotId });
+    return true;
+  }
+
   const { error } = await supabase.from('schedule_slots').delete().eq('id', slotId);
   return !error;
 };
@@ -796,6 +811,11 @@ const formatFeeStructureFromDB = (row: any): FeeStructure => ({
 });
 
 export const addFeePayment = async (payment: Omit<FeePayment, 'id'>): Promise<FeePayment | null> => {
+  if (!isOnline()) {
+    await enqueueMutation('addFeePayment', payment);
+    return { ...payment, id: -Date.now() } as any;
+  }
+
   const { data, error } = await supabase.from('fee_payments').insert({
     student_id: payment.studentId,
     student_name: payment.studentName,
@@ -834,6 +854,11 @@ export const updateFeePayment = async (id: string, updates: Partial<FeePayment>)
 };
 
 export const deleteFeePayment = async (id: string): Promise<boolean> => {
+  if (!isOnline()) {
+    await enqueueMutation('deleteFeePayment', { id });
+    return true;
+  }
+
   const { error } = await supabase.from('fee_payments').delete().eq('id', id);
   if (error) {
     console.error('Error deleting fee payment:', error);
@@ -882,5 +907,58 @@ export const deleteFeeStructure = async (id: string): Promise<boolean> => {
     return false;
   }
   return true;
+};
+
+export const performOfflineSync = async (): Promise<boolean> => {
+  try {
+    let syncFailed = false;
+    const handlers: Record<string, (payload: any) => Promise<boolean>> = {
+      addStudent: async (payload: any) => {
+        const res = await addStudent(payload);
+        if (!res) syncFailed = true;
+        return res !== null;
+      },
+      updateStudent: async (payload: any) => {
+        const success = await updateStudent(payload);
+        if (!success) syncFailed = true;
+        return success;
+      },
+      deleteStudent: async (payload: any) => {
+        const success = await deleteStudent(payload.id);
+        if (!success) syncFailed = true;
+        return success;
+      },
+      addScheduleSlot: async (payload: any) => {
+        const success = await addScheduleSlot(payload);
+        if (!success) syncFailed = true;
+        return success;
+      },
+      updateScheduleSlot: async (payload: any) => {
+        const success = await updateScheduleSlot(payload);
+        if (!success) syncFailed = true;
+        return success;
+      },
+      deleteScheduleSlot: async (payload: any) => {
+        const success = await deleteScheduleSlot(payload.id);
+        if (!success) syncFailed = true;
+        return success;
+      },
+      addFeePayment: async (payload: any) => {
+        const res = await addFeePayment(payload);
+        if (!res) syncFailed = true;
+        return res !== null;
+      },
+      deleteFeePayment: async (payload: any) => {
+        const success = await deleteFeePayment(payload.id);
+        if (!success) syncFailed = true;
+        return success;
+      }
+    };
+    await syncQueue(handlers);
+    return !syncFailed;
+  } catch (err) {
+    console.error('[Offline Sync] Error during offline sync:', err);
+    return false;
+  }
 };
 

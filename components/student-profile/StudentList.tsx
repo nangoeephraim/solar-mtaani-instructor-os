@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { User, Search, ChevronRight, Zap, Monitor, Mail, Phone, MessageSquare } from 'lucide-react';
+import { User, Search, Zap, Monitor, Phone, MessageSquare } from 'lucide-react';
 import clsx from 'clsx';
 import { Student } from '../../types';
 
@@ -64,13 +64,13 @@ export const StudentList: React.FC<StudentListProps> = ({
     };
 
     return (
-        <div className="w-full md:w-80 lg:w-96 flex flex-col bg-[var(--md-sys-color-surface)]/80 backdrop-blur-xl overflow-hidden rounded-2xl border border-[var(--md-sys-color-outline)] h-full shadow-sm">
-            <div className="p-4 border-b border-[var(--md-sys-color-outline)] bg-[var(--md-sys-color-surface)] sticky top-0 z-10">
+        <div className="w-full md:w-80 lg:w-96 flex flex-col glass-panel overflow-hidden h-full">
+            <div className="p-4 border-b border-[var(--md-sys-color-outline)] bg-[var(--md-sys-color-surface)]/50 backdrop-blur-md sticky top-0 z-10">
                 <div className="flex items-center justify-between mb-4">
                     <h2 className="font-google font-bold text-xl text-[var(--md-sys-color-on-surface)]">Student Roster</h2>
                     <button
                         onClick={onAddStudent}
-                        className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-colors flex items-center justify-center shadow-sm dark:bg-indigo-500/10 dark:text-indigo-400 dark:hover:bg-indigo-500/20 border border-indigo-100 dark:border-indigo-500/20"
+                        className="p-2.5 bg-indigo-50/80 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-all flex items-center justify-center shadow-sm dark:bg-indigo-500/10 dark:text-indigo-400 dark:hover:bg-indigo-500/20 border border-indigo-100/50 dark:border-indigo-500/20 active:scale-95"
                         title="Add Student"
                     >
                         <User size={18} />
@@ -78,14 +78,16 @@ export const StudentList: React.FC<StudentListProps> = ({
                 </div>
 
                 {/* Subject Filter Toggle */}
-                <div className="flex bg-[var(--md-sys-color-surface-variant)]/50 p-1 rounded-xl mb-3 border border-[var(--md-sys-color-outline)]/50 backdrop-blur-sm">
+                <div className="flex bg-[var(--md-sys-color-surface-variant)]/40 p-1.5 rounded-2xl mb-3 border border-[var(--md-sys-color-outline)]/40 backdrop-blur-sm">
                     {(['All', 'Solar', 'ICT'] as const).map(sub => (
                         <button
                             key={sub}
                             onClick={() => onFilterChange(sub)}
                             className={clsx(
-                                "flex-1 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5",
-                                subjectFilter === sub ? "bg-white dark:bg-slate-700 shadow-sm text-indigo-600 dark:text-indigo-400" : "text-[var(--md-sys-color-secondary)] hover:text-[var(--md-sys-color-on-surface)]"
+                                "flex-1 py-1.5 text-xs font-bold rounded-xl transition-all duration-300 flex items-center justify-center gap-1.5 active:scale-95",
+                                subjectFilter === sub 
+                                    ? "bg-[var(--md-sys-color-surface)] shadow-md text-[var(--md-sys-color-primary)] border border-[var(--md-sys-color-outline)]" 
+                                    : "text-[var(--md-sys-color-secondary)] hover:text-[var(--md-sys-color-on-surface)] hover:bg-[var(--md-sys-color-surface-variant)]/20"
                             )}
                         >
                             {sub === 'Solar' && <Zap size={12} />}
@@ -95,12 +97,12 @@ export const StudentList: React.FC<StudentListProps> = ({
                     ))}
                 </div>
 
-                <div className="relative">
+                <div className="relative input-glow rounded-xl border border-[var(--md-sys-color-outline)] transition-all bg-[var(--md-sys-color-surface-variant)]/40">
                     <Search className="absolute left-3 top-2.5 text-[var(--md-sys-color-secondary)]" size={18} />
                     <input
                         type="text"
                         placeholder="Search roster..."
-                        className="w-full pl-10 pr-4 py-2 bg-[var(--md-sys-color-surface-variant)]/50 border border-[var(--md-sys-color-outline)] rounded-xl text-sm text-[var(--md-sys-color-on-surface)] focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:bg-[var(--md-sys-color-surface)] placeholder-[var(--md-sys-color-secondary)] transition-all"
+                        className="w-full pl-10 pr-4 py-2 bg-transparent text-sm text-[var(--md-sys-color-on-surface)] focus:outline-none placeholder-[var(--md-sys-color-secondary)] transition-all"
                         value={searchTerm}
                         onChange={(e) => onSearchChange(e.target.value)}
                     />
@@ -118,15 +120,15 @@ export const StudentList: React.FC<StudentListProps> = ({
                             <button
                                 onClick={() => onSelectStudent(student.id)}
                                 className={clsx(
-                                    "w-full text-left p-3 rounded-xl transition-all duration-300 flex items-center gap-3 border relative overflow-hidden",
+                                    "w-full text-left p-3 rounded-xl transition-all duration-300 flex items-center gap-3 border relative overflow-hidden active:scale-[0.99]",
                                     selectedStudentId === student.id
-                                        ? "bg-indigo-50/80 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800 shadow-sm"
-                                        : "bg-[var(--md-sys-color-surface)] border-transparent hover:border-indigo-200 dark:hover:border-indigo-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/30"
+                                        ? "bg-indigo-50/80 dark:bg-indigo-950/30 border-indigo-200 dark:border-indigo-850 shadow-md scale-[1.01]"
+                                        : "bg-[var(--md-sys-color-surface)]/40 border-[var(--md-sys-color-outline)]/40 hover:border-indigo-200/50 dark:hover:border-indigo-800/40 hover:bg-[var(--md-sys-color-surface)]/70 hover:shadow-sm"
                                 )}
                             >
                                 {/* Selection Indicator */}
                                 {selectedStudentId === student.id && (
-                                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500 rounded-l-xl" />
+                                    <div className="absolute left-0 top-0 bottom-0 w-1.5 bg-gradient-to-b from-indigo-500 to-violet-600 rounded-l-xl" />
                                 )}
 
                                 <div className="relative">
@@ -172,11 +174,11 @@ export const StudentList: React.FC<StudentListProps> = ({
                             </button>
 
                             {/* Quick Actions (Hover State) */}
-                            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none group-hover:pointer-events-auto">
-                                <button className="p-1.5 bg-white dark:bg-slate-800 rounded-lg shadow-md border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-indigo-500 transition-colors" title="Message">
+                            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none group-hover:pointer-events-auto">
+                                <button className="p-1.5 bg-white dark:bg-slate-800 rounded-lg shadow-md border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-indigo-500 transition-all active:scale-90" title="Message">
                                     <MessageSquare size={14} />
                                 </button>
-                                <button className="p-1.5 bg-white dark:bg-slate-800 rounded-lg shadow-md border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-indigo-500 transition-colors" title="Call Guardian">
+                                <button className="p-1.5 bg-white dark:bg-slate-800 rounded-lg shadow-md border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-indigo-500 transition-all active:scale-90" title="Call Guardian">
                                     <Phone size={14} />
                                 </button>
                             </div>
@@ -197,3 +199,4 @@ export const StudentList: React.FC<StudentListProps> = ({
         </div>
     );
 };
+

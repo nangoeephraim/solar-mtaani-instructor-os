@@ -310,14 +310,14 @@ export default function Resources({
                                         placeholder="Search..."
                                         value={searchQuery}
                                         onChange={(e) => setSearchQuery(e.target.value)}
-                                        className="pl-9 pr-3 py-1.5 text-sm bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-lg text-[var(--md-sys-color-on-surface)] w-40 focus:w-56 transition-all focus:ring-2 focus:ring-amber-500 outline-none"
+                                        className="pl-9 pr-3 py-1.5 text-sm bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-lg text-[var(--md-sys-color-on-surface)] w-40 focus:w-56 transition-all outline-none input-glow"
                                     />
                                 </div>
                                 <Filter size={14} className="text-[var(--md-sys-color-secondary)]" />
                                 <select
                                     value={filterType}
                                     onChange={(e) => setFilterType(e.target.value)}
-                                    className="px-3 py-1.5 text-sm bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-lg text-[var(--md-sys-color-on-surface)]"
+                                    className="px-3 py-1.5 text-sm bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-lg text-[var(--md-sys-color-on-surface)] focus:outline-none input-glow transition-all"
                                     aria-label="Filter by resource type"
                                 >
                                     <option value="all">All Types</option>
@@ -328,7 +328,7 @@ export default function Resources({
                                 <select
                                     value={filterStatus}
                                     onChange={(e) => setFilterStatus(e.target.value)}
-                                    className="px-3 py-1.5 text-sm bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-lg text-[var(--md-sys-color-on-surface)]"
+                                    className="px-3 py-1.5 text-sm bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-lg text-[var(--md-sys-color-on-surface)] focus:outline-none input-glow transition-all"
                                     aria-label="Filter by status"
                                 >
                                     <option value="all">All Status</option>
@@ -360,7 +360,7 @@ export default function Resources({
                                             exit={{ opacity: 0, scale: 0.9 }}
                                             transition={{ delay: idx * 0.05 }}
                                             onClick={() => handleOpenDrawer(resource)}
-                                            className="bg-[var(--md-sys-color-surface)] p-6 rounded-2xl border border-[var(--md-sys-color-outline)] shadow-sm hover:shadow-lg transition-all group cursor-pointer hover:border-[var(--md-sys-color-primary)] hover:shadow-[var(--md-sys-color-primary-container)]"
+                                            className="glass-card p-6 shadow-elevation-1 hover:shadow-elevation-3 transition-all group cursor-pointer"
                                         >
                                             <div className="flex items-start justify-between mb-4">
                                                 <div className="flex items-center gap-3">
@@ -511,10 +511,10 @@ export default function Resources({
                                     exit={{ x: '100%' }}
                                     transition={{ type: 'spring', damping: 25, stiffness: 200 }}
                                     onClick={(e) => e.stopPropagation()}
-                                    className="w-full max-w-lg bg-[var(--md-sys-color-surface)] h-full shadow-2xl flex flex-col"
+                                    className="w-full max-w-lg glass-panel h-full shadow-elevation-3 flex flex-col rounded-none rounded-l-3xl border-y-0 border-r-0"
                                 >
                                     {/* Drawer Header */}
-                                    <div className="p-6 border-b border-[var(--md-sys-color-outline)] flex items-center justify-between bg-gradient-to-r from-amber-500 to-orange-500">
+                                    <div className="p-6 border-b border-[var(--md-sys-color-outline)] flex items-center justify-between bg-gradient-to-r from-amber-500 to-orange-500 rounded-tl-3xl">
                                         <div>
                                             <h2 className="text-xl font-bold text-white">{selectedResource.name}</h2>
                                             <p className="text-white/80 text-sm capitalize">{selectedResource.type}</p>
@@ -569,7 +569,7 @@ export default function Resources({
                                                     <input
                                                         type="text"
                                                         disabled={user?.role === 'viewer'}
-                                                        className="w-full px-4 py-2.5 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all text-[var(--md-sys-color-on-surface)] disabled:opacity-70 disabled:bg-gray-50 dark:disabled:bg-gray-800/50"
+                                                        className="w-full px-4 py-2.5 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl focus:outline-none input-glow transition-all text-[var(--md-sys-color-on-surface)] disabled:opacity-70 disabled:bg-gray-50 dark:disabled:bg-gray-800/50 font-google"
                                                         value={editForm.name || ''}
                                                         onChange={e => setEditForm({ ...editForm, name: e.target.value })}
                                                         aria-label="Resource Name"
@@ -612,7 +612,7 @@ export default function Resources({
                                                                 type="number"
                                                                 min="0"
                                                                 disabled={user?.role === 'viewer'}
-                                                                className="w-full pl-9 pr-4 py-2.5 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all text-[var(--md-sys-color-on-surface)] disabled:opacity-70 disabled:bg-gray-50 dark:disabled:bg-gray-800/50"
+                                                                className="w-full pl-9 pr-4 py-2.5 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl focus:outline-none input-glow transition-all text-[var(--md-sys-color-on-surface)] disabled:opacity-70 disabled:bg-gray-50 dark:disabled:bg-gray-800/50 font-google"
                                                                 value={editForm.capacity || ''}
                                                                 onChange={e => setEditForm({ ...editForm, capacity: e.target.value ? parseInt(e.target.value) : undefined })}
                                                                 aria-label="Capacity"
@@ -626,7 +626,7 @@ export default function Resources({
                                                             <input
                                                                 type="text"
                                                                 disabled={user?.role === 'viewer'}
-                                                                className="w-full pl-9 pr-4 py-2.5 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all text-[var(--md-sys-color-on-surface)] disabled:opacity-70 disabled:bg-gray-50 dark:disabled:bg-gray-800/50"
+                                                                className="w-full pl-9 pr-4 py-2.5 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl focus:outline-none input-glow transition-all text-[var(--md-sys-color-on-surface)] disabled:opacity-70 disabled:bg-gray-50 dark:disabled:bg-gray-800/50 font-google"
                                                                 value={editForm.location || ''}
                                                                 onChange={e => setEditForm({ ...editForm, location: e.target.value })}
                                                                 aria-label="Location"
@@ -669,7 +669,7 @@ export default function Resources({
                                                     <textarea
                                                         rows={4}
                                                         disabled={user?.role === 'viewer'}
-                                                        className="w-full px-4 py-2.5 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all text-[var(--md-sys-color-on-surface)] resize-none disabled:opacity-70 disabled:bg-gray-50 dark:disabled:bg-gray-800/50"
+                                                        className="w-full px-4 py-2.5 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl focus:outline-none input-glow transition-all text-[var(--md-sys-color-on-surface)] resize-none disabled:opacity-70 disabled:bg-gray-50 dark:disabled:bg-gray-800/50 font-google"
                                                         placeholder="Add notes about this resource..."
                                                         value={editForm.notes || ''}
                                                         onChange={e => setEditForm({ ...editForm, notes: e.target.value })}
@@ -818,9 +818,9 @@ export default function Resources({
                                     initial={{ scale: 0.95, opacity: 0 }}
                                     animate={{ scale: 1, opacity: 1 }}
                                     exit={{ scale: 0.95, opacity: 0 }}
-                                    className="bg-[var(--md-sys-color-surface)] rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
+                                    className="glass-panel shadow-elevation-3 w-full max-w-lg overflow-hidden"
                                 >
-                                    <div className="p-6 border-b border-[var(--md-sys-color-outline)] flex justify-between items-center bg-[var(--md-sys-color-surface-variant)]">
+                                    <div className="p-6 border-b border-[var(--md-sys-color-outline)] flex justify-between items-center bg-[var(--md-sys-color-surface-variant)] rounded-t-3xl">
                                         <h3 className="text-lg font-bold text-[var(--md-sys-color-on-surface)]">Add New Resource</h3>
                                         <button
                                             onClick={() => setShowAddModal(false)}
@@ -837,7 +837,7 @@ export default function Resources({
                                             <input
                                                 autoFocus
                                                 type="text"
-                                                className="w-full px-4 py-2.5 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all text-[var(--md-sys-color-on-surface)]"
+                                                className="w-full px-4 py-2.5 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl focus:outline-none input-glow transition-all text-[var(--md-sys-color-on-surface)] font-google"
                                                 placeholder="e.g. Projector A, Lab 1"
                                                 value={newResource.name}
                                                 onChange={e => setNewResource({ ...newResource, name: e.target.value })}
@@ -876,7 +876,7 @@ export default function Resources({
                                                     <input
                                                         type="number"
                                                         min="0"
-                                                        className="w-full pl-9 pr-4 py-2.5 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all text-[var(--md-sys-color-on-surface)]"
+                                                        className="w-full pl-9 pr-4 py-2.5 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl focus:outline-none input-glow transition-all text-[var(--md-sys-color-on-surface)] font-google"
                                                         placeholder="e.g. 30"
                                                         value={newResource.capacity || ''}
                                                         onChange={e => setNewResource({ ...newResource, capacity: e.target.value ? parseInt(e.target.value) : undefined })}
@@ -889,7 +889,7 @@ export default function Resources({
                                                     <MapPin size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--md-sys-color-secondary)]" />
                                                     <input
                                                         type="text"
-                                                        className="w-full pl-9 pr-4 py-2.5 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all text-[var(--md-sys-color-on-surface)]"
+                                                        className="w-full pl-9 pr-4 py-2.5 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl focus:outline-none input-glow transition-all text-[var(--md-sys-color-on-surface)] font-google"
                                                         placeholder="e.g. Building A"
                                                         value={newResource.location || ''}
                                                         onChange={e => setNewResource({ ...newResource, location: e.target.value })}
@@ -929,7 +929,7 @@ export default function Resources({
                                             </label>
                                             <textarea
                                                 rows={3}
-                                                className="w-full px-4 py-2.5 bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-amber-500 outline-none transition-all text-[var(--md-sys-color-on-surface)] resize-none"
+                                                className="w-full px-4 py-2.5 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl focus:outline-none input-glow transition-all text-[var(--md-sys-color-on-surface)] resize-none font-google"
                                                 placeholder="Add notes about this resource..."
                                                 value={newResource.notes || ''}
                                                 onChange={e => setNewResource({ ...newResource, notes: e.target.value })}

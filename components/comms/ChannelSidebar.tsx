@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ChatMessage } from '../../types';
 import { useAuth } from '../../contexts/AuthContext';
 import { getAvatarStyle } from './helpers';
-import { Hash, Megaphone, MessageSquare, Pin, Search, Users, X, ChevronRight, Menu, UserPlus, User, Video } from 'lucide-react';
+import { Hash, Megaphone, MessageSquare, Pin, Search, Users, X, ChevronRight, Menu, UserPlus, User, Video, ChevronLeft } from 'lucide-react';
 import clsx from 'clsx';
 
 /* ─── Channel Sidebar ─── */
@@ -21,9 +21,11 @@ interface ChannelSidebarProps {
     onToggle: () => void;
     avatarMap: Record<string, string>;
     userProfileMap: Record<string, { name: string; avatarUrl: string | null }>;
+    onNavigate?: (view: string) => void;
+    mobileView?: 'list' | 'chat';
 }
 
-export function ChannelSidebar({ channels, activeChannelId, onSelectChannel, onCreateChannel, onStartDM, onDeleteChannel, getUnreadCount, isAdmin, user, isOpen, onToggle, avatarMap, userProfileMap }: ChannelSidebarProps) {
+export function ChannelSidebar({ channels, activeChannelId, onSelectChannel, onCreateChannel, onStartDM, onDeleteChannel, getUnreadCount, isAdmin, user, isOpen, onToggle, avatarMap, userProfileMap, onNavigate, mobileView = 'list' }: ChannelSidebarProps) {
     const broadcasts = channels.filter(c => c.type === 'announcement');
     const chats = channels.filter(c => c.type === 'chat');
     const dms = channels.filter(c => c.type === 'dm');
@@ -32,6 +34,15 @@ export function ChannelSidebar({ channels, activeChannelId, onSelectChannel, onC
         <>
             {/* Header */}
             <div className="p-5 flex items-center gap-3" style={{ borderBottom: '1px solid var(--md-sys-color-outline-variant)' }}>
+                {onNavigate && (
+                    <button
+                        onClick={() => onNavigate('dashboard')}
+                        className="lg:hidden p-2 rounded-xl hover:bg-[var(--md-sys-color-surface-variant)] transition-colors -ml-2"
+                        title="Back to dashboard"
+                    >
+                        <ChevronLeft size={20} style={{ color: 'var(--md-sys-color-on-surface)' }} />
+                    </button>
+                )}
                 <div className="w-9 h-9 rounded-xl flex items-center justify-center shadow-sm" style={{ background: 'var(--md-sys-color-primary)' }}>
                     <MessageSquare size={17} className="text-white" />
                 </div>
@@ -175,12 +186,15 @@ export function ChannelSidebar({ channels, activeChannelId, onSelectChannel, onC
 
     return (
         <>
-            {/* Desktop Sidebar */}
-            <div className="hidden lg:flex w-72 flex-col flex-shrink-0 sidebar-glass z-20" style={{ borderRight: '1px solid var(--md-sys-color-outline-variant)' }}>
+            {/* Main Sidebar (Desktop sidebar or Mobile full screen list view) */}
+            <div className={clsx(
+                "w-full lg:w-72 flex-col flex-shrink-0 sidebar-glass z-20 h-full",
+                mobileView === 'list' ? 'flex' : 'hidden lg:flex'
+            )} style={{ borderRight: '1px solid var(--md-sys-color-outline-variant)' }}>
                 {sidebarContent}
             </div>
 
-            {/* Mobile Sidebar (Slide drawer) */}
+            {/* Mobile Sidebar (Slide drawer fallback) */}
             <AnimatePresence>
                 {isOpen && (
                     <>

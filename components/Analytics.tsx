@@ -786,7 +786,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                     >
                         {/* Subject Performance Comparison */}
                         <ChartCard title="Program Performance" icon={<Zap size={18} />} delay={0.1} className="lg:col-span-2">
-                            <div className="grid grid-cols-2 gap-4 mb-6">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                                 {subjectData.map((subject, idx) => (
                                     <motion.div
                                         key={subject.name}
@@ -1072,7 +1072,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                         </ChartCard>
 
                         {/* Grade Attendance Breakdown */}
-                        <div className="grid grid-cols-5 gap-4">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
                             {gradeData.map((grade, idx) => (
                                 <motion.div
                                     key={grade.grade}

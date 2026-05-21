@@ -60,20 +60,20 @@ const StatCard: React.FC<{
 }> = ({ title, value, suffix = '', icon, color, trend, delay = 0 }) => {
     const animatedValue = useAnimatedCounter(value, 1500);
 
-    const gradients = {
-        violet: 'from-violet-500 to-purple-600',
-        green: 'from-green-500 to-emerald-600',
-        orange: 'from-orange-500 to-amber-600',
-        blue: 'from-blue-500 to-indigo-600',
-        red: 'from-red-500 to-rose-600'
+    const glows = {
+        violet: 'shadow-violet-500/5 border-violet-500/20 hover:border-violet-500/40',
+        green: 'shadow-emerald-500/5 border-emerald-500/20 hover:border-emerald-500/40',
+        orange: 'shadow-orange-500/5 border-orange-500/20 hover:border-orange-500/40',
+        blue: 'shadow-blue-500/5 border-blue-500/20 hover:border-blue-500/40',
+        red: 'shadow-red-500/5 border-red-500/20 hover:border-red-500/40'
     };
 
-    const bgColors = {
-        violet: 'from-violet-50 to-purple-50 border-violet-100 dark:from-violet-900/20 dark:to-purple-900/20 dark:border-violet-800',
-        green: 'from-green-50 to-emerald-50 border-green-100 dark:from-green-900/20 dark:to-emerald-900/20 dark:border-green-800',
-        orange: 'from-orange-50 to-amber-50 border-orange-100 dark:from-orange-900/20 dark:to-amber-900/20 dark:border-orange-800',
-        blue: 'from-blue-50 to-indigo-50 border-blue-100 dark:from-blue-900/20 dark:to-indigo-900/20 dark:border-blue-800',
-        red: 'from-red-50 to-rose-50 border-red-100 dark:from-red-900/20 dark:to-rose-900/20 dark:border-red-800'
+    const iconBgs = {
+        violet: 'bg-violet-500/15 text-violet-500 dark:bg-violet-500/25 dark:text-violet-400',
+        green: 'bg-emerald-500/15 text-emerald-500 dark:bg-emerald-500/25 dark:text-emerald-400',
+        orange: 'bg-orange-500/15 text-orange-500 dark:bg-orange-500/25 dark:text-orange-400',
+        blue: 'bg-blue-500/15 text-blue-500 dark:bg-blue-500/25 dark:text-blue-400',
+        red: 'bg-red-500/15 text-red-500 dark:bg-red-500/25 dark:text-red-400'
     };
 
     return (
@@ -82,12 +82,13 @@ const StatCard: React.FC<{
             animate={{ opacity: 1, y: 0, scale: 1 }}
             transition={{ delay, type: 'spring', stiffness: 300 }}
             className={clsx(
-                "bg-gradient-to-br rounded-2xl p-5 border relative overflow-hidden",
-                bgColors[color]
+                "glass-card p-5 relative overflow-hidden transition-all duration-300 hover:scale-[1.03] hover:-translate-y-1 shadow-lg",
+                glows[color]
             )}
         >
+            <div className="absolute -top-12 -right-12 w-24 h-24 bg-gradient-to-br opacity-[0.03] rounded-full blur-2xl" />
             <motion.div
-                className={clsx("p-2.5 rounded-xl bg-gradient-to-br text-white w-fit shadow-lg", gradients[color])}
+                className={clsx("p-2.5 rounded-xl w-fit flex items-center justify-center shadow-sm", iconBgs[color])}
                 whileHover={{ scale: 1.1, rotate: 10 }}
                 transition={{ type: 'spring', stiffness: 400 }}
             >
@@ -101,8 +102,8 @@ const StatCard: React.FC<{
                 {suffix && <span className="text-sm font-bold text-[var(--md-sys-color-outline)]">{suffix}</span>}
                 {trend !== undefined && (
                     <span className={clsx(
-                        "text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-0.5 ml-auto",
-                        trend >= 0 ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                        "text-xs font-bold px-2 py-0.5 rounded-full flex items-center gap-0.5 ml-auto border",
+                        trend >= 0 ? "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/10" : "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/10"
                     )}>
                         {trend >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
                         {trend >= 0 ? '+' : ''}{trend.toFixed(1)}
@@ -428,7 +429,7 @@ const StudentAnalytics: React.FC<StudentAnalyticsProps> = ({ data, studentId, on
                     </div>
 
                     {/* Date Filter */}
-                    <div className="flex items-center gap-2 bg-slate-800 border border-slate-700/50 rounded-xl px-3 py-2 shadow-sm text-white w-full lg:w-auto justify-center lg:justify-end">
+                    <div className="flex items-center gap-2 bg-slate-900/40 border border-slate-700/50 rounded-xl px-3 py-2 shadow-sm text-white w-full lg:w-auto justify-center lg:justify-end input-glow">
                         <Calendar size={14} className="text-indigo-400" />
                         <input
                             type="date"
@@ -470,11 +471,11 @@ const StudentAnalytics: React.FC<StudentAnalyticsProps> = ({ data, studentId, on
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.05 }}
                         >
-                            <div className="bg-gradient-to-br from-emerald-50 to-green-50 dark:from-emerald-900/20 dark:to-green-900/20 rounded-2xl border border-emerald-100 dark:border-emerald-800 p-5 shadow-sm">
-                                <h3 className="font-bold text-emerald-900 dark:text-emerald-100 text-sm mb-2 flex items-center gap-2">
-                                    <Sparkles size={16} className="text-emerald-600 dark:text-emerald-400" /> Strengths
+                            <div className="glass-card border border-emerald-500/20 dark:border-emerald-500/10 shadow-sm shadow-emerald-500/5 p-5 transition-transform duration-300 hover:scale-[1.01]">
+                                <h3 className="font-bold text-emerald-600 dark:text-emerald-400 text-sm mb-2 flex items-center gap-2">
+                                    <Sparkles size={16} /> Strengths
                                 </h3>
-                                <p className="text-xs text-emerald-800/80 dark:text-emerald-200/80 leading-relaxed">
+                                <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] leading-relaxed">
                                     {studentAvg >= classAvg ? (
                                         <>Performing <span className="font-bold">above class average</span> (+{(studentAvg - classAvg).toFixed(1)} pts). Shows exceptional mastery in practical skills.</>
                                     ) : (
@@ -483,13 +484,13 @@ const StudentAnalytics: React.FC<StudentAnalyticsProps> = ({ data, studentId, on
                                 </p>
                             </div>
 
-                            <div className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-2xl border border-amber-100 dark:border-amber-800 p-5 shadow-sm">
-                                <h3 className="font-bold text-amber-900 dark:text-amber-100 text-sm mb-2 flex items-center gap-2">
-                                    <AlertTriangle size={16} className="text-amber-600 dark:text-amber-400" /> Areas of Concern
+                            <div className="glass-card border border-amber-500/20 dark:border-amber-500/10 shadow-sm shadow-amber-500/5 p-5 transition-transform duration-300 hover:scale-[1.01]">
+                                <h3 className="font-bold text-amber-600 dark:text-amber-400 text-sm mb-2 flex items-center gap-2">
+                                    <AlertTriangle size={16} /> Areas of Concern
                                 </h3>
-                                <p className="text-xs text-amber-800/80 dark:text-amber-200/80 leading-relaxed">
+                                <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] leading-relaxed">
                                     {dynamicAttendancePct < 85 ? (
-                                        <>Attendance has dropped to <span className="font-bold text-red-600 dark:text-red-400">{dynamicAttendancePct}%</span> in the selected period. This may impact upcoming assessments.</>
+                                        <>Attendance has dropped to <span className="font-bold text-red-500 dark:text-red-400">{dynamicAttendancePct}%</span> in the selected period. This may impact upcoming assessments.</>
                                     ) : studentAvg < classAvg ? (
                                         <>Theoretical understanding is lagging behind practical performance.</>
                                     ) : (
@@ -498,11 +499,11 @@ const StudentAnalytics: React.FC<StudentAnalyticsProps> = ({ data, studentId, on
                                 </p>
                             </div>
 
-                            <div className="bg-gradient-to-br from-indigo-50 to-violet-50 dark:from-indigo-900/20 dark:to-violet-900/20 rounded-2xl border border-indigo-100 dark:border-indigo-800 p-5 shadow-sm">
-                                <h3 className="font-bold text-indigo-900 dark:text-indigo-100 text-sm mb-2 flex items-center gap-2">
-                                    <Target size={16} className="text-indigo-600 dark:text-indigo-400" /> Recommended Action
+                            <div className="glass-card border border-indigo-500/20 dark:border-indigo-500/10 shadow-sm shadow-indigo-500/5 p-5 transition-transform duration-300 hover:scale-[1.01]">
+                                <h3 className="font-bold text-indigo-600 dark:text-indigo-400 text-sm mb-2 flex items-center gap-2">
+                                    <Target size={16} /> Recommended Action
                                 </h3>
-                                <p className="text-xs text-indigo-800/80 dark:text-indigo-200/80 leading-relaxed">
+                                <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] leading-relaxed">
                                     {studentAvg >= classAvg ? (
                                         <>Consider assigning advanced peer-mentoring roles or challenging supplementary projects.</>
                                     ) : (
@@ -554,46 +555,46 @@ const StudentAnalytics: React.FC<StudentAnalyticsProps> = ({ data, studentId, on
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             {/* Radar Chart */}
                             <motion.div
-                                className="bg-[var(--md-sys-color-surface)] rounded-2xl border border-[var(--md-sys-color-outline)] shadow-sm p-6"
+                                className="glass-card p-6 shadow-lg border border-[var(--md-sys-color-outline)]/10 hover:scale-[1.01] transition-transform duration-300"
                                 initial={{ opacity: 0, scale: 0.95 }}
                                 animate={{ opacity: 1, scale: 1 }}
                                 transition={{ delay: 0.2 }}
                             >
                                 <h3 className="font-google font-bold text-[var(--md-sys-color-on-surface)] flex items-center gap-2 mb-4">
-                                    <Target className="text-violet-500 dark:text-violet-400" size={18} />
+                                    <Target className="text-indigo-500 dark:text-indigo-400" size={18} />
                                     Competency Profile vs Class
                                 </h3>
                                 <div className="h-72">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
-                                            <PolarGrid stroke="var(--md-sys-color-outline)" />
+                                            <PolarGrid stroke="var(--md-sys-color-outline)" opacity={0.2} />
                                             <PolarAngleAxis dataKey="skill" tick={{ fill: 'var(--md-sys-color-secondary)', fontSize: 11 }} />
                                             <PolarRadiusAxis angle={30} domain={[0, 4]} tick={false} axisLine={false} />
                                             <Tooltip
-                                                contentStyle={{ backgroundColor: 'var(--md-sys-color-surface)', borderColor: 'var(--md-sys-color-outline)', borderRadius: '12px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }}
+                                                contentStyle={{ backgroundColor: 'var(--md-sys-color-surface-container)', borderColor: 'var(--md-sys-color-outline)', borderRadius: '12px', backdropFilter: 'blur(8px)', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.2)' }}
                                                 itemStyle={{ fontWeight: 'bold' }}
                                                 labelStyle={{ color: 'var(--md-sys-color-on-surface)', fontWeight: 'bold', marginBottom: '8px', borderBottom: '1px solid var(--md-sys-color-outline)', paddingBottom: '4px' }}
                                             />
-                                            <Radar name="Student" dataKey="student" stroke="#8b5cf6" fill="#8b5cf6" fillOpacity={0.4} strokeWidth={2} activeDot={{ r: 6, fill: '#8b5cf6', stroke: 'white', strokeWidth: 2 }} />
-                                            <Radar name="Class Avg" dataKey="class" stroke="#10b981" fill="#10b981" fillOpacity={0.15} strokeDasharray="5 5" activeDot={{ r: 6, fill: '#10b981', stroke: 'white', strokeWidth: 2 }} />
+                                            <Radar name="Student" dataKey="student" stroke="#6366f1" fill="#6366f1" fillOpacity={0.4} strokeWidth={2} activeDot={{ r: 6, fill: '#6366f1', stroke: 'white', strokeWidth: 2 }} />
+                                            <Radar name="Class Avg" dataKey="class" stroke="#06b6d4" fill="#06b6d4" fillOpacity={0.15} strokeDasharray="5 5" activeDot={{ r: 6, fill: '#06b6d4', stroke: 'white', strokeWidth: 2 }} />
                                         </RadarChart>
                                     </ResponsiveContainer>
                                 </div>
                                 <div className="flex justify-center gap-6 mt-2 text-xs text-[var(--md-sys-color-secondary)]">
-                                    <span className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-violet-500" /> {student.name}</span>
-                                    <span className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-green-500 opacity-50" /> Class Average</span>
+                                    <span className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-indigo-500" /> {student.name}</span>
+                                    <span className="flex items-center gap-2"><span className="w-3 h-3 rounded bg-cyan-500 opacity-50" /> Class Average</span>
                                 </div>
                             </motion.div>
 
                             {/* Progress Timeline */}
                             <motion.div
-                                className="bg-[var(--md-sys-color-surface)] rounded-2xl border border-[var(--md-sys-color-outline)] shadow-sm p-6"
+                                className="glass-card p-6 shadow-lg border border-[var(--md-sys-color-outline)]/10 hover:scale-[1.01] transition-transform duration-300"
                                 initial={{ opacity: 0, scale: 0.95 }}
                                 animate={{ opacity: 1, scale: 1 }}
                                 transition={{ delay: 0.3 }}
                             >
                                 <h3 className="font-google font-bold text-[var(--md-sys-color-on-surface)] flex items-center gap-2 mb-4">
-                                    <Activity className="text-violet-500 dark:text-violet-400" size={18} />
+                                    <Activity className="text-indigo-500 dark:text-indigo-400" size={18} />
                                     Attendance Trend
                                 </h3>
                                 <div className="h-72">
@@ -601,31 +602,32 @@ const StudentAnalytics: React.FC<StudentAnalyticsProps> = ({ data, studentId, on
                                         <AreaChart data={attendanceTrendData}>
                                             <defs>
                                                 <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                                                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                                                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
+                                                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
                                                 </linearGradient>
                                             </defs>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="var(--md-sys-color-outline)" />
-                                            <XAxis dataKey="period" tick={{ fill: 'var(--md-sys-color-secondary)', fontSize: 12 }} />
-                                            <YAxis domain={[0, 100]} tick={{ fill: 'var(--md-sys-color-secondary)', fontSize: 12 }} />
+                                            <CartesianGrid strokeDasharray="3 3" stroke="var(--md-sys-color-outline)" opacity={0.2} vertical={false} />
+                                            <XAxis dataKey="period" tick={{ fill: 'var(--md-sys-color-secondary)', fontSize: 12 }} axisLine={false} tickLine={false} />
+                                            <YAxis domain={[0, 100]} tick={{ fill: 'var(--md-sys-color-secondary)', fontSize: 12 }} axisLine={false} tickLine={false} />
                                             <Tooltip
                                                 contentStyle={{
-                                                    background: 'var(--md-sys-color-surface)',
+                                                    background: 'var(--md-sys-color-surface-container)',
                                                     border: '1px solid var(--md-sys-color-outline)',
                                                     borderRadius: '12px',
                                                     color: 'var(--md-sys-color-on-surface)',
-                                                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                                                    backdropFilter: 'blur(8px)',
+                                                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.2)'
                                                 }}
                                             />
                                             <Area
                                                 type="monotone"
                                                 dataKey="rate"
-                                                stroke="#8b5cf6"
+                                                stroke="#6366f1"
                                                 strokeWidth={3}
                                                 fillOpacity={1}
                                                 fill="url(#colorScore)"
-                                                dot={{ fill: '#8b5cf6', strokeWidth: 2, r: 4 }}
-                                                activeDot={{ r: 6, fill: '#8b5cf6' }}
+                                                dot={{ fill: '#6366f1', strokeWidth: 2, r: 4 }}
+                                                activeDot={{ r: 6, fill: '#6366f1' }}
                                             />
                                         </AreaChart>
                                     </ResponsiveContainer>
@@ -635,13 +637,13 @@ const StudentAnalytics: React.FC<StudentAnalyticsProps> = ({ data, studentId, on
 
                         {/* Competency Distribution Pie */}
                         <motion.div
-                            className="bg-[var(--md-sys-color-surface)] rounded-2xl border border-[var(--md-sys-color-outline)] shadow-sm p-6"
+                            className="glass-card p-6 shadow-lg border border-[var(--md-sys-color-outline)]/10 hover:scale-[1.01] transition-transform duration-300"
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: 0.4 }}
                         >
                             <h3 className="font-google font-bold text-[var(--md-sys-color-on-surface)] flex items-center gap-2 mb-4">
-                                <Award className="text-violet-500 dark:text-violet-400" size={18} />
+                                <Award className="text-indigo-500 dark:text-indigo-400" size={18} />
                                 Competency Level Distribution
                             </h3>
                             <div className="flex flex-col lg:flex-row items-center justify-between gap-6">
@@ -652,8 +654,8 @@ const StudentAnalytics: React.FC<StudentAnalyticsProps> = ({ data, studentId, on
                                                 data={competencyDistribution}
                                                 cx="50%"
                                                 cy="50%"
-                                                innerRadius={40}
-                                                outerRadius={70}
+                                                innerRadius={50}
+                                                outerRadius={75}
                                                 paddingAngle={4}
                                                 dataKey="value"
                                             >
@@ -661,6 +663,15 @@ const StudentAnalytics: React.FC<StudentAnalyticsProps> = ({ data, studentId, on
                                                     <Cell key={`cell-${index}`} fill={entry.color} />
                                                 ))}
                                             </Pie>
+                                            <Tooltip
+                                                contentStyle={{
+                                                    background: 'var(--md-sys-color-surface-container)',
+                                                    border: '1px solid var(--md-sys-color-outline)',
+                                                    borderRadius: '12px',
+                                                    color: 'var(--md-sys-color-on-surface)',
+                                                    backdropFilter: 'blur(8px)'
+                                                }}
+                                            />
                                         </PieChart>
                                     </ResponsiveContainer>
                                 </div>
@@ -711,7 +722,7 @@ const StudentAnalytics: React.FC<StudentAnalyticsProps> = ({ data, studentId, on
                             </button>
                         </div>
 
-                        <div className="bg-[var(--md-sys-color-surface)] rounded-2xl border border-[var(--md-sys-color-outline)] shadow-sm p-6">
+                        <div className="glass-card p-6 shadow-lg border border-[var(--md-sys-color-outline)]/10">
                             <h3 className="font-google font-bold text-[var(--md-sys-color-on-surface)] flex items-center gap-2 mb-6">
                                 <BookOpen className="text-violet-500 dark:text-violet-400" size={18} />
                                 Detailed Competency Breakdown
@@ -729,12 +740,12 @@ const StudentAnalytics: React.FC<StudentAnalyticsProps> = ({ data, studentId, on
                                             initial={{ opacity: 0, x: -20 }}
                                             animate={{ opacity: 1, x: 0 }}
                                             transition={{ delay: index * 0.05 }}
-                                            className="p-4 bg-[var(--md-sys-color-surface-variant)] rounded-xl border border-[var(--md-sys-color-outline)]"
+                                            className="p-4 glass-panel hover:scale-[1.01] transition-transform duration-300"
                                         >
                                             <div className="flex items-center justify-between mb-3">
                                                 <div className="flex items-center gap-3">
                                                     <div className={clsx(
-                                                        "w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm",
+                                                        "w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm shadow-md",
                                                         COMPETENCY_COLORS[value as 1 | 2 | 3 | 4]
                                                     )}>
                                                         {value}
@@ -745,23 +756,23 @@ const StudentAnalytics: React.FC<StudentAnalyticsProps> = ({ data, studentId, on
                                                     </div>
                                                 </div>
                                                 <div className={clsx(
-                                                    "px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1",
-                                                    diff >= 0 ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400" : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                                                    "px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 border",
+                                                    diff >= 0 ? "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/10" : "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/10"
                                                 )}>
                                                     {diff >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
                                                     {diff >= 0 ? '+' : ''}{diff.toFixed(1)} vs class
                                                 </div>
                                             </div>
-                                            <div className="w-full h-3 bg-[var(--md-sys-color-surface-container-highest)] rounded-full overflow-hidden">
+                                            <div className="w-full h-2.5 bg-[var(--md-sys-color-surface-container-highest)]/40 rounded-full overflow-hidden">
                                                 <motion.div
                                                     initial={{ width: 0 }}
                                                     animate={{ width: `${(value / 4) * 100}%` }}
                                                     transition={{ delay: 0.3 + index * 0.05, duration: 0.8, type: 'spring' }}
                                                     className={clsx(
-                                                        "h-full rounded-full",
-                                                        value === 4 ? "bg-emerald-500" :
-                                                            value === 3 ? "bg-blue-500" :
-                                                                value === 2 ? "bg-amber-500" : "bg-rose-500"
+                                                        "h-full rounded-full bg-gradient-to-r",
+                                                        value === 4 ? "from-emerald-500 to-teal-400" :
+                                                            value === 3 ? "from-blue-500 to-cyan-400" :
+                                                                value === 2 ? "from-amber-500 to-orange-400" : "from-rose-500 to-red-400"
                                                     )}
                                                 />
                                             </div>
@@ -786,39 +797,39 @@ const StudentAnalytics: React.FC<StudentAnalyticsProps> = ({ data, studentId, on
                             <motion.div
                                 initial={{ scale: 0 }}
                                 animate={{ scale: 1 }}
-                                className="bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 p-6 rounded-2xl border border-green-100 dark:border-green-800 text-center"
+                                className="glass-card border border-green-500/20 shadow-green-500/5 p-6 rounded-2xl text-center hover:scale-[1.02] transition-transform duration-300"
                             >
                                 <CheckCircle className="text-green-500 mx-auto mb-2" size={28} />
                                 <p className="text-3xl font-black text-green-600 dark:text-green-400">{sessionsAttended}</p>
-                                <p className="text-xs font-bold text-green-700 dark:text-green-300 uppercase">Present</p>
+                                <p className="text-xs font-bold text-green-700 dark:text-green-300 uppercase tracking-wider">Present</p>
                             </motion.div>
                             <motion.div
                                 initial={{ scale: 0 }}
                                 animate={{ scale: 1 }}
                                 transition={{ delay: 0.1 }}
-                                className="bg-gradient-to-br from-red-50 to-rose-50 dark:from-red-900/20 dark:to-rose-900/20 p-6 rounded-2xl border border-red-100 dark:border-red-800 text-center"
+                                className="glass-card border border-red-500/20 shadow-red-500/5 p-6 rounded-2xl text-center hover:scale-[1.02] transition-transform duration-300"
                             >
                                 <XCircle className="text-red-500 mx-auto mb-2" size={28} />
                                 <p className="text-3xl font-black text-red-500 dark:text-red-400">
                                     {periodAttendanceHistory.filter(h => h.status === 'absent').length}
                                 </p>
-                                <p className="text-xs font-bold text-red-700 dark:text-red-300 uppercase">Absent</p>
+                                <p className="text-xs font-bold text-red-700 dark:text-red-300 uppercase tracking-wider">Absent</p>
                             </motion.div>
                             <motion.div
                                 initial={{ scale: 0 }}
                                 animate={{ scale: 1 }}
                                 transition={{ delay: 0.2 }}
-                                className="bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20 p-6 rounded-2xl border border-violet-100 dark:border-violet-800 text-center"
+                                className="glass-card border border-violet-500/20 shadow-violet-500/5 p-6 rounded-2xl text-center hover:scale-[1.02] transition-transform duration-300"
                             >
                                 <BarChart3 className="text-violet-500 mx-auto mb-2" size={28} />
                                 <p className="text-3xl font-black text-violet-600 dark:text-violet-400">{dynamicAttendancePct}%</p>
-                                <p className="text-xs font-bold text-violet-700 dark:text-violet-300 uppercase">Rate</p>
+                                <p className="text-xs font-bold text-violet-700 dark:text-violet-300 uppercase tracking-wider">Rate</p>
                             </motion.div>
                         </div>
 
                         {/* Attendance Trend Chart */}
                         <motion.div
-                            className="bg-[var(--md-sys-color-surface)] rounded-2xl border border-[var(--md-sys-color-outline)] shadow-sm p-6"
+                            className="glass-card p-6 shadow-lg border border-[var(--md-sys-color-outline)]/10"
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             transition={{ delay: 0.2 }}
@@ -836,11 +847,11 @@ const StudentAnalytics: React.FC<StudentAnalyticsProps> = ({ data, studentId, on
                                                 <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
                                             </linearGradient>
                                         </defs>
-                                        <CartesianGrid strokeDasharray="3 3" stroke="var(--md-sys-color-outline)" />
-                                        <XAxis dataKey="period" tick={{ fill: 'var(--md-sys-color-secondary)', fontSize: 11 }} />
-                                        <YAxis domain={[0, 100]} tick={{ fill: 'var(--md-sys-color-secondary)', fontSize: 11 }} />
+                                        <CartesianGrid strokeDasharray="3 3" stroke="var(--md-sys-color-outline)" opacity={0.2} vertical={false} />
+                                        <XAxis dataKey="period" tick={{ fill: 'var(--md-sys-color-secondary)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                                        <YAxis domain={[0, 100]} tick={{ fill: 'var(--md-sys-color-secondary)', fontSize: 11 }} axisLine={false} tickLine={false} />
                                         <Tooltip
-                                            contentStyle={{ background: 'var(--md-sys-color-surface)', border: '1px solid var(--md-sys-color-outline)', borderRadius: '12px', color: 'var(--md-sys-color-on-surface)' }}
+                                            contentStyle={{ background: 'var(--md-sys-color-surface-container)', border: '1px solid var(--md-sys-color-outline)', borderRadius: '12px', color: 'var(--md-sys-color-on-surface)', backdropFilter: 'blur(8px)' }}
                                             formatter={(value: number) => [`${value}%`, 'Attendance']}
                                         />
                                         <Area type="monotone" dataKey="rate" stroke="#22c55e" strokeWidth={2.5} fillOpacity={1} fill="url(#attGrad)" dot={{ fill: '#22c55e', r: 3 }} />
@@ -851,7 +862,7 @@ const StudentAnalytics: React.FC<StudentAnalyticsProps> = ({ data, studentId, on
 
                         {/* Attendance History Log */}
                         <motion.div
-                            className="bg-[var(--md-sys-color-surface)] rounded-2xl border border-[var(--md-sys-color-outline)] shadow-sm p-6"
+                            className="glass-card p-6 shadow-lg"
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             transition={{ delay: 0.3 }}
@@ -861,10 +872,10 @@ const StudentAnalytics: React.FC<StudentAnalyticsProps> = ({ data, studentId, on
                                 Attendance History Log
                                 <span className="ml-auto text-xs font-normal text-[var(--md-sys-color-secondary)]">{periodAttendanceHistory.length} records</span>
                             </h3>
-                            <div className="overflow-hidden rounded-xl border border-[var(--md-sys-color-outline)]">
+                            <div className="overflow-hidden rounded-xl border border-[var(--md-sys-color-outline)]/20 glass-panel">
                                 <div className="max-h-[360px] overflow-y-auto custom-scrollbar">
                                     <table className="w-full text-sm">
-                                        <thead className="bg-[var(--md-sys-color-surface-variant)] sticky top-0 z-10">
+                                        <thead className="bg-[var(--md-sys-color-surface-variant)]/40 backdrop-blur-md sticky top-0 z-10 border-b border-[var(--md-sys-color-outline)]/20">
                                             <tr>
                                                 <th className="px-4 py-3 text-left text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase">Date</th>
                                                 <th className="px-4 py-3 text-left text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase">Day</th>
@@ -872,20 +883,20 @@ const StudentAnalytics: React.FC<StudentAnalyticsProps> = ({ data, studentId, on
                                                 <th className="px-4 py-3 text-left text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase">Notes</th>
                                             </tr>
                                         </thead>
-                                        <tbody className="divide-y divide-[var(--md-sys-color-outline)]">
+                                        <tbody className="divide-y divide-[var(--md-sys-color-outline)]/10">
                                             {periodAttendanceHistory.length === 0 ? (
                                                 <tr><td colSpan={4} className="p-8 text-center text-[var(--md-sys-color-secondary)]">No records found in selected date range.</td></tr>
                                             ) : (
                                                 [...periodAttendanceHistory].reverse().map((record, i) => {
                                                     const d = new Date(record.date);
                                                     return (
-                                                        <tr key={i} className="hover:bg-[var(--md-sys-color-surface-variant)]/50 transition-colors">
+                                                        <tr key={i} className="hover:bg-[var(--md-sys-color-surface-variant)]/20 transition-colors">
                                                             <td className="px-4 py-3 font-medium text-[var(--md-sys-color-on-surface)]">{record.date}</td>
                                                             <td className="px-4 py-3 text-[var(--md-sys-color-secondary)]">{d.toLocaleDateString('en-US', { weekday: 'short' })}</td>
                                                             <td className="px-4 py-3 text-center">
                                                                 <span className={clsx(
-                                                                    "px-2.5 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1",
-                                                                    record.status === 'present' ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400" : "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400"
+                                                                    "px-2.5 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1 border",
+                                                                    record.status === 'present' ? "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/10" : "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/10"
                                                                 )}>
                                                                     {record.status === 'present' ? <CheckCircle size={12} /> : <XCircle size={12} />}
                                                                     {record.status === 'present' ? 'Present' : 'Absent'}
@@ -1260,16 +1271,16 @@ const StudentAnalytics: React.FC<StudentAnalyticsProps> = ({ data, studentId, on
                             </div>
 
                             {/* Action Buttons - Hidden on Print */}
-                            <div className="mt-8 pt-4 border-t border-gray-100 flex justify-end gap-3 print-hidden">
+                            <div className="mt-8 pt-4 border-t border-gray-100 dark:border-slate-800 flex justify-end gap-3 print-hidden">
                                 <button
                                     onClick={handlePrint}
-                                    className="px-5 py-2.5 border border-slate-300 rounded-xl text-sm font-bold hover:bg-slate-50 flex items-center gap-2 text-slate-700 transition-colors"
+                                    className="px-5 py-2.5 border border-slate-300 dark:border-slate-700 rounded-xl text-sm font-bold hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2 text-slate-700 dark:text-slate-300 transition-all active:scale-95"
                                 >
                                     <Printer size={16} /> Print Official Report
                                 </button>
                                 <button
                                     onClick={handleDownloadPDF}
-                                    className="px-5 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-bold shadow-sm hover:shadow-lg hover:bg-slate-800 flex items-center gap-2 transition-all"
+                                    className="px-5 py-2.5 bg-slate-900 dark:bg-slate-100 dark:text-slate-900 text-white rounded-xl text-sm font-bold shadow-sm hover:shadow-lg hover:bg-slate-800 dark:hover:bg-slate-200 flex items-center gap-2 transition-all active:scale-95"
                                 >
                                     <FileText size={16} /> Save as PDF
                                 </button>

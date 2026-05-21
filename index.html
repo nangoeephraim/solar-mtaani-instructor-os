@@ -35,7 +35,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap"
     rel="stylesheet" />
 
   <!-- Favicon -->
@@ -52,9 +52,11 @@
       theme: {
         extend: {
           fontFamily: {
-            sans: ['Inter', 'sans-serif'],
-            google: ['Outfit', 'sans-serif'], // Re-purposing the 'google' class to use Outfit
-            outfit: ['Outfit', 'sans-serif'],
+            sans: ['"Plus Jakarta Sans"', 'sans-serif'],
+            jakarta: ['"Plus Jakarta Sans"', 'sans-serif'],
+            space: ['"Space Grotesk"', 'sans-serif'],
+            google: ['"Space Grotesk"', 'sans-serif'], // Fallback for components currently using font-google
+            outfit: ['"Space Grotesk"', 'sans-serif'], // Fallback for components currently using font-outfit
           }
         }
       }
