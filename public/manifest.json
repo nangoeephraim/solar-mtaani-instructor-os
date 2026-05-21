@@ -10,8 +10,8 @@
         "standalone",
         "minimal-ui"
     ],
-    "background_color": "#f8f9fa",
-    "theme_color": "#1a73e8",
+    "background_color": "#0f172a",
+    "theme_color": "#4f46e5",
     "orientation": "any",
     "icons": [
         {
@@ -43,6 +43,28 @@
             "name": "Students",
             "short_name": "Students",
             "url": "/?view=students",
+            "icons": [
+                {
+                    "src": "/logo.png",
+                    "sizes": "96x96"
+                }
+            ]
+        },
+        {
+            "name": "Schedule",
+            "short_name": "Schedule",
+            "url": "/?view=schedule",
+            "icons": [
+                {
+                    "src": "/logo.png",
+                    "sizes": "96x96"
+                }
+            ]
+        },
+        {
+            "name": "Messages",
+            "short_name": "Messages",
+            "url": "/?view=communications",
             "icons": [
                 {
                     "src": "/logo.png",

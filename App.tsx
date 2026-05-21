@@ -20,7 +20,8 @@ import {
   formatFeePaymentFromDB,
   formatStudentFromDB,
   formatScheduleSlot,
-  formatChannelFromDB
+  formatChannelFromDB,
+  performOfflineSync
 } from './services/storageService';
 import { INITIAL_DATA, DEFAULT_SCHEDULE_TEMPLATE } from './constants';
 import { AppData, Student, ScheduleSlot, Resource, LibraryResource, ChatMessage, FeePayment, FeeStructure } from './types';
@@ -153,6 +154,58 @@ const AppContent: React.FC = () => {
 
   const { showToast } = useToast();
 
+  // Trigger offline sync when connection is restored
+  useEffect(() => {
+    const handleOnline = async () => {
+      showToast('Connection restored! Syncing offline updates...', 'loading');
+      try {
+        const success = await performOfflineSync();
+        
+        // Refresh local data to pull synced records
+        const freshData = await fetchAppData();
+        setData(freshData);
+        
+        if (success) {
+          showToast('Offline sync completed successfully!', 'success');
+        } else {
+          showToast('Some offline updates could not be synced.', 'warning');
+        }
+      } catch (err) {
+        console.error('Failed to sync offline updates:', err);
+        showToast('Offline sync failed.', 'error');
+      }
+    };
+
+    window.addEventListener('online', handleOnline);
+    
+    // Check/sync on mount if online and has pending queue
+    if (navigator.onLine) {
+      import('./services/offlineSyncService').then(async ({ getPendingMutations }) => {
+        const pending = await getPendingMutations();
+        if (pending.length > 0) {
+          handleOnline();
+        }
+      });
+    }
+
+    // Periodic check every 30s if online and has pending mutations
+    const intervalId = setInterval(() => {
+      if (navigator.onLine) {
+        import('./services/offlineSyncService').then(async ({ getPendingMutations }) => {
+          const pending = await getPendingMutations();
+          if (pending.length > 0) {
+            handleOnline();
+          }
+        });
+      }
+    }, 30000);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      clearInterval(intervalId);
+    };
+  }, [showToast]);
+
   // Clean up URL + sessionStorage after the meeting code has been consumed
   useEffect(() => {
     if (pendingMeetCode) {
@@ -284,6 +337,33 @@ const AppContent: React.FC = () => {
     };
   }, []);
 
+  // ── Initialize Notification Engine ──
+  // Request permission on first load and listen for SW navigation messages
+  useEffect(() => {
+    if (!data) return;
+
+    let cleanupSWListener: (() => void) | undefined;
+
+    import('./services/notificationService').then(({ notificationService }) => {
+      // Request notification permission (non-blocking — prompts user once)
+      notificationService.requestPermission().then((granted) => {
+        if (granted) {
+          console.log('[PRISM] Notification permission granted');
+        }
+      });
+
+      // Listen for SW messages (e.g., user clicked a notification action button)
+      cleanupSWListener = notificationService.listenForServiceWorkerMessages((view, navData) => {
+        console.log('[PRISM] Notification navigation →', view, navData);
+        handleNavigate(view);
+      });
+    });
+
+    return () => {
+      cleanupSWListener?.();
+    };
+  }, [!!data, handleNavigate]);
+
   // Reconcile stale M-Pesa pending payments on load
   // Payments older than 5 minutes with status 'pending' are auto-expired to 'failed'
   // because the M-Pesa STK push window is typically 60 seconds.
@@ -363,14 +443,24 @@ const AppContent: React.FC = () => {
                 attachments: msg.attachments || []
               };
 
-              // Toast notification for messages when not in communications view
+              // Toast + native notification for messages when not in communications view
               const currentUser = userRef.current;
               const view = currentViewRef.current;
               if (currentUser && msg.sender_id !== currentUser.id && view !== 'communications') {
                 const channel = currentComms.channels.find(c => c.id === msg.channel_id);
-                const prefix = channel?.type === 'dm' ? '(Direct Message)' : `(#${channel?.name || 'Channel'})`;
+                const channelLabel = channel?.type === 'dm' ? 'Direct Message' : (channel?.name || 'Channel');
+                const prefix = channel?.type === 'dm' ? '(Direct Message)' : `(#${channelLabel})`;
                 const preview = msg.content.length > 40 ? msg.content.substring(0, 40) + '...' : msg.content;
                 showToast(`${prefix} ${msg.sender_name || 'Someone'}: ${preview}`, 'success');
+
+                // Native OS notification via Service Worker
+                import('./services/notificationService').then(({ notificationService }) => {
+                  notificationService.notifyMessage(
+                    msg.sender_name || 'Someone',
+                    channelLabel,
+                    preview
+                  );
+                });
               }
 
               return {
@@ -505,7 +595,7 @@ const AppContent: React.FC = () => {
           }
         });
 
-        // ─── Fee Payments (UPDATE for M-Pesa status) ───
+        // ─── Fee Payments (UPDATE for M-Pesa status, INSERT for new payments) ───
         subscribeToFeePayments((payload) => {
           if (payload.eventType === 'UPDATE' && payload.new) {
             const updatedPayment = formatFeePaymentFromDB(payload.new);
@@ -519,12 +609,30 @@ const AppContent: React.FC = () => {
                 )
               };
             });
+
+            // Native notification for payment status changes
+            import('./services/notificationService').then(({ notificationService }) => {
+              notificationService.notifyPayment(
+                updatedPayment.studentName || 'Student',
+                updatedPayment.amount || 0,
+                updatedPayment.status || 'updated'
+              );
+            });
           } else if (payload.eventType === 'INSERT' && payload.new) {
             const newPayment = formatFeePaymentFromDB(payload.new);
             setData(prevData => {
               if (!prevData) return prevData;
               if (prevData.payments.some(p => p.id === newPayment.id)) return prevData;
               return { ...prevData, payments: [newPayment, ...prevData.payments] };
+            });
+
+            // Native notification for new payment
+            import('./services/notificationService').then(({ notificationService }) => {
+              notificationService.notifyPayment(
+                newPayment.studentName || 'Student',
+                newPayment.amount || 0,
+                newPayment.status || 'pending'
+              );
             });
           }
         });
@@ -537,6 +645,11 @@ const AppContent: React.FC = () => {
               if (!prevData) return prevData;
               if (prevData.students.some(s => s.id === newStudent.id)) return prevData;
               return { ...prevData, students: [newStudent, ...prevData.students] };
+            });
+
+            // Native notification for new student enrollment
+            import('./services/notificationService').then(({ notificationService }) => {
+              notificationService.notifyStudent('enrolled', newStudent.name || 'New Student');
             });
           } else if (payload.eventType === 'UPDATE' && payload.new) {
             const updatedStudent = formatStudentFromDB(payload.new);
@@ -571,6 +684,11 @@ const AppContent: React.FC = () => {
               if (prevData.schedule.some(s => s.id === newSlot.id)) return prevData;
               return { ...prevData, schedule: [...prevData.schedule, newSlot] };
             });
+
+            // Native notification for new schedule slot
+            import('./services/notificationService').then(({ notificationService }) => {
+              notificationService.notifyScheduleChange('added', newSlot.subject || 'Class', `G${newSlot.grade || '?'}`);
+            });
           } else if (payload.eventType === 'UPDATE' && payload.new) {
             const updatedSlot = formatScheduleSlot(payload.new);
             setData(prevData => {
@@ -582,6 +700,11 @@ const AppContent: React.FC = () => {
                 )
               };
             });
+
+            // Native notification for schedule update
+            import('./services/notificationService').then(({ notificationService }) => {
+              notificationService.notifyScheduleChange('updated', updatedSlot.subject || 'Class', `G${updatedSlot.grade || '?'}`);
+            });
           } else if (payload.eventType === 'DELETE' && payload.old) {
             const deletedId = payload.old?.id;
             if (!deletedId) return;
@@ -591,6 +714,11 @@ const AppContent: React.FC = () => {
                 ...prevData,
                 schedule: prevData.schedule.filter(s => s.id !== deletedId)
               };
+            });
+
+            // Native notification for schedule cancellation
+            import('./services/notificationService').then(({ notificationService }) => {
+              notificationService.notifyScheduleChange('cancelled', 'Class', 'slot');
             });
           }
         });
