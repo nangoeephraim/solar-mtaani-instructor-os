@@ -169,7 +169,7 @@ const IconGallery: React.FC<IconGalleryProps> = ({ onNavigate }) => {
   const itemVariants = {
     hidden: { opacity: 0, y: 20 },
     show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 300, damping: 25 } }
-  };
+  } as const;
 
   return (
     <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 pb-28 md:pb-8 custom-scrollbar">

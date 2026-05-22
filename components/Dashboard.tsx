@@ -370,9 +370,11 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onNavigate }) => {
   // ── Unread Messages ──
   const unreadMessagesCount = useMemo(() => {
     if (!data.communications || !user) return 0;
+    const channels = data.communications.channels || [];
+    const messages = data.communications.messages || {};
     let count = 0;
-    data.communications.channels.forEach(ch => {
-      const msgs = data.communications!.messages[ch.id] || [];
+    channels.forEach(ch => {
+      const msgs = messages[ch.id] || [];
       const lastRead = ch.lastReadBy?.[user.id];
       if (!lastRead) {
          count += msgs.filter(m => m.senderId !== user.id).length;
@@ -997,8 +999,8 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onNavigate }) => {
 
 export default React.memo(Dashboard, (prevProps, nextProps) => {
   return prevProps.onNavigate === nextProps.onNavigate &&
-         prevProps.data.students === nextProps.data.students &&
-         prevProps.data.schedule === nextProps.data.schedule &&
-         prevProps.data.curriculum === nextProps.data.curriculum &&
-         prevProps.data.communications?.messages?.['chan_announcements'] === nextProps.data.communications?.messages?.['chan_announcements'];
+         prevProps.data?.students === nextProps.data?.students &&
+         prevProps.data?.schedule === nextProps.data?.schedule &&
+         prevProps.data?.curriculum === nextProps.data?.curriculum &&
+         prevProps.data?.communications?.messages?.['chan_announcements'] === nextProps.data?.communications?.messages?.['chan_announcements'];
 });

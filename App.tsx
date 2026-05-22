@@ -422,7 +422,9 @@ const AppContent: React.FC = () => {
               const msg = payload.new as any;
               const channelId = msg.channel_id;
               const currentComms = prevData.communications || { channels: [], messages: {} };
-              const existingMsgs = currentComms.messages[channelId] || [];
+              const currentChannels = currentComms.channels || [];
+              const currentMessages = currentComms.messages || {};
+              const existingMsgs = currentMessages[channelId] || [];
 
               // Deduplicate
               if (existingMsgs.some((m) => m.id === msg.id)) return prevData;
@@ -447,7 +449,7 @@ const AppContent: React.FC = () => {
               const currentUser = userRef.current;
               const view = currentViewRef.current;
               if (currentUser && msg.sender_id !== currentUser.id && view !== 'communications') {
-                const channel = currentComms.channels.find(c => c.id === msg.channel_id);
+                const channel = currentChannels.find(c => c.id === msg.channel_id);
                 const channelLabel = channel?.type === 'dm' ? 'Direct Message' : (channel?.name || 'Channel');
                 const prefix = channel?.type === 'dm' ? '(Direct Message)' : `(#${channelLabel})`;
                 const preview = msg.content.length > 40 ? msg.content.substring(0, 40) + '...' : msg.content;
@@ -467,8 +469,9 @@ const AppContent: React.FC = () => {
                 ...prevData,
                 communications: {
                   ...currentComms,
+                  channels: currentChannels,
                   messages: {
-                    ...currentComms.messages,
+                    ...currentMessages,
                     [channelId]: [...existingMsgs, frontendMsg]
                   }
                 }
@@ -479,7 +482,10 @@ const AppContent: React.FC = () => {
               if (!prevData) return prevData;
               const msg = payload.new as any;
               const channelId = msg.channel_id;
-              const existingMsgs = prevData.communications?.messages?.[channelId] || [];
+              const currentComms = prevData.communications || { channels: [], messages: {} };
+              const currentChannels = currentComms.channels || [];
+              const currentMessages = currentComms.messages || {};
+              const existingMsgs = currentMessages[channelId] || [];
               const msgIndex = existingMsgs.findIndex((m) => m.id === msg.id);
               if (msgIndex === -1) return prevData;
 
@@ -499,9 +505,10 @@ const AppContent: React.FC = () => {
               return {
                 ...prevData,
                 communications: {
-                  ...prevData.communications,
+                  ...currentComms,
+                  channels: currentChannels,
                   messages: {
-                    ...prevData.communications.messages,
+                    ...currentMessages,
                     [channelId]: updatedMsgs
                   }
                 }
@@ -513,7 +520,10 @@ const AppContent: React.FC = () => {
               const msgId = payload.old?.id;
               if (!msgId) return prevData;
 
-              const newMessages: Record<string, ChatMessage[]> = { ...(prevData.communications?.messages || {}) };
+              const currentComms = prevData.communications || { channels: [], messages: {} };
+              const currentChannels = currentComms.channels || [];
+              const currentMessages = currentComms.messages || {};
+              const newMessages: Record<string, ChatMessage[]> = { ...currentMessages };
               let changed = false;
               for (const [chId, msgs] of Object.entries(newMessages)) {
                 const filtered = msgs.filter((m) => m.id !== msgId);
@@ -527,7 +537,8 @@ const AppContent: React.FC = () => {
               return {
                 ...prevData,
                 communications: {
-                  ...prevData.communications,
+                  ...currentComms,
+                  channels: currentChannels,
                   messages: newMessages
                 }
               };
@@ -542,14 +553,16 @@ const AppContent: React.FC = () => {
               if (!prevData) return prevData;
               const newChannel = formatChannelFromDB(payload.new);
               const currentComms = prevData.communications || { channels: [], messages: {} };
+              const currentChannels = currentComms.channels || [];
+              const currentMessages = currentComms.messages || {};
               // Deduplicate
-              if (currentComms.channels.some(c => c.id === newChannel.id)) return prevData;
+              if (currentChannels.some(c => c.id === newChannel.id)) return prevData;
               return {
                 ...prevData,
                 communications: {
                   ...currentComms,
-                  channels: [...currentComms.channels, newChannel],
-                  messages: { ...currentComms.messages, [newChannel.id]: [] }
+                  channels: [...currentChannels, newChannel],
+                  messages: { ...currentMessages, [newChannel.id]: [] }
                 }
               };
             });
@@ -557,11 +570,14 @@ const AppContent: React.FC = () => {
             setData((prevData) => {
               if (!prevData) return prevData;
               const updatedChannel = formatChannelFromDB(payload.new);
+              const currentComms = prevData.communications || { channels: [], messages: {} };
+              const currentChannels = currentComms.channels || [];
+              const currentMessages = currentComms.messages || {};
               return {
                 ...prevData,
                 communications: {
-                  ...prevData.communications,
-                  channels: prevData.communications.channels.map(c => {
+                  ...currentComms,
+                  channels: currentChannels.map(c => {
                     if (c.id !== updatedChannel.id) return c;
                     // MERGE lastReadBy: keep our local read timestamps if they're newer
                     const mergedLastReadBy = { ...(updatedChannel.lastReadBy || {}) };
@@ -572,7 +588,8 @@ const AppContent: React.FC = () => {
                       }
                     }
                     return { ...updatedChannel, lastReadBy: mergedLastReadBy };
-                  })
+                  }),
+                  messages: currentMessages
                 }
               };
             });
@@ -581,13 +598,16 @@ const AppContent: React.FC = () => {
               if (!prevData) return prevData;
               const deletedId = payload.old?.id;
               if (!deletedId) return prevData;
-              const newMessages = { ...(prevData.communications?.messages || {}) };
+              const currentComms = prevData.communications || { channels: [], messages: {} };
+              const currentChannels = currentComms.channels || [];
+              const currentMessages = currentComms.messages || {};
+              const newMessages = { ...currentMessages };
               delete newMessages[deletedId];
               return {
                 ...prevData,
                 communications: {
-                  ...prevData.communications,
-                  channels: prevData.communications.channels.filter(c => c.id !== deletedId),
+                  ...currentComms,
+                  channels: currentChannels.filter(c => c.id !== deletedId),
                   messages: newMessages
                 }
               };

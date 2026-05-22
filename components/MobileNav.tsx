@@ -36,7 +36,7 @@ const itemVariants = {
             damping: 24 
         } 
     }
-};
+} as const;
 
 const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate }) => {
     const [showMore, setShowMore] = useState(false);

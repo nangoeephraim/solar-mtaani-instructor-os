@@ -320,14 +320,19 @@ export const addChatMessage = async (data: AppData, payload: Omit<ChatMessage, '
     attachments: payload.attachments || []
   };
 
-  // Construct optimistic data
+  // Construct optimistic data safely
+  const comms = data.communications || { channels: [], messages: {} };
+  const channels = comms.channels || [];
+  const messages = comms.messages || {};
+
   const newData = {
     ...data,
     communications: {
-      ...data.communications,
+      ...comms,
+      channels,
       messages: {
-        ...data.communications.messages,
-        [payload.channelId]: [...(data.communications.messages[payload.channelId] || []), optimisticMsg]
+        ...messages,
+        [payload.channelId]: [...(messages[payload.channelId] || []), optimisticMsg]
       }
     }
   };
@@ -350,13 +355,18 @@ export const addChatMessage = async (data: AppData, payload: Omit<ChatMessage, '
 };
 
 export const editChatMessage = async (data: AppData, channelId: string, messageId: string, newContent: string): Promise<AppData> => {
+  const comms = data.communications || { channels: [], messages: {} };
+  const channels = comms.channels || [];
+  const messages = comms.messages || {};
+
   const newData = {
     ...data,
     communications: {
-      ...data.communications,
+      ...comms,
+      channels,
       messages: {
-        ...data.communications.messages,
-        [channelId]: (data.communications.messages[channelId] || []).map(msg => 
+        ...messages,
+        [channelId]: (messages[channelId] || []).map(msg => 
           msg.id === messageId ? { ...msg, content: newContent, editedAt: new Date().toISOString() } : msg
         )
       }
@@ -374,17 +384,22 @@ export const editChatMessage = async (data: AppData, channelId: string, messageI
 };
 
 export const softDeleteChatMessage = async (data: AppData, channelId: string, messageId: string): Promise<AppData> => {
+  const comms = data.communications || { channels: [], messages: {} };
+  const channels = comms.channels || [];
+  const messages = comms.messages || {};
+
   // Find the message to get attachment URLs before clearing
-  const existingMsg = (data.communications.messages[channelId] || []).find(m => m.id === messageId);
+  const existingMsg = (messages[channelId] || []).find(m => m.id === messageId);
   const attachments = existingMsg?.attachments || [];
 
   const newData = {
     ...data,
     communications: {
-      ...data.communications,
+      ...comms,
+      channels,
       messages: {
-        ...data.communications.messages,
-        [channelId]: (data.communications.messages[channelId] || []).map(msg => 
+        ...messages,
+        [channelId]: (messages[channelId] || []).map(msg => 
           msg.id === messageId ? { ...msg, isDeleted: true, content: '', attachments: [] } : msg
         )
       }
@@ -424,14 +439,19 @@ export const softDeleteChatMessage = async (data: AppData, channelId: string, me
 };
 
 export const togglePinMessage = async (data: AppData, channelId: string, messageId: string): Promise<AppData> => {
+  const comms = data.communications || { channels: [], messages: {} };
+  const channels = comms.channels || [];
+  const messages = comms.messages || {};
+
   let isPinned = false;
   const newData = {
     ...data,
     communications: {
-      ...data.communications,
+      ...comms,
+      channels,
       messages: {
-        ...data.communications.messages,
-        [channelId]: (data.communications.messages[channelId] || []).map(msg => {
+        ...messages,
+        [channelId]: (messages[channelId] || []).map(msg => {
           if (msg.id === messageId) {
             isPinned = !msg.isPinned;
             return { ...msg, isPinned };
@@ -452,15 +472,20 @@ export const togglePinMessage = async (data: AppData, channelId: string, message
 };
 
 export const toggleReaction = async (data: AppData, channelId: string, messageId: string, emoji: string, userId: string): Promise<AppData> => {
+  const comms = data.communications || { channels: [], messages: {} };
+  const channels = comms.channels || [];
+  const messages = comms.messages || {};
+
   let currentReactions: Record<string, string[]> = {};
   
   const newData = {
     ...data,
     communications: {
-      ...data.communications,
+      ...comms,
+      channels,
       messages: {
-        ...data.communications.messages,
-        [channelId]: (data.communications.messages[channelId] || []).map(msg => {
+        ...messages,
+        [channelId]: (messages[channelId] || []).map(msg => {
           if (msg.id === messageId) {
             currentReactions = { ...(msg.reactions || {}) };
             let users = currentReactions[emoji] || [];
@@ -492,10 +517,14 @@ export const toggleReaction = async (data: AppData, channelId: string, messageId
 };
 
 export const markChannelRead = (data: AppData, channelId: string, userId: string): AppData => {
-  const channelIndex = data.communications?.channels.findIndex(c => c.id === channelId);
-  if (channelIndex === undefined || channelIndex === -1) return data;
+  const comms = data.communications || { channels: [], messages: {} };
+  const channels = comms.channels || [];
+  const messages = comms.messages || {};
 
-  const channel = data.communications.channels[channelIndex];
+  const channelIndex = channels.findIndex(c => c.id === channelId);
+  if (channelIndex === -1) return data;
+
+  const channel = channels[channelIndex];
   const now = new Date().toISOString();
 
   // If we already read it very recently, skip to prevent thrashing
@@ -516,20 +545,21 @@ export const markChannelRead = (data: AppData, channelId: string, userId: string
     }
   })();
 
-  const newChannels = [...data.communications.channels];
+  const newChannels = [...channels];
   newChannels[channelIndex] = { ...channel, lastReadBy: newLastReadBy };
 
   return {
     ...data,
     communications: {
-      ...data.communications,
-      channels: newChannels
+      ...comms,
+      channels: newChannels,
+      messages
     }
   };
 };
 
 export const getUnreadCount = (data: AppData, channelId: string, userId: string): number => {
-  const channel = data.communications?.channels.find(c => c.id === channelId);
+  const channel = data.communications?.channels?.find(c => c.id === channelId);
   if (!channel) return 0;
 
   const lastReadTimestamp = channel.lastReadBy?.[userId];
@@ -556,13 +586,17 @@ export const addChatChannel = async (data: AppData, payload: Omit<ChatChannel, '
     lastReadBy: {}
   };
 
+  const comms = data.communications || { channels: [], messages: {} };
+  const channels = comms.channels || [];
+  const messages = comms.messages || {};
+
   const newData = {
     ...data,
     communications: {
-      ...data.communications,
-      channels: [...data.communications.channels, newChannel],
+      ...comms,
+      channels: [...channels, newChannel],
       messages: {
-        ...data.communications.messages,
+        ...messages,
         [id]: []
       }
     }
@@ -635,11 +669,16 @@ export const createDirectMessage = async (currentUserId: string, targetUserId: s
 };
 
 export const deleteChatChannel = async (data: AppData, channelId: string): Promise<AppData> => {
+  const comms = data.communications || { channels: [], messages: {} };
+  const channels = comms.channels || [];
+  const messages = comms.messages || {};
+
   const newData = {
     ...data,
     communications: {
-      ...data.communications,
-      channels: data.communications.channels.filter(c => c.id !== channelId)
+      ...comms,
+      channels: channels.filter(c => c.id !== channelId),
+      messages
     }
   };
   

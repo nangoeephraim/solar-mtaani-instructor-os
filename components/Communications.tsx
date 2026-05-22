@@ -5,7 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import {
     MessageSquare, Hash, Megaphone, Search, MoreVertical, Paperclip, Send,
     Image as ImageIcon, FileText, Smile, X, Edit2, Pencil, Trash2, Pin, CornerUpLeft,
-    Reply, ShieldAlert, Check, CheckCheck, Clock, Download, Bold, Italic, Code, Menu, Users, AtSign, UserPlus, User, Mic, Square, Video, Plus, ChevronLeft
+    Reply, ShieldAlert, Check, CheckCheck, Clock, Download, Bold, Italic, Code, Menu, Users, AtSign, UserPlus, User, Mic, Square, Video, Plus, ChevronLeft, Calendar
 } from 'lucide-react';
 import { useToast } from './Toast';
 import clsx from 'clsx';
@@ -1078,7 +1078,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
         onUpdateAppData(newData);
         
         // Find the newly created channel to set it as active
-        const newChannel = newData.communications.channels.find(c => c.name === newChannelName.trim() && c.type === newChannelType);
+        const newChannel = newData.communications?.channels?.find(c => c.name === newChannelName.trim() && c.type === newChannelType);
         if (newChannel) {
             setActiveChannelId(newChannel.id);
         }
@@ -1111,7 +1111,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                 onUpdateAppData({
                     ...data,
                     communications: {
-                        ...data.communications,
+                        ...(data.communications || {}),
                         channels: [...channels, dmChannel],
                         messages: { ...messages, [dmChannel.id]: [] }
                     }
