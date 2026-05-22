@@ -4,7 +4,7 @@
    stale-while-revalidate caching, and background sync hooks.
    ═══════════════════════════════════════════════════════════ */
 
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const CACHE_NAME = `prism-static-cache-${CACHE_VERSION}`;
 const ASSETS_TO_CACHE = [
   '/',
@@ -58,6 +58,31 @@ self.addEventListener('fetch', (event) => {
       return;
     }
 
+    // Network-First for Navigation requests (HTML pages / route entry points)
+    // This prevents serving stale index.html which may reference deleted assets/chunks,
+    // while still providing offline support.
+    const isNavigation = event.request.mode === 'navigate' || 
+                         url.pathname === '/' || 
+                         url.pathname === '/index.html';
+
+    if (isNavigation) {
+      event.respondWith(
+        fetch(event.request)
+          .then((res) => {
+            if (res.status === 200) {
+              const clone = res.clone();
+              caches.open(CACHE_NAME).then((c) => c.put(event.request, clone));
+            }
+            return res;
+          })
+          .catch(() => {
+            return caches.match('/').then((cached) => cached || caches.match('/index.html'));
+          })
+      );
+      return;
+    }
+
+    // Stale-While-Revalidate for sub-resources (JS, CSS, images, fonts)
     event.respondWith(
       caches.match(event.request).then((cached) => {
         if (cached) {
@@ -81,7 +106,6 @@ self.addEventListener('fetch', (event) => {
             return res;
           })
           .catch((err) => {
-            if (event.request.mode === 'navigate') return caches.match('/');
             throw err;
           });
       })
