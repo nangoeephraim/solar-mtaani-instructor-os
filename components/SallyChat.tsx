@@ -121,7 +121,7 @@ export function SallyChat() {
       {/* 1. Floating Action Orb Button */}
       <button
         onClick={() => setIsOpen(true)}
-        className="fixed bottom-24 right-6 md:bottom-6 p-4 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-xl hover:scale-110 active:scale-95 transition-all z-45 flex items-center justify-center"
+        className="fixed bottom-24 right-6 md:bottom-6 p-4 rounded-full bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-xl hover:scale-110 active:scale-95 transition-all z-40 flex items-center justify-center"
         aria-label="Ask Sally"
       >
         <Sparkles className="w-6 h-6 animate-pulse" />
