@@ -36,6 +36,7 @@ import LoginPage from './components/LoginPage';
 import CommandPalette from './components/CommandPalette';
 import SplashScreen from './components/SplashScreen';
 import { AnimatedBackground } from './components/AnimatedBackground';
+import { SallyChat } from './components/SallyChat';
 
 // Lazy load components for code splitting
 const Schedule = lazy(() => import('./components/Schedule'));
@@ -1254,6 +1255,9 @@ const AppContent: React.FC = () => {
 
         {/* Mobile Bottom Navigation */}
         <MobileNav currentView={currentView} onNavigate={handleNavigate} />
+
+        {/* Sally AI Companion */}
+        <SallyChat />
       </div>
     </div>
   );
