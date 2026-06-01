@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from './supabase-server';
+import { createServerSupabaseClient } from './supabase-server.ts';
 
 export type AIProviderType = 'groq' | 'cerebras' | 'openrouter' | 'google';
 

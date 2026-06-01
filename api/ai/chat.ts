@@ -1,11 +1,11 @@
-import { streamText, convertToModelMessages, tool } from 'ai';
+import { streamText, convertToModelMessages, tool, createUIMessageStreamResponse } from 'ai';
 import { z } from 'zod';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createGroq } from '@ai-sdk/groq';
 import { createOpenAI } from '@ai-sdk/openai';
-import { buildPrismAIContext, buildPrismSystemPrompt } from '../../lib/aiContext';
-import { createServerSupabaseClient } from '../../lib/supabase-server';
-import { getPrioritizedProviderConfigs } from '../../lib/aiProvider';
+import { buildPrismAIContext, buildPrismSystemPrompt } from '../../lib/aiContext.ts';
+import { createServerSupabaseClient } from '../../lib/supabase-server.ts';
+import { getPrioritizedProviderConfigs } from '../../lib/aiProvider.ts';
 
 // Ensure the API key is set for the Gemini provider
 if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY && process.env.GEMINI_API_KEY) {
@@ -18,8 +18,46 @@ export default async function handler(req: Request) {
   }
 
   try {
-    const { messages } = await req.json();
-    const modelMessages = await convertToModelMessages(messages);
+    const body = await req.json();
+    console.log("Parsed request body:", body);
+    const { messages } = body;
+
+    // Sanitize client-sent messages to ensure compatibility with Vercel AI SDK 6.x convertToModelMessages
+    const sanitizeMessage = (msg: any): any => {
+      if (msg.parts && Array.isArray(msg.parts)) {
+        return msg;
+      }
+      const parts: any[] = [];
+      if (typeof msg.content === 'string' && msg.content.trim() !== '') {
+        parts.push({
+          type: 'text',
+          text: msg.content
+        });
+      }
+      if (msg.toolInvocations && Array.isArray(msg.toolInvocations)) {
+        for (const toolInv of msg.toolInvocations) {
+          parts.push({
+            type: 'dynamic-tool',
+            toolCallId: toolInv.toolCallId,
+            toolName: toolInv.toolName,
+            state: toolInv.state,
+            input: toolInv.input,
+            output: toolInv.result,
+            errorText: toolInv.errorText
+          });
+        }
+      }
+      return {
+        ...msg,
+        parts
+      };
+    };
+
+    const sanitizedMessages = (messages || [])
+      .filter((msg: any) => msg && (msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system'))
+      .map(sanitizeMessage);
+
+    const modelMessages = await convertToModelMessages(sanitizedMessages);
 
     // 1. Compile live database context
     const ctx = await buildPrismAIContext();
@@ -115,9 +153,14 @@ export default async function handler(req: Request) {
       } as any)
     };
 
-    // 4. Stream response using the prioritized fallback chain
-    let result = null;
-    let lastError = null;
+    // 4. Stream response using the prioritized fallback chain with pre-flight checks
+    let finalResponseStream: ReadableStream<any> | null = null;
+    let lastError: any = null;
+
+    // Helper to check stream within a timeout
+    const timeoutPromise = (ms: number, message: string) => {
+      return new Promise<never>((_, reject) => setTimeout(() => reject(new Error(message)), ms));
+    };
 
     for (const config of configs) {
       try {
@@ -146,7 +189,8 @@ export default async function handler(req: Request) {
             break;
         }
 
-        result = await streamText({
+        console.log(`Starting stream validation for provider: ${config.provider}`);
+        const streamResult = await streamText({
           model,
           system: systemPrompt,
           messages: modelMessages,
@@ -155,20 +199,77 @@ export default async function handler(req: Request) {
           tools,
         });
 
-        // Break if we successfully initialized and called streamText
+        const uiStream = streamResult.toUIMessageStream();
+        const reader = uiStream.getReader();
+        const consumed: any[] = [];
+
+        // Pre-flight check: read first 2 chunks to confirm successful connection and auth
+        const readPreflight = async () => {
+          // Read 1st chunk
+          const chunk1 = await reader.read();
+          if (chunk1.done) return;
+          consumed.push(chunk1.value);
+          if (chunk1.value?.type === 'error') {
+            throw new Error(chunk1.value.errorText || 'Error chunk yielded');
+          }
+
+          // Read 2nd chunk
+          const chunk2 = await reader.read();
+          if (chunk2.done) return;
+          consumed.push(chunk2.value);
+          if (chunk2.value?.type === 'error') {
+            throw new Error(chunk2.value.errorText || 'Error chunk yielded');
+          }
+        };
+
+        // Enforce a 6-second timeout for the pre-flight connection check
+        await Promise.race([
+          readPreflight(),
+          timeoutPromise(6000, `Pre-flight verification timeout for provider "${config.provider}"`)
+        ]);
+
+        console.log(`Provider "${config.provider}" passed pre-flight! Reconstructing response stream.`);
+
+        // Reconstruct the response stream from preflight chunks and the remaining reader
+        finalResponseStream = new ReadableStream({
+          async start(controller) {
+            for (const chunk of consumed) {
+              controller.enqueue(chunk);
+            }
+          },
+          async pull(controller) {
+            try {
+              const { done, value } = await reader.read();
+              if (done) {
+                controller.close();
+                reader.releaseLock();
+              } else {
+                controller.enqueue(value);
+              }
+            } catch (err) {
+              controller.error(err);
+              reader.releaseLock();
+            }
+          },
+          cancel() {
+            reader.releaseLock();
+          }
+        });
+
         break;
       } catch (err: any) {
-        console.warn(`Failed to initialize stream with AI provider "${config.provider}":`, err.message || err);
+        console.warn(`Failed to execute fallback chain for provider "${config.provider}":`, err.message || err);
         lastError = err;
       }
     }
 
-    if (!result) {
+    if (!finalResponseStream) {
       throw new Error(`All configured AI providers failed. Last error: ${lastError?.message || lastError}`);
     }
 
-    return result.toUIMessageStreamResponse();
+    return createUIMessageStreamResponse({ stream: finalResponseStream });
   } catch (error: any) {
+    console.error("Handler error:", error);
     return new Response(JSON.stringify({ error: error.message }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' }
