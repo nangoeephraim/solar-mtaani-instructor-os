@@ -3,9 +3,9 @@ import { z } from 'zod';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createGroq } from '@ai-sdk/groq';
 import { createOpenAI } from '@ai-sdk/openai';
-import { buildPrismAIContext, buildPrismSystemPrompt } from '../../lib/aiContext.ts';
-import { createServerSupabaseClient } from '../../lib/supabase-server.ts';
-import { getPrioritizedProviderConfigs } from '../../lib/aiProvider.ts';
+import { buildPrismAIContext, buildPrismSystemPrompt } from '../../lib/aiContext.js';
+import { createServerSupabaseClient } from '../../lib/supabase-server.js';
+import { getPrioritizedProviderConfigs } from '../../lib/aiProvider.js';
 
 // Ensure the API key is set for the Gemini provider
 if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY && process.env.GEMINI_API_KEY) {
@@ -222,10 +222,10 @@ export default async function handler(req: Request) {
           }
         };
 
-        // Enforce a 6-second timeout for the pre-flight connection check
+        // Enforce a 2.5-second timeout for the pre-flight connection check
         await Promise.race([
           readPreflight(),
-          timeoutPromise(6000, `Pre-flight verification timeout for provider "${config.provider}"`)
+          timeoutPromise(2500, `Pre-flight verification timeout for provider "${config.provider}"`)
         ]);
 
         console.log(`Provider "${config.provider}" passed pre-flight! Reconstructing response stream.`);
