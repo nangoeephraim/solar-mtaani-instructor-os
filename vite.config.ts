@@ -20,18 +20,11 @@ export default defineConfig({
     drop: ['debugger']
   },
   build: {
+    emptyOutDir: false,
     minify: 'esbuild',
     rollupOptions: {
       output: {
-        manualChunks: {
-          charts: ['recharts'],
-          animation: ['framer-motion'],
-          icons: ['lucide-react'],
-          utils: ['clsx', 'date-fns'],
-          vendor: ['react', 'react-dom'],
-          supabase: ['@supabase/supabase-js'],
-          pdf: ['jspdf', 'jspdf-autotable', 'html2canvas'],
-        }
+        // Removed manualChunks to resolve Node.js OOM crashes during Rollup graph optimization
       }
     },
     chunkSizeWarningLimit: 1000,

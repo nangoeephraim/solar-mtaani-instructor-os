@@ -1,0 +1,6 @@
+{
+  "appId": "com.prism.app",
+  "appName": "Prism",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}

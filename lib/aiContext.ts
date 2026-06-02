@@ -130,7 +130,7 @@ export async function buildPrismAIContext(): Promise<PrismAIContext> {
   });
 
   return {
-    systemIdentity: 'Solar Mtaani PRISM Instructors Platform — Technical Companion & Operations Assistant',
+    systemIdentity: 'PRISM Instructors Platform — Technical Companion & Operations Assistant',
     activeCohorts,
     lowStockItems,
     recentAssessments,
