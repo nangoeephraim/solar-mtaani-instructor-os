@@ -37,6 +37,18 @@ import CommandPalette from './components/CommandPalette';
 import SplashScreen from './components/SplashScreen';
 import { AnimatedBackground } from './components/AnimatedBackground';
 import { SallyChat } from './components/SallyChat';
+import { useLocalStorage } from './hooks/useLocalStorage';
+import {
+  subscribeToChatMessages,
+  subscribeToChatChannels,
+  subscribeToStudents,
+  subscribeToSchedule,
+  subscribeToLibrary,
+  subscribeToFeePayments,
+  startHealthMonitor,
+  unsubscribeAll
+} from './services/realtimeService';
+
 
 // Lazy load components for code splitting
 const Schedule = lazy(() => import('./components/Schedule'));
@@ -234,7 +246,17 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     if (!window.visualViewport) return;
     const handleResize = () => {
-      document.documentElement.style.setProperty('--vh', `${window.visualViewport!.height * 0.01}px`);
+      const vv = window.visualViewport;
+      if (!vv) return;
+      document.documentElement.style.setProperty('--vh', `${vv.height * 0.01}px`);
+      
+      // If visual viewport height is significantly smaller than inner height, keyboard is open
+      const isKeyboard = (window.innerHeight - vv.height) > 120;
+      if (isKeyboard) {
+        document.body.classList.add('keyboard-visible');
+      } else {
+        document.body.classList.remove('keyboard-visible');
+      }
     };
     window.visualViewport.addEventListener('resize', handleResize);
     window.addEventListener('resize', handleResize);
@@ -242,6 +264,7 @@ const AppContent: React.FC = () => {
     return () => {
       window.visualViewport?.removeEventListener('resize', handleResize);
       window.removeEventListener('resize', handleResize);
+      document.body.classList.remove('keyboard-visible');
     };
   }, []);
 
@@ -403,17 +426,7 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     if (!data) return;
 
-    import('./services/realtimeService').then(({
-      subscribeToChatMessages,
-      subscribeToChatChannels,
-      subscribeToStudents,
-      subscribeToSchedule,
-      subscribeToLibrary,
-      subscribeToFeePayments,
-      startHealthMonitor,
-      unsubscribeAll
-    }) => {
-      {
+    {
 
         // ─── Chat Messages (INSERT, UPDATE, DELETE) ───
         subscribeToChatMessages(null, (payload) => {
@@ -788,13 +801,10 @@ const AppContent: React.FC = () => {
         // Start the health monitor for auto-recovery of dropped connections
         startHealthMonitor();
       }
-    });
 
-    return () => {
-      import('./services/realtimeService').then(({ unsubscribeAll }) => {
+      return () => {
         unsubscribeAll();
-      });
-    };
+      };
   }, [!!data]); // Run once when data changes from falsy to truthy
 
   // Save handler wrapper (No longer saves to localStorage directly)
@@ -1235,11 +1245,7 @@ const AppContent: React.FC = () => {
                 <div className={clsx(
                   "mx-auto w-full transition-all duration-300",
                   isAppView 
-                    ? clsx(
-                        "h-full p-0 max-w-none",
-                        currentView === 'communications' && "pb-20 md:pb-0",
-                        currentView === 'schedule' && "pb-24 md:pb-0"
-                      )
+                    ? "app-view-container p-0 max-w-none"
                     : "p-4 md:p-6 lg:p-8 pb-32 lg:pb-8 max-w-[1600px]"
                 )} style={{ paddingBottom: isAppView ? undefined : 'var(--safe-area-bottom, env(safe-area-inset-bottom, 0px))' }}>
                   <ErrorBoundary>

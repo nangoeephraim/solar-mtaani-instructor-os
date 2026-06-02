@@ -694,11 +694,40 @@ h6,
   color: #f9a8d4;
 }
 
+body.keyboard-visible .hide-on-keyboard {
+  display: none !important;
+}
+
+body.keyboard-visible main,
+body.keyboard-visible .pb-20,
+body.keyboard-visible .pb-24,
+body.keyboard-visible .pb-32 {
+  padding-bottom: 0 !important;
+}
+
+/* App view height adjustments for mobile bottom navigation */
+.app-view-container {
+  height: calc(100% - 76px); /* Subtract mobile bottom navigation bar height */
+  padding-bottom: 0 !important;
+}
+
+@media (min-width: 1024px) {
+  .app-view-container {
+    height: 100% !important;
+  }
+}
+
+/* When virtual keyboard is visible, bottom nav is hidden, so expand to full height */
+body.keyboard-visible .app-view-container {
+  height: 100% !important;
+}
+
 @media (max-height: 500px) and (max-width: 768px) {
   .hide-on-keyboard {
     display: none !important;
   }
 }
+
 
 /* ======================================================
    Meeting Controls — Mobile-safe overrides

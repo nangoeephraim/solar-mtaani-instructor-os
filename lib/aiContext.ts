@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from './supabase-server';
+import { createServerSupabaseClient } from './supabase-server.js';
 
 export interface PrismAIContext {
   systemIdentity: string;
