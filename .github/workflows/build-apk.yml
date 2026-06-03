@@ -55,6 +55,13 @@ jobs:
         chmod +x gradlew
         ./gradlew assembleDebug --no-daemon --max-workers=2 > ../gradle_build_error.log 2>&1
 
+    - name: Upload Debug APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: prism-app-debug-apk
+        path: android/app/build/outputs/apk/debug/app-debug.apk
+        retention-days: 30
+
     - name: Create Issue with Error Log
       if: failure()
       run: |
