@@ -21,6 +21,9 @@ jobs:
     - name: Install Dependencies
       run: npm install --no-audit --no-fund --legacy-peer-deps --ignore-scripts
 
+    - name: Sync Capacitor Android
+      run: npx cap sync android
+
     - name: Set up JDK 17
       uses: actions/setup-java@v4
       with:
