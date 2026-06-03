@@ -203,7 +203,12 @@ export default function LoginPage() {
                                             animate={{ scale: 1, opacity: 1 }}
                                             transition={{ delay: 0.1, duration: 0.5 }}
                                         >
-                                            <img src="/logo.png" alt="PRISM Logo" className="w-full h-full object-contain drop-shadow-lg" />
+                                            <img 
+                                                src="/logo.png" 
+                                                alt="PRISM Logo" 
+                                                onClick={() => window.dispatchEvent(new CustomEvent('prism-logo-tap'))}
+                                                className="w-full h-full object-contain drop-shadow-lg cursor-pointer" 
+                                            />
                                         </motion.div>
                                         <motion.p
                                             initial={{ opacity: 0, y: 5 }}
@@ -313,7 +318,12 @@ export default function LoginPage() {
                                 >
                                     <div className="text-center mb-8">
                                         <div className="w-40 h-20 mx-auto mb-2 flex items-center justify-center">
-                                            <img src="/logo.png" alt="PRISM Logo" className="w-full h-full object-contain drop-shadow-lg" />
+                                            <img 
+                                                src="/logo.png" 
+                                                alt="PRISM Logo" 
+                                                onClick={() => window.dispatchEvent(new CustomEvent('prism-logo-tap'))}
+                                                className="w-full h-full object-contain drop-shadow-lg cursor-pointer" 
+                                            />
                                         </div>
                                         <p className="text-indigo-500 dark:text-indigo-400 font-black text-[10px] tracking-[0.25em] uppercase mb-2">Illuminating Learning</p>
                                         <h1 className="text-xl font-google font-bold text-slate-900 dark:text-white mb-1">Setup Administrator</h1>
@@ -356,7 +366,12 @@ export default function LoginPage() {
                                 >
                                     <div className="text-center mb-6">
                                         <div className="w-40 h-20 mx-auto mb-2 flex items-center justify-center">
-                                            <img src="/logo.png" alt="PRISM Logo" className="w-full h-full object-contain drop-shadow-lg" />
+                                            <img 
+                                                src="/logo.png" 
+                                                alt="PRISM Logo" 
+                                                onClick={() => window.dispatchEvent(new CustomEvent('prism-logo-tap'))}
+                                                className="w-full h-full object-contain drop-shadow-lg cursor-pointer" 
+                                            />
                                         </div>
                                         <p className="text-indigo-500 dark:text-indigo-400 font-black text-[10px] tracking-[0.25em] uppercase mb-2">Illuminating Learning</p>
                                         <h1 className="text-xl font-google font-bold text-slate-900 dark:text-white mb-1">Join PRISM</h1>

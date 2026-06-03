@@ -7,12 +7,33 @@ import { Sparkles, Send, Volume2, VolumeX, MessageSquare, X, Box, ClipboardCheck
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
 
-export function SallyChat() {
+export function SallyChat({ currentView }: { currentView?: string }) {
   const [isOpen, setIsOpen] = useState(false);
   const [speechEnabled, setSpeechEnabled] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [input, setInput] = useState('');
   const messageEndRef = useRef<HTMLDivElement | null>(null);
+
+  // Listen to Capacitor native back gesture to close AI drawer
+  useEffect(() => {
+    const handleBackButton = (e: Event) => {
+      if (isOpen) {
+        e.preventDefault();
+        setIsOpen(false);
+      }
+    };
+    window.addEventListener('app-back-button', handleBackButton);
+    return () => window.removeEventListener('app-back-button', handleBackButton);
+  }, [isOpen]);
+
+  // Listen to open sally custom events from other chat triggers
+  useEffect(() => {
+    const handleOpenSally = () => {
+      setIsOpen(true);
+    };
+    window.addEventListener('open-sally-chat', handleOpenSally);
+    return () => window.removeEventListener('open-sally-chat', handleOpenSally);
+  }, []);
 
   // Helper to extract text content from a modular message
   const getMessageText = (message: any) => {
@@ -156,29 +177,31 @@ export function SallyChat() {
   return (
     <>
       {/* 1. Floating Action Orb Trigger Button */}
-      <div className="fixed bottom-24 right-6 md:bottom-6 z-40">
-        <div className="relative group cursor-pointer">
-          {/* Animated Ambient Shadow Glow */}
-          <div className="absolute inset-0 rounded-full bg-gradient-to-br from-emerald-500 via-teal-600 to-indigo-600 opacity-60 blur-md group-hover:opacity-100 transition duration-500" />
-          
-          {/* Animated Gradient Rotating Ring */}
-          <motion.div
-            animate={{ rotate: 360 }}
-            transition={{ repeat: Infinity, duration: 10, ease: "linear" }}
-            className="absolute inset-0 rounded-full bg-gradient-to-tr from-emerald-400 via-teal-500 to-indigo-500 p-[2px]"
-          />
-          
-          {/* Main button element */}
-          <button
-            onClick={() => setIsOpen(true)}
-            className="relative p-4 rounded-full bg-slate-950 text-emerald-400 group-hover:text-white transition-colors duration-300 flex items-center justify-center"
-            aria-label="Ask Sally"
-            style={{ width: '56px', height: '56px' }}
-          >
-            <Sparkles className="w-6 h-6 animate-pulse" />
-          </button>
+      {!isOpen && currentView !== 'communications' && (
+        <div className="fixed bottom-24 right-6 md:bottom-6 z-40">
+          <div className="relative group cursor-pointer">
+            {/* Animated Ambient Shadow Glow */}
+            <div className="absolute inset-0 rounded-full bg-gradient-to-br from-emerald-500 via-teal-600 to-indigo-600 opacity-60 blur-md group-hover:opacity-100 transition duration-500" />
+            
+            {/* Animated Gradient Rotating Ring */}
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{ repeat: Infinity, duration: 10, ease: "linear" }}
+              className="absolute inset-0 rounded-full bg-gradient-to-tr from-emerald-400 via-teal-500 to-indigo-500 p-[2px]"
+            />
+            
+            {/* Main button element */}
+            <button
+              onClick={() => setIsOpen(true)}
+              className="relative p-4 rounded-full bg-slate-950 text-emerald-400 group-hover:text-white transition-colors duration-300 flex items-center justify-center"
+              aria-label="Ask Sally"
+              style={{ width: '56px', height: '56px' }}
+            >
+              <Sparkles className="w-6 h-6 animate-pulse" />
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* 2. Side Panel Chat UI */}
       <AnimatePresence>

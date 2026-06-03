@@ -5,7 +5,8 @@ import { useAuth } from '../contexts/AuthContext';
 import {
     MessageSquare, Hash, Megaphone, Search, MoreVertical, Paperclip, Send,
     Image as ImageIcon, FileText, Smile, X, Edit2, Pencil, Trash2, Pin, CornerUpLeft,
-    Reply, ShieldAlert, Check, CheckCheck, Clock, Download, Bold, Italic, Code, Menu, Users, AtSign, UserPlus, User, Mic, Square, Video, Plus, ChevronLeft, Calendar
+    Reply, ShieldAlert, Check, CheckCheck, Clock, Download, Bold, Italic, Code, Menu, Users, AtSign, UserPlus, User, Mic, Square, Video, Plus, ChevronLeft, Calendar,
+    Sparkles, Settings, Copy
 } from 'lucide-react';
 import { useToast } from './Toast';
 import clsx from 'clsx';
@@ -295,7 +296,7 @@ const MessageGroupRenderer = React.memo(({
                                 onSwipeReply={onSwipeReply}
                                 onSwipeEdit={onSwipeEdit}
                             >
-                            <motion.div layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={clsx("relative px-3 py-2 text-[15px] group/msg break-words shadow-sm transition-shadow hover:shadow-md",
+                            <motion.div layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={clsx("relative px-3 py-2 group/msg break-words shadow-sm transition-shadow hover:shadow-md", getFontSizeClass(),
                                 isMyMsg
                                     ? `bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] ${isFirst ? 'rounded-tr-2xl' : 'rounded-tr-md'} ${isLast ? 'rounded-br-2xl' : 'rounded-br-md'} rounded-l-2xl`
                                     : `rounded-r-2xl text-[var(--md-sys-color-on-surface)] ${isFirst ? 'rounded-tl-2xl' : 'rounded-tl-md'} ${isLast ? 'rounded-bl-2xl' : 'rounded-bl-md'}`
@@ -304,7 +305,7 @@ const MessageGroupRenderer = React.memo(({
                                 onMouseLeave={() => { setHoveredMsgId(null); setShowEmojiPicker(null); }}
                                 onPointerDown={(e: any) => {
                                     if (e.pointerType === 'touch') {
-                                        const t = setTimeout(() => onLongPress?.(msg), 400);
+                                        const t = setTimeout(() => { triggerHaptics('medium'); onLongPress?.(msg); }, 400);
                                         (e.currentTarget as any)._lpTimer = t;
                                     }
                                 }}
@@ -622,6 +623,114 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
     // Mobile bottom-sheet state: which message ID has it open
     const [mobileActionMsg, setMobileActionMsg] = useState<ChatMessage | null>(null);
     const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Android customizable chat preferences
+    const [chatWallpaper, setChatWallpaper] = useState<'default' | 'midnight' | 'sunset' | 'emerald' | 'doodle'>(() => {
+        return (localStorage.getItem('prism_chat_wallpaper') as any) || 'default';
+    });
+    const [enterIsSend, setEnterIsSend] = useState<boolean>(() => {
+        return localStorage.getItem('prism_enter_is_send') !== 'false';
+    });
+    const [chatFontSize, setChatFontSize] = useState<'small' | 'medium' | 'large' | 'xlarge'>(() => {
+        return (localStorage.getItem('prism_chat_font_size') as any) || 'medium';
+    });
+    const [enableHaptics, setEnableHaptics] = useState<boolean>(() => {
+        return localStorage.getItem('prism_enable_haptics') !== 'false';
+    });
+    const [showCustomSettings, setShowCustomSettings] = useState(false);
+
+    useEffect(() => {
+        localStorage.setItem('prism_chat_wallpaper', chatWallpaper);
+    }, [chatWallpaper]);
+    useEffect(() => {
+        localStorage.setItem('prism_enter_is_send', String(enterIsSend));
+    }, [enterIsSend]);
+    useEffect(() => {
+        localStorage.setItem('prism_chat_font_size', chatFontSize);
+    }, [chatFontSize]);
+    useEffect(() => {
+        localStorage.setItem('prism_enable_haptics', String(enableHaptics));
+    }, [enableHaptics]);
+
+    // Haptics vibration helper
+    const triggerHaptics = useCallback(async (type: 'light' | 'medium' | 'success' | 'warning' = 'light') => {
+        if (!enableHaptics) return;
+        if (typeof window !== 'undefined') {
+            try {
+                const { Capacitor } = await import('@capacitor/core');
+                if (Capacitor.isNativePlatform()) {
+                    const { Haptics, ImpactStyle, NotificationType } = await import('@capacitor/haptics');
+                    if (type === 'light') await Haptics.impact({ style: ImpactStyle.Light });
+                    else if (type === 'medium') await Haptics.impact({ style: ImpactStyle.Medium });
+                    else if (type === 'success') await Haptics.notification({ type: NotificationType.Success });
+                    else if (type === 'warning') await Haptics.notification({ type: NotificationType.Warning });
+                } else if ('vibrate' in navigator) {
+                    navigator.vibrate(type === 'success' || type === 'warning' ? 50 : 15);
+                }
+            } catch (e) {
+                // Ignore errors
+            }
+        }
+    }, [enableHaptics]);
+
+    // Font size scaling helper
+    const getFontSizeClass = useCallback(() => {
+        switch (chatFontSize) {
+            case 'small': return 'text-xs';
+            case 'large': return 'text-base';
+            case 'xlarge': return 'text-lg';
+            case 'medium':
+            default:
+                return 'text-[15px]';
+        }
+    }, [chatFontSize]);
+
+    // Wallpaper styling helper
+    const getWallpaperStyle = useCallback((): React.CSSProperties => {
+        switch (chatWallpaper) {
+            case 'midnight':
+                return {
+                    background: 'radial-gradient(circle at 50% 50%, #1e1b4b 0%, #030712 100%)',
+                };
+            case 'sunset':
+                return {
+                    background: 'linear-gradient(135deg, #fef08a 0%, #f43f5e 50%, #4c1d95 100%)',
+                };
+            case 'emerald':
+                return {
+                    background: 'linear-gradient(135deg, #064e3b 0%, #022c22 100%)',
+                };
+            case 'doodle':
+                return {
+                    backgroundColor: 'var(--md-sys-color-background)',
+                    backgroundImage: 'radial-gradient(var(--md-sys-color-outline-variant) 1px, transparent 0px)',
+                    backgroundSize: '24px 24px',
+                };
+            case 'default':
+            default:
+                return {
+                    background: 'var(--md-sys-color-background)',
+                };
+        }
+    }, [chatWallpaper]);
+
+    // Native app-back-button listener coordinator
+    useEffect(() => {
+        const handleBackButton = (e: Event) => {
+            if (showCustomSettings) {
+                e.preventDefault();
+                setShowCustomSettings(false);
+            } else if (mobileActionMsg) {
+                e.preventDefault();
+                setMobileActionMsg(null);
+            } else if (mobileView === 'chat') {
+                e.preventDefault();
+                setMobileView('list');
+            }
+        };
+        window.addEventListener('app-back-button', handleBackButton);
+        return () => window.removeEventListener('app-back-button', handleBackButton);
+    }, [mobileView, mobileActionMsg, showCustomSettings]);
     // Mobile: whether the formatting toolbar is expanded (hidden by default like WhatsApp)
     const [showMobileFormats, setShowMobileFormats] = useState(false);
 
@@ -936,6 +1045,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
 
         onUpdateAppData(newData);
         playSendSound();
+        triggerHaptics('light');
 
         // Wait for realtime subscription to pull the message. Just clear input.
         setMessageInput('');
@@ -998,7 +1108,12 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
     };
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }
+        if (e.key === 'Enter' && !e.shiftKey) {
+            if (enterIsSend) {
+                e.preventDefault();
+                handleSendMessage();
+            }
+        }
     };
 
     const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -1329,6 +1444,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                 )}
                                 <button onClick={() => setShowSearch(!showSearch)} title="Search (Ctrl+K)" className={clsx("glass-button p-2", showSearch && "btn-primary")}><Search size={15} /></button>
                                 <button onClick={() => setShowInfoDrawer(!showInfoDrawer)} title="Channel info" className={clsx("glass-button p-2", showInfoDrawer && "btn-primary")}><Users size={15} /></button>
+                                <button onClick={() => { triggerHaptics('light'); setShowCustomSettings(true); }} title="Chat Customization" className="glass-button p-2 hover:text-[var(--md-sys-color-primary)] transition-colors"><Settings size={15} /></button>
                             </div>
                         </div>
 
@@ -1358,7 +1474,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                             )}
                         </AnimatePresence>
 
-                        <div className="flex flex-1 overflow-hidden relative">
+                        <div className="flex flex-1 overflow-hidden relative transition-all duration-500" style={getWallpaperStyle()}>
                             {/* Messages Feed */}
                             <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-5 custom-scrollbar pb-4" style={{ minHeight: 0 }}>
                                 {/* Channel Intro */}
@@ -1398,7 +1514,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                                 <motion.div layout initial={{ opacity: 0, y: 10, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} className="relative glass-card p-5 group/msg animate-fade-in break-words hover:shadow-lg transition-all duration-300" style={{ animationFillMode: 'both' }}
                                                     onMouseEnter={() => setHoveredMsgId(msg.id)}
                                                     onMouseLeave={() => { setHoveredMsgId(null); setShowEmojiPicker(null); }}
-                                                    onPointerDown={(e) => { if (e.pointerType === 'touch') { longPressTimerRef.current = setTimeout(() => setMobileActionMsg(msg), 400); } }}
+                                                    onPointerDown={(e) => { if (e.pointerType === 'touch') { longPressTimerRef.current = setTimeout(() => { triggerHaptics('medium'); setMobileActionMsg(msg); }, 400); } }}
                                                     onPointerUp={() => { if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; } }}
                                                     onPointerCancel={() => { if (longPressTimerRef.current) { clearTimeout(longPressTimerRef.current); longPressTimerRef.current = null; } }}>
                                                     {renderMsgActions(msg)}
@@ -1426,7 +1542,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                                             </div>
                                                         </div>
                                                     ) : (
-                                                        <div className="text-sm leading-relaxed" style={{ color: 'var(--md-sys-color-on-surface)' }}>{renderMarkdown(msg.content)}</div>
+                                                        <div className={clsx("leading-relaxed", getFontSizeClass())} style={{ color: 'var(--md-sys-color-on-surface)' }}>{renderMarkdown(msg.content)}</div>
                                                     )}
                                                     {renderReactions(msg)}
                                                 </motion.div>
@@ -1670,6 +1786,18 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                             </button>
                                             {/* Desktop: paperclip opens full picker */}
                                             <button type="button" onClick={() => fileInputRef.current?.click()} className="hidden md:flex p-2.5 rounded-full hover:bg-[var(--md-sys-color-surface-2)] transition-colors hover:text-[var(--md-sys-color-primary)]" style={{ color: 'var(--md-sys-color-secondary)' }} title="Attach file (or drag & drop / paste image)"><Paperclip size={18} /></button>
+                                            {/* Dedicated Sally AI Copilot Button (resolves keyboard Send/Enter overlap layout clash) */}
+                                            <button 
+                                                type="button" 
+                                                onClick={() => {
+                                                    triggerHaptics('light');
+                                                    window.dispatchEvent(new Event('open-sally-chat'));
+                                                }} 
+                                                className="p-2.5 rounded-full hover:bg-[var(--md-sys-color-surface-2)] transition-colors hover:text-emerald-500 text-emerald-600 flex items-center justify-center animate-pulse" 
+                                                title="Ask Sally AI Assistant"
+                                            >
+                                                <Sparkles size={18} />
+                                            </button>
                                         </div>
 
                                         {isRecording ? (
@@ -1895,6 +2023,23 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
 
                             {/* Action Buttons */}
                             <div className="px-4 py-3 space-y-1">
+                                {/* Copy Text */}
+                                {!mobileActionMsg.isDeleted && (
+                                    <button
+                                        onClick={() => {
+                                            triggerHaptics('success');
+                                            navigator.clipboard.writeText(mobileActionMsg.content);
+                                            showToast('Message copied to clipboard', 'success');
+                                            setMobileActionMsg(null);
+                                        }}
+                                        className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-colors text-left"
+                                        style={{ background: 'var(--md-sys-color-surface-variant)' }}
+                                    >
+                                        <Copy size={20} style={{ color: 'var(--md-sys-color-secondary)' }} />
+                                        <span className="font-semibold font-google" style={{ color: 'var(--md-sys-color-on-surface)' }}>Copy Text</span>
+                                    </button>
+                                )}
+
                                 {/* Reply */}
                                 <button
                                     onClick={() => {
@@ -1979,6 +2124,146 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
 
                             {/* Safe area bottom padding */}
                             <div style={{ paddingBottom: 'env(safe-area-inset-bottom, 24px)' }} />
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
+
+            {/* Android Chat Settings Modal */}
+            <AnimatePresence>
+                {showCustomSettings && (
+                    <>
+                        <motion.div 
+                            initial={{ opacity: 0 }} 
+                            animate={{ opacity: 1 }} 
+                            exit={{ opacity: 0 }} 
+                            className="fixed inset-0 bg-black/50 z-50 backdrop-blur-sm" 
+                            onClick={() => setShowCustomSettings(false)} 
+                        />
+                        <motion.div 
+                            initial={{ y: '100%', opacity: 0 }} 
+                            animate={{ y: 0, opacity: 1 }} 
+                            exit={{ y: '100%', opacity: 0 }} 
+                            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                            className="fixed bottom-0 left-0 right-0 sm:bottom-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:max-w-md w-full glass-panel z-50 p-6 rounded-t-3xl sm:rounded-[28px] overflow-hidden" 
+                            style={{ 
+                                boxShadow: 'var(--shadow-elevation-3)', 
+                                background: 'var(--md-sys-color-surface)',
+                                paddingBottom: 'calc(2rem + env(safe-area-inset-bottom))'
+                            }}
+                        >
+                            <div className="flex items-center justify-between pb-4 border-b border-[var(--md-sys-color-outline-variant)]">
+                                <h3 className="text-base font-google font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>Chat Customization</h3>
+                                <button onClick={() => { triggerHaptics(); setShowCustomSettings(false); }} className="p-1 rounded-full hover:bg-[var(--md-sys-color-surface-variant)]" style={{ color: 'var(--md-sys-color-secondary)' }}>
+                                    <X size={18} />
+                                </button>
+                            </div>
+
+                            <div className="mt-5 space-y-6 max-h-[60vh] overflow-y-auto pr-1 custom-scrollbar">
+                                {/* Wallpaper Selection */}
+                                <div>
+                                    <label className="text-xs font-bold uppercase tracking-wider block mb-2" style={{ color: 'var(--md-sys-color-secondary)' }}>Chat Wallpaper</label>
+                                    <div className="grid grid-cols-5 gap-2">
+                                        {[
+                                            { id: 'default', label: 'Default', bg: 'var(--md-sys-color-background)' },
+                                            { id: 'midnight', label: 'Midnight', bg: 'radial-gradient(circle, #1e1b4b 0%, #030712 100%)' },
+                                            { id: 'sunset', label: 'Sunset', bg: 'linear-gradient(135deg, #fef08a 0%, #f43f5e 50%, #4c1d95 100%)' },
+                                            { id: 'emerald', label: 'Oasis', bg: 'linear-gradient(135deg, #064e3b 0%, #022c22 100%)' },
+                                            { id: 'doodle', label: 'Doodle', bg: '#111827', border: 'dashed' },
+                                        ].map((wp) => (
+                                            <button 
+                                                key={wp.id} 
+                                                type="button"
+                                                onClick={() => { triggerHaptics('light'); setChatWallpaper(wp.id as any); }}
+                                                className={clsx(
+                                                    "h-12 rounded-xl border-2 transition-all flex flex-col items-center justify-center p-1 relative overflow-hidden",
+                                                    chatWallpaper === wp.id ? "border-[var(--md-sys-color-primary)] scale-105" : "border-[var(--md-sys-color-outline)] opacity-70 hover:opacity-100"
+                                                )}
+                                                title={wp.label}
+                                            >
+                                                <div className="absolute inset-0.5 rounded-lg" style={{ background: wp.bg }} />
+                                                <span className="relative z-10 text-[9px] font-bold text-white bg-black/40 px-1 rounded truncate max-w-full">{wp.label}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Enter Is Send Toggle */}
+                                <div className="flex items-center justify-between py-2 border-b border-[var(--md-sys-color-outline-variant)]">
+                                    <div>
+                                        <h4 className="text-sm font-semibold" style={{ color: 'var(--md-sys-color-on-surface)' }}>Enter is Send</h4>
+                                        <p className="text-xs opacity-75" style={{ color: 'var(--md-sys-color-secondary)' }}>Pressing Enter key on keyboard will send message</p>
+                                    </div>
+                                    <button 
+                                        type="button"
+                                        onClick={() => { triggerHaptics('light'); setEnterIsSend(!enterIsSend); }}
+                                        className={clsx(
+                                            "w-12 h-6 rounded-full p-1 transition-colors duration-300 relative",
+                                            enterIsSend ? "bg-[var(--md-sys-color-primary)]" : "bg-[var(--md-sys-color-outline)]"
+                                        )}
+                                    >
+                                        <div 
+                                            className={clsx(
+                                                "w-4 h-4 rounded-full bg-white transition-transform duration-300 shadow-md absolute top-1 left-1",
+                                                enterIsSend && "translate-x-6"
+                                            )} 
+                                        />
+                                    </button>
+                                </div>
+
+                                {/* Text Font Size Slider */}
+                                <div className="space-y-2 py-2 border-b border-[var(--md-sys-color-outline-variant)]">
+                                    <div className="flex justify-between items-center">
+                                        <h4 className="text-sm font-semibold" style={{ color: 'var(--md-sys-color-on-surface)' }}>Font Size</h4>
+                                        <span className="text-xs font-bold text-[var(--md-sys-color-primary)] uppercase font-mono">{chatFontSize}</span>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-xs opacity-60">A</span>
+                                        <input 
+                                            type="range" 
+                                            min="0" 
+                                            max="3" 
+                                            value={['small', 'medium', 'large', 'xlarge'].indexOf(chatFontSize)}
+                                            onChange={(e) => {
+                                                triggerHaptics('light');
+                                                const sizes: ('small' | 'medium' | 'large' | 'xlarge')[] = ['small', 'medium', 'large', 'xlarge'];
+                                                setChatFontSize(sizes[Number(e.target.value)]);
+                                            }}
+                                            className="flex-1 accent-[var(--md-sys-color-primary)] h-1.5 bg-[var(--md-sys-color-outline-variant)] rounded-lg appearance-none cursor-pointer"
+                                        />
+                                        <span className="text-lg font-bold opacity-80">A</span>
+                                    </div>
+                                </div>
+
+                                {/* Enable Haptics Toggle */}
+                                <div className="flex items-center justify-between py-2">
+                                    <div>
+                                        <h4 className="text-sm font-semibold" style={{ color: 'var(--md-sys-color-on-surface)' }}>Tactile Haptic Feedback</h4>
+                                        <p className="text-xs opacity-75" style={{ color: 'var(--md-sys-color-secondary)' }}>Vibrate on sending message, long-press, and reactions</p>
+                                    </div>
+                                    <button 
+                                        type="button"
+                                        onClick={() => {
+                                            const newVal = !enableHaptics;
+                                            setEnableHaptics(newVal);
+                                            if (newVal) {
+                                                if (typeof window !== 'undefined' && 'vibrate' in navigator) navigator.vibrate(30);
+                                            }
+                                        }}
+                                        className={clsx(
+                                            "w-12 h-6 rounded-full p-1 transition-colors duration-300 relative",
+                                            enableHaptics ? "bg-[var(--md-sys-color-primary)]" : "bg-[var(--md-sys-color-outline)]"
+                                        )}
+                                    >
+                                        <div 
+                                            className={clsx(
+                                                "w-4 h-4 rounded-full bg-white transition-transform duration-300 shadow-md absolute top-1 left-1",
+                                                enableHaptics ? "translate-x-6" : "translate-x-0"
+                                            )} 
+                                        />
+                                    </button>
+                                </div>
+                            </div>
                         </motion.div>
                     </>
                 )}

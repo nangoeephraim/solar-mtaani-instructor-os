@@ -78,7 +78,10 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, data }) => {
       {/* Logo Header */}
       <div className="p-4 flex items-center gap-3 border-b border-[var(--md-sys-color-outline)]">
         <motion.div
-          className="w-16 h-12 flex-shrink-0 flex items-center justify-center p-1"
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent('prism-logo-tap'));
+          }}
+          className="w-16 h-12 flex-shrink-0 flex items-center justify-center p-1 cursor-pointer"
           whileHover={{ scale: 1.05, rotate: 5 }}
           whileTap={{ scale: 0.95 }}
           transition={{ type: "spring", stiffness: 400 }}

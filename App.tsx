@@ -37,6 +37,7 @@ import CommandPalette from './components/CommandPalette';
 import SplashScreen from './components/SplashScreen';
 import { AnimatedBackground } from './components/AnimatedBackground';
 import { SallyChat } from './components/SallyChat';
+import { EasterEgg } from './components/EasterEgg';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import {
   subscribeToChatMessages,
@@ -166,6 +167,36 @@ const AppContent: React.FC = () => {
   const { user } = useAuth();
 
   const { showToast } = useToast();
+
+  // Easter Egg State & Tap Listener
+  const [logoTaps, setLogoTaps] = useState(0);
+  const [showEasterEgg, setShowEasterEgg] = useState(false);
+
+  useEffect(() => {
+    let tapTimeout: any;
+    const handleLogoTap = () => {
+      setLogoTaps((prev) => {
+        const next = prev + 1;
+        if (next >= 5) {
+          setShowEasterEgg(true);
+          if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+            navigator.vibrate([100, 50, 100]);
+          }
+          return 0;
+        }
+        clearTimeout(tapTimeout);
+        tapTimeout = setTimeout(() => {
+          setLogoTaps(0);
+        }, 3000);
+        return next;
+      });
+    };
+    window.addEventListener('prism-logo-tap', handleLogoTap);
+    return () => {
+      window.removeEventListener('prism-logo-tap', handleLogoTap);
+      clearTimeout(tapTimeout);
+    };
+  }, []);
 
   // Trigger offline sync when connection is restored
   useEffect(() => {
@@ -324,6 +355,48 @@ const AppContent: React.FC = () => {
       window.removeEventListener('prepare-meeting', handlePrepareMeetingAtApp);
     };
   }, [userLevel]);
+
+  // Native back navigation coordinator using @capacitor/app
+  useEffect(() => {
+    let backListener: any = null;
+
+    const setupBackButton = async () => {
+      try {
+        const { Capacitor } = await import('@capacitor/core');
+        if (Capacitor.isNativePlatform()) {
+          const { App } = await import('@capacitor/app');
+          backListener = await App.addListener('backButton', () => {
+            // Dispatch a cancellable custom event
+            const event = new CustomEvent('app-back-button', { cancelable: true });
+            window.dispatchEvent(event);
+
+            if (event.defaultPrevented) {
+              // Something handled the back event (e.g. closed a drawer or modal)
+              return;
+            }
+
+            // Fallback: If nothing was open, handle navigation back to dashboard
+            if (currentView !== 'dashboard') {
+              handleNavigate('dashboard');
+            } else {
+              // Already on dashboard, exit the application
+              App.exitApp();
+            }
+          });
+        }
+      } catch (err) {
+        console.error('Error setting up native back button listener:', err);
+      }
+    };
+
+    setupBackButton();
+
+    return () => {
+      if (backListener) {
+        backListener.remove();
+      }
+    };
+  }, [currentView, handleNavigate]);
 
   // Fetch initial data asynchronously from Supabase
   useEffect(() => {
@@ -1263,7 +1336,10 @@ const AppContent: React.FC = () => {
         <MobileNav currentView={currentView} onNavigate={handleNavigate} />
 
         {/* Sally AI Companion */}
-        <SallyChat />
+        <SallyChat currentView={currentView} />
+
+        {/* Secret Launch Easter Egg */}
+        <EasterEgg isOpen={showEasterEgg} onClose={() => { setLogoTaps(0); setShowEasterEgg(false); }} />
       </div>
     </div>
   );
