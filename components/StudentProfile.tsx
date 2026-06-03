@@ -6,7 +6,7 @@ import PageHeader from './PageHeader';
 import AddStudentModal from './AddStudentModal';
 import EditStudentModal from './EditStudentModal';
 import { useToast } from './Toast';
-import { GraduationCap, Plus, AlertTriangle, User, BookOpen, FileText, CreditCard } from 'lucide-react';
+import { GraduationCap, Plus, AlertTriangle, User, BookOpen, FileText, CreditCard, ArrowLeft } from 'lucide-react';
 import clsx from 'clsx';
 import { AnimatePresence } from 'framer-motion';
 
@@ -28,6 +28,7 @@ interface StudentProfileProps {
 
 const StudentProfile: React.FC<StudentProfileProps> = ({ data, onUpdateStudent, onAddStudent, onDeleteStudent, selectedStudentId: externalStudentId }) => {
    const [selectedStudentId, setSelectedStudentId] = useState<number>(externalStudentId || data.students[0]?.id || 0);
+   const [mobileShowDetail, setMobileShowDetail] = useState(!!externalStudentId);
    const [searchTerm, setSearchTerm] = useState("");
    const [subjectFilter, setSubjectFilter] = useState<'All' | 'Solar' | 'ICT'>('All');
    const [showAddModal, setShowAddModal] = useState(false);
@@ -120,27 +121,48 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ data, onUpdateStudent, 
                 </div>
             </div>
 
-            <div className="flex-1 flex gap-6 min-h-0 bg-slate-50/50 dark:bg-slate-900/10 rounded-2xl p-2 border border-slate-100 dark:border-slate-800">
+            <div className="flex-1 flex flex-col md:flex-row gap-6 min-h-0 bg-slate-50/50 dark:bg-slate-900/10 rounded-2xl p-2 border border-slate-100 dark:border-slate-800">
                {/* LEFT: Student List */}
-               <Suspense fallback={<div className="w-96 glass-panel animate-pulse" />}>
-                  <StudentList
-                     students={data.students}
-                     selectedStudentId={selectedStudentId}
-                     onSelectStudent={setSelectedStudentId}
-                     searchTerm={searchTerm}
-                     onSearchChange={setSearchTerm}
-                     subjectFilter={subjectFilter}
-                     onFilterChange={setSubjectFilter}
-                     onAddStudent={handleAddStudentClick}
-                  />
-               </Suspense>
+               <div className={clsx(
+                  "w-full md:w-80 lg:w-96 flex-shrink-0 flex flex-col h-full",
+                  mobileShowDetail ? "hidden md:flex" : "flex"
+               )}>
+                  <Suspense fallback={<div className="w-full md:w-80 lg:w-96 glass-panel animate-pulse" />}>
+                     <StudentList
+                        students={data.students}
+                        selectedStudentId={selectedStudentId}
+                        onSelectStudent={(id) => {
+                           setSelectedStudentId(id);
+                           setMobileShowDetail(true);
+                        }}
+                        searchTerm={searchTerm}
+                        onSearchChange={setSearchTerm}
+                        subjectFilter={subjectFilter}
+                        onFilterChange={setSubjectFilter}
+                        onAddStudent={handleAddStudentClick}
+                     />
+                  </Suspense>
+               </div>
 
                {/* RIGHT: Detailed Profile */}
-               <div className="flex-1 glass-panel backdrop-blur-md bg-[var(--md-sys-color-surface)]/80 overflow-hidden flex flex-col rounded-2xl border border-[var(--md-sys-color-outline)] shadow-lg shadow-slate-200/20 dark:shadow-none">
+               <div className={clsx(
+                  "flex-1 glass-panel backdrop-blur-md bg-[var(--md-sys-color-surface)]/80 overflow-hidden flex flex-col rounded-2xl border border-[var(--md-sys-color-outline)] shadow-lg shadow-slate-200/20 dark:shadow-none",
+                  mobileShowDetail ? "flex" : "hidden md:flex"
+               )}>
                   <Suspense fallback={<div className="flex-1 flex items-center justify-center"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div></div>}>
                      {selectedStudent ? (
                         <>
                            {/* Header */}
+                           {mobileShowDetail && (
+                              <div className="md:hidden p-3 bg-[var(--md-sys-color-surface-variant)]/50 border-b border-[var(--md-sys-color-outline)] flex items-center flex-shrink-0">
+                                 <button
+                                    onClick={() => setMobileShowDetail(false)}
+                                    className="flex items-center gap-2 text-sm font-bold text-[var(--md-sys-color-primary)] active:scale-95 transition-all"
+                                 >
+                                    <ArrowLeft size={16} /> Back to Roster
+                                 </button>
+                              </div>
+                           )}
                            <ProfileHeader
                               student={selectedStudent}
                               studentAverage={studentAverage}

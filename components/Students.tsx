@@ -169,9 +169,9 @@ const Students: React.FC<StudentsProps> = ({
                         />
                     </div>
 
-                    <div className="flex gap-2 sm:gap-3 overflow-x-auto custom-scrollbar pb-1 sm:pb-0">
+                    <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto overflow-visible">
                         {/* Subject Filter Pills */}
-                        <div className="flex bg-[var(--md-sys-color-surface-variant)]/60 rounded-lg p-1 border border-[var(--md-sys-color-outline)]">
+                        <div className="flex bg-[var(--md-sys-color-surface-variant)]/60 rounded-lg p-1 border border-[var(--md-sys-color-outline)] overflow-x-auto custom-scrollbar flex-shrink-0">
                             {(['All', 'Solar', 'ICT'] as const).map(sub => (
                                 <button
                                     key={sub}
