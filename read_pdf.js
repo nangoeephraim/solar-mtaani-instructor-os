@@ -1,0 +1,10 @@
+import fs from 'fs';
+import pdf from 'pdf-parse';
+
+const dataBuffer = fs.readFileSync('public/plan/Building a Google Meet Web App.pdf');
+
+pdf(dataBuffer).then(function(data) {
+    console.log(data.text);
+}).catch(function(error) {
+    console.error('Error reading PDF:', error);
+});

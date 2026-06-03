@@ -41,6 +41,26 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ data, onUpdateStudent, 
       data.students.find(s => s.id === selectedStudentId),
       [data.students, selectedStudentId]);
 
+   React.useEffect(() => {
+      const handleBackButton = (e: Event) => {
+         if (showAddModal) {
+            e.preventDefault();
+            setShowAddModal(false);
+         } else if (showEditModal) {
+            e.preventDefault();
+            setShowEditModal(false);
+         } else if (showDeleteConfirm) {
+            e.preventDefault();
+            setShowDeleteConfirm(false);
+         } else if (mobileShowDetail) {
+            e.preventDefault();
+            setMobileShowDetail(false);
+         }
+      };
+      window.addEventListener('app-back-button', handleBackButton);
+      return () => window.removeEventListener('app-back-button', handleBackButton);
+   }, [mobileShowDetail, showAddModal, showEditModal, showDeleteConfirm]);
+
    // Calculate class average for comparison
    const classStudents = useMemo(() => {
       if (!selectedStudent) return [];

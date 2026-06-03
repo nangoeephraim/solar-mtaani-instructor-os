@@ -109,6 +109,28 @@ const Schedule: React.FC<ScheduleProps> = ({ data, onUpdateSchedule, onUpdateStu
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Intercept back button to close modals or settings
+  useEffect(() => {
+    const handleBackButton = (e: Event) => {
+      if (showSettings) {
+        e.preventDefault();
+        setShowSettings(false);
+      } else if (showAddModal) {
+        e.preventDefault();
+        setShowAddModal(false);
+      } else if (selectedSlot) {
+        e.preventDefault();
+        setSelectedSlot(null);
+        setIsEditingSlot(false);
+      } else if (confirmDialog.isOpen) {
+        e.preventDefault();
+        setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+      }
+    };
+    window.addEventListener('app-back-button', handleBackButton);
+    return () => window.removeEventListener('app-back-button', handleBackButton);
+  }, [showSettings, showAddModal, selectedSlot, confirmDialog.isOpen]);
+
   // Custom confirm dialog state to bypass window.confirm issues in webviews
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean;

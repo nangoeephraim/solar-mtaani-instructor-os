@@ -44,6 +44,18 @@ const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate }) => {
     const { user } = useAuth();
     const userLevel = ROLE_LEVEL[user?.role || 'viewer'] || 1;
 
+    // Intercept back button to close More overlay
+    useEffect(() => {
+        const handleBackButton = (e: Event) => {
+            if (showMore) {
+                e.preventDefault();
+                setShowMore(false);
+            }
+        };
+        window.addEventListener('app-back-button', handleBackButton);
+        return () => window.removeEventListener('app-back-button', handleBackButton);
+    }, [showMore]);
+
     useEffect(() => {
         const handleViewChange = (e: Event) => {
             const customEvent = e as CustomEvent<'list' | 'chat'>;

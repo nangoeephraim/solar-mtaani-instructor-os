@@ -329,6 +329,7 @@ const AppContent: React.FC = () => {
   // Native back navigation coordinator using @capacitor/app
   useEffect(() => {
     let backListener: any = null;
+    let lastBackButtonPress = 0;
 
     const setupBackButton = async () => {
       try {
@@ -349,8 +350,13 @@ const AppContent: React.FC = () => {
             if (currentView !== 'dashboard') {
               handleNavigate('dashboard');
             } else {
-              // Already on dashboard, exit the application
-              App.exitApp();
+              const now = Date.now();
+              if (now - lastBackButtonPress < 2000) {
+                App.exitApp();
+              } else {
+                lastBackButtonPress = now;
+                showToast('Press back again to exit', 'info');
+              }
             }
           });
         }
@@ -366,7 +372,7 @@ const AppContent: React.FC = () => {
         backListener.remove();
       }
     };
-  }, [currentView, handleNavigate]);
+  }, [currentView, handleNavigate, showToast]);
 
   // Fetch initial data asynchronously from Supabase
   useEffect(() => {
@@ -1291,7 +1297,7 @@ const AppContent: React.FC = () => {
                     ? "app-view-container p-0 max-w-none"
                     : "p-4 md:p-6 lg:p-8 pb-32 lg:pb-8 max-w-[1600px]"
                 )} style={{ paddingBottom: isAppView ? undefined : 'var(--safe-area-bottom, env(safe-area-inset-bottom, 0px))' }}>
-                  <ErrorBoundary>
+                  <ErrorBoundary key={currentView}>
                     <Suspense fallback={<LoadingSpinner />}>
                       {renderContent()}
                     </Suspense>

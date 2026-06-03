@@ -266,8 +266,21 @@ const MessageGroupRenderer = React.memo(({
     onSwipeReply,
     onSwipeEdit,
     channelData,
+    chatFontSize,
+    triggerHaptics,
 }: any) => {
     const first = group[0];
+
+    const getFontSizeClass = () => {
+        switch (chatFontSize) {
+            case 'small': return 'text-[11px] leading-relaxed';
+            case 'large': return 'text-[15px] leading-relaxed';
+            case 'xlarge': return 'text-[17px] leading-relaxed';
+            case 'medium':
+            default:
+                return 'text-sm leading-relaxed';
+        }
+    };
 
     return (
         <div className={clsx("group/cluster flex gap-3 py-1", first.senderId === userId && "flex-row-reverse")}>
@@ -449,6 +462,8 @@ const MessageGroupRenderer = React.memo(({
         const hasOwnMsg = nextProps.group.some((m: any) => m.senderId === nextProps.userId);
         if (hasOwnMsg) return false;
     }
+
+    if (prevProps.chatFontSize !== nextProps.chatFontSize) return false;
 
     return true;
 });
@@ -720,6 +735,23 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
             if (showCustomSettings) {
                 e.preventDefault();
                 setShowCustomSettings(false);
+            } else if (showNewChannel) {
+                e.preventDefault();
+                setShowNewChannel(false);
+            } else if (showNewDM) {
+                e.preventDefault();
+                setShowNewDM(false);
+                setDmUserSearch('');
+            } else if (showInfoDrawer) {
+                e.preventDefault();
+                setShowInfoDrawer(false);
+            } else if (showPinnedPanel) {
+                e.preventDefault();
+                setShowPinnedPanel(false);
+            } else if (showSearch) {
+                e.preventDefault();
+                setShowSearch(false);
+                setSearchQuery('');
             } else if (mobileActionMsg) {
                 e.preventDefault();
                 setMobileActionMsg(null);
@@ -730,7 +762,10 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
         };
         window.addEventListener('app-back-button', handleBackButton);
         return () => window.removeEventListener('app-back-button', handleBackButton);
-    }, [mobileView, mobileActionMsg, showCustomSettings]);
+    }, [
+        mobileView, mobileActionMsg, showCustomSettings,
+        showNewChannel, showNewDM, showInfoDrawer, showPinnedPanel, showSearch
+    ]);
     // Mobile: whether the formatting toolbar is expanded (hidden by default like WhatsApp)
     const [showMobileFormats, setShowMobileFormats] = useState(false);
 
@@ -1607,6 +1642,8 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                                                 setEditContent(msg.content);
                                                             }}
                                                             channelData={activeChannel}
+                                                            chatFontSize={chatFontSize}
+                                                            triggerHaptics={triggerHaptics}
                                                         />
                                                     </React.Fragment>
                                                 );
