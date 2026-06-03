@@ -6,7 +6,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  issues: write
 
 jobs:
   build:
@@ -54,10 +55,21 @@ jobs:
         chmod +x gradlew
         ./gradlew assembleDebug --no-daemon --max-workers=2 > ../gradle_build_error.log 2>&1
 
-    - name: Commit and Push Logs on Failure
+    - name: Create Issue with Error Log
       if: failure()
       run: |
-        git config --global user.name "github-actions[bot]"
-        git config --global user.email "github-actions[bot]@users.noreply.github.com"
-        git add capacitor_sync_error.log gradle_build_error.log || true
-        git commit -m "chore: upload build logs [skip ci]" && git push origin master || echo "No changes to commit"
+        ERROR_LOG=""
+        if [ -f capacitor_sync_error.log ]; then
+          ERROR_LOG=$(cat capacitor_sync_error.log)
+        fi
+        if [ -f gradle_build_error.log ]; then
+          ERROR_LOG="$ERROR_LOG\n\nGradle Build Error:\n$(cat gradle_build_error.log)"
+        fi
+        
+        payload=$(jq -n --arg title "Build Failure Log - SHA ${{ github.sha }}" --arg body "Here is the error log:\n\`\`\`\n$ERROR_LOG\n\`\`\`" '{title: $title, body: $body}')
+        
+        curl -s -X POST \
+          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+          -H "Accept: application/vnd.github+json" \
+          https://api.github.com/repos/${{ github.repository }}/issues \
+          -d "$payload"
