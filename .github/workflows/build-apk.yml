@@ -5,6 +5,14 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+env:
+  # These VITE_ vars are client-side only (browser-facing).
+  # The Supabase anon key is intentionally public — it is safe to store here.
+  VITE_SUPABASE_URL: "https://qiyanhlrstbczzpmivnn.supabase.co"
+  VITE_SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpeWFuaGxyc3RiY3p6cG1pdm5uIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE3OTc2NTIsImV4cCI6MjA4NzM3MzY1Mn0.zLZW6IlCbZH2xb0zMxROFjWvlRZ1EWGiyYWeuuUZHV4"
+  VITE_GOOGLE_CLIENT_ID: "1:579073691133:web:464261fda0e27444709d94"
+  NODE_OPTIONS: "--max-old-space-size=4096"
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -38,10 +46,11 @@ jobs:
       run: |
         cd android
         chmod +x gradlew
-        ./gradlew assembleDebug
+        ./gradlew assembleDebug --no-daemon --max-workers=2
 
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
       with:
         name: prism-app-debug-apk
         path: android/app/build/outputs/apk/debug/app-debug.apk
+        retention-days: 30
