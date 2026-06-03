@@ -168,36 +168,6 @@ const AppContent: React.FC = () => {
 
   const { showToast } = useToast();
 
-  // Easter Egg State & Tap Listener
-  const [logoTaps, setLogoTaps] = useState(0);
-  const [showEasterEgg, setShowEasterEgg] = useState(false);
-
-  useEffect(() => {
-    let tapTimeout: any;
-    const handleLogoTap = () => {
-      setLogoTaps((prev) => {
-        const next = prev + 1;
-        if (next >= 5) {
-          setShowEasterEgg(true);
-          if (typeof window !== 'undefined' && 'vibrate' in navigator) {
-            navigator.vibrate([100, 50, 100]);
-          }
-          return 0;
-        }
-        clearTimeout(tapTimeout);
-        tapTimeout = setTimeout(() => {
-          setLogoTaps(0);
-        }, 3000);
-        return next;
-      });
-    };
-    window.addEventListener('prism-logo-tap', handleLogoTap);
-    return () => {
-      window.removeEventListener('prism-logo-tap', handleLogoTap);
-      clearTimeout(tapTimeout);
-    };
-  }, []);
-
   // Trigger offline sync when connection is restored
   useEffect(() => {
     const handleOnline = async () => {
@@ -1337,9 +1307,6 @@ const AppContent: React.FC = () => {
 
         {/* Sally AI Companion */}
         <SallyChat currentView={currentView} />
-
-        {/* Secret Launch Easter Egg */}
-        <EasterEgg isOpen={showEasterEgg} onClose={() => { setLogoTaps(0); setShowEasterEgg(false); }} />
       </div>
     </div>
   );
@@ -1373,6 +1340,35 @@ const AuthWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 };
 
 export default function App() {
+  const [logoTaps, setLogoTaps] = useState(0);
+  const [showEasterEgg, setShowEasterEgg] = useState(false);
+
+  useEffect(() => {
+    let tapTimeout: any;
+    const handleLogoTap = () => {
+      setLogoTaps((prev) => {
+        const next = prev + 1;
+        if (next >= 5) {
+          setShowEasterEgg(true);
+          if (typeof window !== 'undefined' && 'vibrate' in navigator) {
+            navigator.vibrate([100, 50, 100]);
+          }
+          return 0;
+        }
+        clearTimeout(tapTimeout);
+        tapTimeout = setTimeout(() => {
+          setLogoTaps(0);
+        }, 3000);
+        return next;
+      });
+    };
+    window.addEventListener('prism-logo-tap', handleLogoTap);
+    return () => {
+      window.removeEventListener('prism-logo-tap', handleLogoTap);
+      clearTimeout(tapTimeout);
+    };
+  }, []);
+
   return (
     <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
       <ThemeProvider>
@@ -1383,6 +1379,9 @@ export default function App() {
                 <AppContent />
               </ErrorBoundary>
             </AuthWrapper>
+            
+            {/* Secret Launch Easter Egg */}
+            <EasterEgg isOpen={showEasterEgg} onClose={() => { setLogoTaps(0); setShowEasterEgg(false); }} />
           </AuthProvider>
         </ToastProvider>
       </ThemeProvider>
