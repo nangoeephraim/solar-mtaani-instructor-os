@@ -1,4 +1,4 @@
-import { streamText, convertToModelMessages, tool, createUIMessageStreamResponse } from 'ai';
+import { streamText, convertToModelMessages, tool } from 'ai';
 import { z } from 'zod';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createGroq } from '@ai-sdk/groq';
@@ -24,10 +24,7 @@ interface ProviderConfig {
   apiKey: string;
 }
 
-// ── Provider Resolution (env-only, no DB round-trip) ─────────────────
-// The previous implementation queried Supabase for sally_settings on every
-// request, adding seconds of latency. Environment variables are always
-// available instantly on the serverless function.
+// ── Provider Resolution ──────────────────────────────────────────────
 function getProviderConfigsFromEnv(): ProviderConfig[] {
   const mapping: { provider: AIProviderType; envKey: string }[] = [
     { provider: 'groq', envKey: 'GROQ_API_KEY' },
@@ -67,9 +64,9 @@ function createModelForProvider(config: ProviderConfig) {
 // ── Fallback System Prompt ───────────────────────────────────────────
 const FALLBACK_SYSTEM_PROMPT = `You are Sally — a warm, witty solar technology coordinator who lives inside the PRISM Instructors Platform.
 
-You help local instructors run professional solar vocational training centers. Think of yourself as the instructor's technical copilot, sitting in the workshop, ready to review curriculum specs, calculate PV array ratios, check inventory levels, and help manage student performance.
+You help local instructors run professional solar vocational training centers. Think of yourself as the instructor's technical copilot. 
 
-Be concise, professional, and technical when needed. Use occasional technical humor. Respond in plain flowing text without markdown formatting (no bold, italic, hashes, or bullet characters) as your output is also rendered via text-to-speech.
+Be concise, professional, and technical when needed. Use occasional technical humor. Respond in plain flowing text without markdown formatting.
 
 Current time: ${new Date().toISOString()}`;
 
@@ -84,7 +81,7 @@ export default async function handler(req: Request) {
     console.log('[Sally] Chat handler invoked');
     const { messages } = body;
 
-    // ── 1. Sanitize client messages for AI SDK 6.x ──────────────────
+    // ── 1. Sanitize messages ─────────────────────────────────────────
     const sanitizeMessage = (msg: any): any => {
       if (msg.parts && Array.isArray(msg.parts)) return msg;
       const parts: any[] = [];
@@ -113,16 +110,13 @@ export default async function handler(req: Request) {
 
     const modelMessages = await convertToModelMessages(sanitizedMessages);
 
-    // ── 2. Build live database context (with timeout fallback) ──────
-    // If the Supabase queries take longer than 8 seconds (cold start,
-    // network latency), we fall back to the static system prompt so the
-    // AI response is not blocked.
+    // ── 2. Build live database context (with 5s fallback) ───────────
     let systemPrompt = FALLBACK_SYSTEM_PROMPT;
     try {
       const ctx = await Promise.race([
         buildPrismAIContext(),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Context build exceeded 8s timeout')), 8000)
+          setTimeout(() => reject(new Error('Context build exceeded timeout')), 5000)
         ),
       ]);
       systemPrompt = buildPrismSystemPrompt(ctx);
@@ -131,10 +125,8 @@ export default async function handler(req: Request) {
       console.warn('[Sally] Context build failed/timed out, using fallback:', ctxErr.message);
     }
 
-    // ── 3. Resolve provider configs from environment ────────────────
+    // ── 3. Resolve provider configs ─────────────────────────────────
     const configs = getProviderConfigsFromEnv();
-    console.log('[Sally] Available providers:', configs.map(c => c.provider).join(', '));
-
     if (configs.length === 0) {
       throw new Error('No AI provider API keys found in environment variables.');
     }
@@ -160,51 +152,28 @@ export default async function handler(req: Request) {
           }
         },
       } as any),
-
       logStudentAssessment: tool({
         description: 'Submit a training module grade/score for a student directly from conversation.',
         parameters: z.object({
           studentName: z.string().describe('Full name of the student'),
-          moduleName: z.string().describe('Solar training module name (e.g. PV Wiring)'),
+          moduleName: z.string().describe('Solar training module name'),
           score: z.number().describe('Assessment score out of 100'),
           comments: z.string().optional().describe('Brief feedback notes'),
         }),
         execute: async ({ studentName, moduleName, score, comments }: any) => {
           try {
             const supabase = await createServerSupabaseClient();
-            // Resolve student
             const { data: students, error: stdErr } = await supabase
               .from('students')
-              .select('id, name, cohort_id')
+              .select('id, name')
               .ilike('name', `%${studentName}%`);
-            if (stdErr || !students?.length) {
-              return { error: `Could not find student matching "${studentName}"` };
-            }
+            if (stdErr || !students?.length) return { error: `Could not find student "${studentName}"` };
             const targetStudent = students[0];
-            // Insert assessment
             const { error: insErr } = await supabase
               .from('assessments')
-              .insert({
-                student_id: targetStudent.id,
-                module_name: moduleName,
-                score,
-                comments: comments || 'Graded via Sally Copilot.',
-              })
-              .select();
+              .insert({ student_id: targetStudent.id, module_name: moduleName, score, comments: comments || '' });
             if (insErr) return { error: insErr.message };
-            // Recalculate average
-            const { data: allAssessments } = await supabase
-              .from('assessments')
-              .select('score')
-              .eq('student_id', targetStudent.id);
-            const scores = allAssessments || [];
-            const newAvg =
-              scores.length > 0 ? scores.reduce((sum, a) => sum + Number(a.score), 0) / scores.length : 0;
-            await supabase.from('students').update({ average_score: newAvg }).eq('id', targetStudent.id);
-            return {
-              success: true,
-              message: `Logged score of ${score} for ${targetStudent.name} in ${moduleName}.`,
-            };
+            return { success: true, message: `Logged score ${score} for ${targetStudent.name}` };
           } catch (err: any) {
             return { error: err.message || 'Assessment logging failed' };
           }
@@ -212,35 +181,78 @@ export default async function handler(req: Request) {
       } as any),
     };
 
-    // ── 5. Stream AI response ───────────────────────────────────────
-    // Use the first available provider and stream directly.
-    // 
-    // DESIGN DECISION: The previous implementation read 2 chunks from
-    // the stream with a 2.5s timeout per provider as a "pre-flight
-    // check", then reconstructed the stream. This caused:
-    //   - 2.5s × 4 providers = 10s minimum on timeout cascade
-    //   - Plus DB queries = exceeded Vercel function timeout → 504
-    //
-    // The new approach streams directly. If the provider errors, the
-    // error is sent through the stream to the client (which displays it
-    // gracefully). This converts a 100% timeout failure into a working
-    // stream with rare in-stream errors.
-    const primaryConfig = configs[0];
-    console.log(`[Sally] Streaming via provider: ${primaryConfig.provider}`);
+    // ── 5. Robust Provider Failover ─────────────────────────────────
+    let lastError: Error | null = null;
 
-    const model = createModelForProvider(primaryConfig);
+    for (const config of configs) {
+      console.log(`[Sally] Attempting provider: ${config.provider}`);
+      try {
+        const model = createModelForProvider(config);
+        const result = streamText({
+          model,
+          system: systemPrompt,
+          messages: modelMessages,
+          temperature: 0.7,
+          tools,
+          maxRetries: 0,
+          abortSignal: AbortSignal.timeout(5000) // Fast 5s timeout per provider!
+        });
 
-    const result = streamText({
-      model,
-      system: systemPrompt,
-      messages: modelMessages,
-      temperature: 0.7,
-      tools,
-    });
+        // Convert to UIMessageStream internally which emits JSON stream chunks
+        const uiStreamResponse = result.toUIMessageStream();
+        
+        // Wait for the FIRST chunk to prove the provider actually works.
+        // We do this by intercepting the readable stream.
+        const reader = uiStreamResponse.getReader();
+        const firstChunk = await reader.read(); // Will throw if API key bad, rate limited, or timeout
 
-    return createUIMessageStreamResponse({
-      stream: result.toUIMessageStream(),
-    });
+        console.log(`[Sally] Successfully established stream with ${config.provider}`);
+
+        // Reconstruct stream and return
+        const newStream = new ReadableStream({
+          start(controller) {
+            if (!firstChunk.done && firstChunk.value) {
+              controller.enqueue(firstChunk.value);
+            }
+            if (firstChunk.done) {
+              controller.close();
+            } else {
+              // Pipe the rest
+              (async () => {
+                try {
+                  while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    controller.enqueue(value);
+                  }
+                  controller.close();
+                } catch (err) {
+                  controller.error(err);
+                }
+              })();
+            }
+          },
+          cancel() {
+            reader.cancel();
+          }
+        });
+
+        return new Response(newStream, {
+          headers: {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'X-Provider-Used': config.provider
+          }
+        });
+
+      } catch (err: any) {
+        console.warn(`[Sally] Provider ${config.provider} failed: ${err.message}`);
+        lastError = err;
+        continue; // Try next provider!
+      }
+    }
+
+    throw new Error(`All providers failed. Last error: ${lastError?.message}`);
+
   } catch (error: any) {
     console.error('[Sally] Handler error:', error);
     return new Response(JSON.stringify({ error: error.message }), {
