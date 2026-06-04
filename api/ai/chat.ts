@@ -192,6 +192,11 @@ export default async function handler(req: Request) {
 
     for (const config of configs) {
       console.log(`[Sally] Attempting provider: ${config.provider}`);
+      
+      const abortController = new AbortController();
+      // Only timeout the INITIAL connection. If it connects, we clear this timeout.
+      const abortTimeout = setTimeout(() => abortController.abort(), 2000);
+
       try {
         const model = createModelForProvider(config);
         const result = streamText({
@@ -201,21 +206,22 @@ export default async function handler(req: Request) {
           temperature: 0.7,
           tools,
           maxRetries: 0,
-          abortSignal: AbortSignal.timeout(1200) // Ultra-fast 1.2s timeout to fit Vercel 10s limit!
+          abortSignal: abortController.signal
         });
 
-        // Convert to UIMessageStream internally which emits JSON stream chunks
-        const uiStreamResponse = result.toUIMessageStream();
+        const stream = result.toDataStream();
+        const reader = stream.getReader();
         
         // Wait for the FIRST chunk to prove the provider actually works.
-        const reader = uiStreamResponse.getReader();
         const firstChunk = await Promise.race([
           reader.read(),
           new Promise<any>((_, reject) => 
-            setTimeout(() => reject(new Error('Stream read timeout')), 1500)
+            setTimeout(() => reject(new Error('Stream read timeout')), 2000)
           )
         ]);
 
+        // Connection successful! Clear the timeout so the stream can complete naturally.
+        clearTimeout(abortTimeout);
         console.log(`[Sally] Successfully established stream with ${config.provider}`);
 
         // Reconstruct stream and return
@@ -255,6 +261,8 @@ export default async function handler(req: Request) {
         });
 
       } catch (err: any) {
+        abortController.abort();
+        clearTimeout(abortTimeout);
         console.warn(`[Sally] Provider ${config.provider} failed: ${err.message}`);
         lastError = err;
         continue; // Try next provider!
