@@ -1,4 +1,4 @@
-import { streamText, convertToModelMessages, tool } from 'ai';
+import { streamText, convertToModelMessages, tool, createUIMessageStreamResponse } from 'ai';
 import { z } from 'zod';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createGroq } from '@ai-sdk/groq';
@@ -25,12 +25,12 @@ interface ProviderConfig {
 
 // ── Provider Resolution ──────────────────────────────────────────────
 function getProviderConfigsFromEnv(): ProviderConfig[] {
-  const mapping: { provider: AIProviderType; envKey: string; fallback?: string }[] = [
-    { provider: 'groq', envKey: 'GROQ_API_KEY', fallback: 'gsk_Wd0GJKdyHD' + 'pPNetFG294WGdyb3FYZOGOzTODmZJRjkboZFlho6Ps' },
-    { provider: 'cerebras', envKey: 'CEREBRAS_API_KEY', fallback: 'csk-f288h6e' + 'vry2cw26m2epd4yfn89vnxtemphk6ryjpwy385844' },
-    { provider: 'openrouter', envKey: 'OPENROUTER_API_KEY', fallback: 'sk-or-v1-8a47' + '7a6ba4b22252063de0f797f4a8ecf77730ee19254973881b33ece3e12a44' },
-    { provider: 'google', envKey: 'GOOGLE_GENERATIVE_AI_API_KEY', fallback: 'AIzaSyBQ' + 'hB_bOydpOVEslD4jUZUiGUN2EJaPb-Q' },
-  ];
+    const mapping: { provider: AIProviderType; envKey: string; fallback?: string }[] = [
+      { provider: 'google', envKey: 'GOOGLE_GENERATIVE_AI_API_KEY', fallback: 'AIzaSyBQ' + 'hB_bOydpOVEslD4jUZUiGUN2EJaPb-Q' },
+      { provider: 'groq', envKey: 'GROQ_API_KEY', fallback: 'gsk_Wd0GJKdyHD' + 'pPNetFG294WGdyb3FYZOGOzTODmZJRjkboZFlho6Ps' },
+      { provider: 'cerebras', envKey: 'CEREBRAS_API_KEY', fallback: 'csk-f288h6e' + 'vry2cw26m2epd4yfn89vnxtemphk6ryjpwy385844' },
+      { provider: 'openrouter', envKey: 'OPENROUTER_API_KEY', fallback: 'sk-or-v1-8a47' + '7a6ba4b22252063de0f797f4a8ecf77730ee19254973881b33ece3e12a44' },
+    ];
 
   return mapping
     .map(m => ({ provider: m.provider, apiKey: (process.env[m.envKey] || m.fallback!).replace(/\n/g, '').trim() }))
@@ -88,7 +88,24 @@ export default async function handler(req: Request) {
 
     // ── 1. Sanitize messages ─────────────────────────────────────────
     const sanitizeMessage = (msg: any): any => {
-      if (msg.parts && Array.isArray(msg.parts)) return msg;
+      if (msg.parts && Array.isArray(msg.parts)) {
+        const sanitizedParts = msg.parts.map((part: any) => {
+          if (part.type === 'tool-invocation' && part.toolInvocation) {
+            const toolInv = part.toolInvocation;
+            return {
+              type: 'dynamic-tool',
+              toolCallId: toolInv.toolCallId,
+              toolName: toolInv.toolName,
+              state: toolInv.state,
+              input: toolInv.input ?? toolInv.args,
+              output: toolInv.result,
+              errorText: toolInv.errorText,
+            };
+          }
+          return part;
+        });
+        return { ...msg, parts: sanitizedParts };
+      }
       const parts: any[] = [];
       if (typeof msg.content === 'string' && msg.content.trim() !== '') {
         parts.push({ type: 'text', text: msg.content });
@@ -100,7 +117,7 @@ export default async function handler(req: Request) {
             toolCallId: toolInv.toolCallId,
             toolName: toolInv.toolName,
             state: toolInv.state,
-            input: toolInv.input,
+            input: toolInv.input ?? toolInv.args,
             output: toolInv.result,
             errorText: toolInv.errorText,
           });
@@ -136,16 +153,24 @@ export default async function handler(req: Request) {
       throw new Error('No AI provider API keys found in environment variables.');
     }
 
-    // ── 4. Define callable tools ────────────────────────────────────
     const tools = {
       getInventoryStock: tool({
         description: 'Lookup the current available stock for training materials and equipment at a specific location.',
-        parameters: z.object({
-          locationName: z.string().describe('The training location (e.g. Kibera)'),
+        inputSchema: z.object({
+          locationName: z.string().optional().describe('The training location (e.g. Kibera)'),
+          location_name: z.string().optional().describe('The training location (e.g. Kibera)'),
+          location: z.string().optional().describe('The training location (e.g. Kibera)'),
           itemName: z.string().optional().describe('Specific item name to check (e.g. Multimeter)'),
+          item_name: z.string().optional().describe('Specific item name to check (e.g. Multimeter)'),
+          item: z.string().optional().describe('Specific item name to check (e.g. Multimeter)'),
         }),
-        execute: async ({ locationName, itemName }: any) => {
+        execute: async (args: any) => {
           try {
+            const locationName = args.locationName ?? args.location_name ?? args.location;
+            const itemName = args.itemName ?? args.item_name ?? args.item;
+            if (!locationName) {
+              return { error: 'Location name is required' };
+            }
             const supabase = await createServerSupabaseClient();
             let query = supabase.from('equipment_inventory').select('*').ilike('location', `%${locationName}%`).abortSignal((globalThis as any).reqAbortSignal);
             if (itemName) query = query.ilike('item_name', `%${itemName}%`);
@@ -156,17 +181,37 @@ export default async function handler(req: Request) {
             return { error: err.message || 'Inventory lookup failed' };
           }
         },
-      } as any),
+      }),
       logStudentAssessment: tool({
         description: 'Submit a training module grade/score for a student directly from conversation.',
-        parameters: z.object({
-          studentName: z.string().describe('Full name of the student'),
-          moduleName: z.string().describe('Solar training module name'),
-          score: z.number().describe('Assessment score out of 100'),
+        inputSchema: z.object({
+          studentName: z.string().optional().describe('Full name of the student'),
+          student_name: z.string().optional().describe('Full name of the student'),
+          student: z.string().optional().describe('Full name of the student'),
+          moduleName: z.string().optional().describe('Solar training module name'),
+          module_name: z.string().optional().describe('Solar training module name'),
+          module: z.string().optional().describe('Solar training module name'),
+          score: z.union([z.number(), z.string()]).optional().describe('Assessment score out of 100'),
+          grade: z.union([z.number(), z.string()]).optional().describe('Assessment score out of 100'),
+          mark: z.union([z.number(), z.string()]).optional().describe('Assessment score out of 100'),
           comments: z.string().optional().describe('Brief feedback notes'),
+          comment: z.string().optional().describe('Brief feedback notes'),
+          notes: z.string().optional().describe('Brief feedback notes'),
+          feedback: z.string().optional().describe('Brief feedback notes'),
         }),
-        execute: async ({ studentName, moduleName, score, comments }: any) => {
+        execute: async (args: any) => {
           try {
+            const studentName = args.studentName ?? args.student_name ?? args.student;
+            const moduleName = args.moduleName ?? args.module_name ?? args.module;
+            const rawScore = args.score ?? args.grade ?? args.mark;
+            const comments = args.comments ?? args.comment ?? args.notes ?? args.feedback ?? '';
+
+            if (!studentName) return { error: 'Student name is required' };
+            if (!moduleName) return { error: 'Module name is required' };
+            if (rawScore === undefined) return { error: 'Score is required' };
+            const score = typeof rawScore === 'number' ? rawScore : parseFloat(rawScore);
+            if (isNaN(score)) return { error: 'Invalid score value' };
+
             const supabase = await createServerSupabaseClient();
             const { data: students, error: stdErr } = await supabase
               .from('students')
@@ -184,18 +229,19 @@ export default async function handler(req: Request) {
             return { error: err.message || 'Assessment logging failed' };
           }
         },
-      } as any),
+      }),
     };
 
-    // ── 5. Robust Provider Failover ─────────────────────────────────
+    // ── 5. Robust Provider Failover with Pre-flight Check ───────────
     let lastError: Error | null = null;
+    const timeoutPromise = (ms: number, message: string) =>
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error(message)), ms));
 
     for (const config of configs) {
       console.log(`[Sally] Attempting provider: ${config.provider}`);
       
       const abortController = new AbortController();
-      // Only timeout the INITIAL connection. If it connects, we clear this timeout.
-      const abortTimeout = setTimeout(() => abortController.abort(), 2000);
+      const preFlightTimeoutMs = 3000;
 
       try {
         const model = createModelForProvider(config);
@@ -209,20 +255,69 @@ export default async function handler(req: Request) {
           abortSignal: abortController.signal
         });
 
-        const streamResponse = result.toUIMessageStreamResponse({
+        // Obtain UI Message Stream and read first two chunks to verify API key / Quota connection status
+        const uiStream = result.toUIMessageStream();
+        const reader = uiStream.getReader();
+        const consumedChunks: any[] = [];
+
+        const readPreFlight = async () => {
+          const chunk1 = await reader.read();
+          if (chunk1.done) return;
+          consumedChunks.push(chunk1.value);
+          if (chunk1.value?.type === 'error') {
+            throw new Error(chunk1.value.errorText || 'Error chunk yielded');
+          }
+
+          const chunk2 = await reader.read();
+          if (chunk2.done) return;
+          consumedChunks.push(chunk2.value);
+          if (chunk2.value?.type === 'error') {
+            throw new Error(chunk2.value.errorText || 'Error chunk yielded');
+          }
+        };
+
+        await Promise.race([
+          readPreFlight(),
+          timeoutPromise(preFlightTimeoutMs, `Pre-flight timeout for provider ${config.provider}`)
+        ]);
+
+        console.log(`[Sally] Successfully pre-flighted and initiated stream with ${config.provider}`);
+
+        const finalResponseStream = new ReadableStream({
+          async start(controller) {
+            for (const chunk of consumedChunks) {
+              controller.enqueue(chunk);
+            }
+          },
+          async pull(controller) {
+            try {
+              const { done, value } = await reader.read();
+              if (done) {
+                controller.close();
+                reader.releaseLock();
+              } else {
+                controller.enqueue(value);
+              }
+            } catch (err) {
+              controller.error(err);
+              reader.releaseLock();
+            }
+          },
+          cancel() {
+            reader.releaseLock();
+          }
+        });
+
+        return createUIMessageStreamResponse({
+          stream: finalResponseStream,
           headers: {
             'X-Provider-Used': config.provider
           }
         });
 
-        clearTimeout(abortTimeout);
-        console.log(`[Sally] Successfully initiated stream with ${config.provider}`);
-        return streamResponse;
-
       } catch (err: any) {
         abortController.abort();
-        clearTimeout(abortTimeout);
-        console.warn(`[Sally] Provider ${config.provider} failed: ${err.message}`);
+        console.warn(`[Sally] Provider ${config.provider} failed pre-flight: ${err.message}`);
         lastError = err;
         continue; // Try next provider!
       }
