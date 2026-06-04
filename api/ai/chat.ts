@@ -209,56 +209,15 @@ export default async function handler(req: Request) {
           abortSignal: abortController.signal
         });
 
-        const stream = result.toDataStream();
-        const reader = stream.getReader();
-        
-        // Wait for the FIRST chunk to prove the provider actually works.
-        const firstChunk = await Promise.race([
-          reader.read(),
-          new Promise<any>((_, reject) => 
-            setTimeout(() => reject(new Error('Stream read timeout')), 2000)
-          )
-        ]);
-
-        // Connection successful! Clear the timeout so the stream can complete naturally.
-        clearTimeout(abortTimeout);
-        console.log(`[Sally] Successfully established stream with ${config.provider}`);
-
-        // Reconstruct stream and return
-        const newStream = new ReadableStream({
-          start(controller) {
-            if (!firstChunk.done && firstChunk.value) {
-              controller.enqueue(firstChunk.value);
-            }
-            if (firstChunk.done) {
-              controller.close();
-            } else {
-              // Pipe the rest
-              (async () => {
-                try {
-                  while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    controller.enqueue(value);
-                  }
-                  controller.close();
-                } catch (err) {
-                  controller.error(err);
-                }
-              })();
-            }
-          },
-          cancel() {
-            reader.cancel();
-          }
-        });
-
-        return new Response(newStream, {
+        const streamResponse = result.toUIMessageStreamResponse({
           headers: {
-            'Content-Type': 'text/plain; charset=utf-8',
             'X-Provider-Used': config.provider
           }
         });
+
+        clearTimeout(abortTimeout);
+        console.log(`[Sally] Successfully initiated stream with ${config.provider}`);
+        return streamResponse;
 
       } catch (err: any) {
         abortController.abort();
