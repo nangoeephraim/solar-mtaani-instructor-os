@@ -1,4 +1,4 @@
-export const runtime = 'edge';
+// Removed edge runtime
 
 export default async function handler(req: Request) {
   try {

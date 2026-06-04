@@ -7,8 +7,7 @@ import { buildPrismAIContext, buildPrismSystemPrompt } from '../../lib/aiContext
 import { createServerSupabaseClient } from '../../lib/supabase-server.js';
 
 // ── Vercel Serverless Configuration ──────────────────────────────────
-// Use the Edge runtime to bypass the 10-second Hobby plan Serverless Function limit.
-export const runtime = 'edge';
+// Ensure maxDuration is 60 (ignored on Hobby, but good practice).
 export const maxDuration = 60;
 
 // Ensure the Gemini API key alias is propagated
@@ -195,7 +194,7 @@ export default async function handler(req: Request) {
           temperature: 0.7,
           tools,
           maxRetries: 0,
-          abortSignal: AbortSignal.timeout(5000) // Fast 5s timeout per provider!
+          abortSignal: AbortSignal.timeout(1500) // Fast 1.5s timeout to fit Vercel 10s limit!
         });
 
         // Convert to UIMessageStream internally which emits JSON stream chunks
