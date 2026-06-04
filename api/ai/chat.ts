@@ -230,6 +230,215 @@ export default async function handler(req: Request) {
           }
         },
       }),
+      getStudentData: tool({
+        description: 'Query student database records. Can search for a student by name, retrieve stats, or get details.',
+        inputSchema: z.object({
+          studentName: z.string().optional().describe('Full or partial name of student'),
+          student_name: z.string().optional().describe('Full or partial name of student'),
+          student: z.string().optional().describe('Full or partial name of student'),
+          getStats: z.boolean().optional().describe('Set true to get global student statistics (average scores, counts)'),
+          get_stats: z.boolean().optional().describe('Set true to get global student statistics (average scores, counts)'),
+        }),
+        execute: async (args: any) => {
+          try {
+            const studentName = args.studentName ?? args.student_name ?? args.student;
+            const getStats = args.getStats ?? args.get_stats;
+            const supabase = await createServerSupabaseClient();
+            
+            if (getStats) {
+              const { data, error } = await supabase.from('students').select('id, attendance_rate, average_score').abortSignal((globalThis as any).reqAbortSignal);
+              if (error) return { error: error.message };
+              const count = data?.length || 0;
+              const avgScore = count > 0 ? (data.reduce((sum, s) => sum + Number(s.average_score || 0), 0) / count) : 0;
+              const avgAttendance = count > 0 ? (data.reduce((sum, s) => sum + Number(s.attendance_rate || 0), 0) / count) : 0;
+              return {
+                totalStudents: count,
+                averageScore: Math.round(avgScore * 100) / 100,
+                averageAttendance: Math.round(avgAttendance * 100) / 100,
+              };
+            }
+            
+            let query = supabase.from('students').select('*').abortSignal((globalThis as any).reqAbortSignal);
+            if (studentName) {
+              query = query.ilike('name', `%${studentName}%`);
+            }
+            const { data, error } = await query;
+            if (error) return { error: error.message };
+            return { students: data || [] };
+          } catch (err: any) {
+            return { error: err.message || 'Student query failed' };
+          }
+        }
+      }),
+      getFeePayments: tool({
+        description: 'Query fee payment receipts and financial transactions from the database.',
+        inputSchema: z.object({
+          studentName: z.string().optional().describe('Full or partial name of student to find payments for'),
+          student_name: z.string().optional().describe('Full or partial name of student to find payments for'),
+          student: z.string().optional().describe('Full or partial name of student to find payments for'),
+          mpesaReceipt: z.string().optional().describe('M-Pesa receipt code or phone number to lookup'),
+          mpesa_receipt: z.string().optional().describe('M-Pesa receipt code or phone number to lookup'),
+          receipt: z.string().optional().describe('M-Pesa receipt code or phone number to lookup'),
+          status: z.string().optional().describe('Payment status: completed, pending, failed, cancelled'),
+          getStats: z.boolean().optional().describe('Set true to get total fee collection statistics'),
+          get_stats: z.boolean().optional().describe('Set true to get total fee collection statistics'),
+        }),
+        execute: async (args: any) => {
+          try {
+            const studentName = args.studentName ?? args.student_name ?? args.student;
+            const mpesaReceipt = args.mpesaReceipt ?? args.mpesa_receipt ?? args.receipt;
+            const status = args.status;
+            const getStats = args.getStats ?? args.get_stats;
+            const supabase = await createServerSupabaseClient();
+            
+            if (getStats) {
+              const { data, error } = await supabase.from('fee_payments').select('amount, status').abortSignal((globalThis as any).reqAbortSignal);
+              if (error) return { error: error.message };
+              const completed = data?.filter(p => p.status === 'completed') || [];
+              const totalCollected = completed.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+              return {
+                totalPaymentsCount: data?.length || 0,
+                completedPaymentsCount: completed.length,
+                totalCollectedAmount: totalCollected,
+              };
+            }
+            
+            let query = supabase.from('fee_payments').select('*').order('created_at', { ascending: false }).abortSignal((globalThis as any).reqAbortSignal);
+            if (studentName) {
+              query = query.ilike('student_name', `%${studentName}%`);
+            }
+            if (mpesaReceipt) {
+              query = query.or(`mpesa_receipt_number.ilike.%${mpesaReceipt}%,mpesa_phone_number.ilike.%${mpesaReceipt}%`);
+            }
+            if (status) {
+              query = query.eq('status', status.toLowerCase());
+            }
+            const { data, error } = await query.limit(50);
+            if (error) return { error: error.message };
+            return { payments: data || [] };
+          } catch (err: any) {
+            return { error: err.message || 'Fee payments query failed' };
+          }
+        }
+      }),
+      getLibraryAssets: tool({
+        description: 'Search the digital document library for files, student receipts, guides, or manuals.',
+        inputSchema: z.object({
+          searchTerm: z.string().optional().describe('Keyword or name in file name or title'),
+          search_term: z.string().optional().describe('Keyword or name in file name or title'),
+          search: z.string().optional().describe('Keyword or name in file name or title'),
+          category: z.string().optional().describe('Filter by category: guide, lesson-plan, notes, report, other'),
+        }),
+        execute: async (args: any) => {
+          try {
+            const searchTerm = args.searchTerm ?? args.search_term ?? args.search;
+            const category = args.category;
+            const supabase = await createServerSupabaseClient();
+            
+            let query = supabase.from('library_resources').select('*').order('uploaded_at', { ascending: false }).abortSignal((globalThis as any).reqAbortSignal);
+            if (category) {
+              query = query.eq('category', category.toLowerCase());
+            }
+            const { data, error } = await query;
+            if (error) return { error: error.message };
+            
+            let results = data || [];
+            if (searchTerm) {
+              const lowerTerm = searchTerm.toLowerCase();
+              results = results.filter(item => 
+                (item.title && item.title.toLowerCase().includes(lowerTerm)) ||
+                (item.file_name && item.file_name.toLowerCase().includes(lowerTerm))
+              );
+            }
+            return { assets: results.slice(0, 50) };
+          } catch (err: any) {
+            return { error: err.message || 'Library assets query failed' };
+          }
+        }
+      }),
+      getFeedMessages: tool({
+        description: 'Read the latest chat feed messages or announcements from the campus channels.',
+        inputSchema: z.object({
+          channelName: z.string().optional().describe('Channel to fetch messages from: general, announcements. Defaults to general'),
+          channel_name: z.string().optional().describe('Channel to fetch messages from: general, announcements. Defaults to general'),
+          channel: z.string().optional().describe('Channel to fetch messages from: general, announcements. Defaults to general'),
+          searchTerm: z.string().optional().describe('Search query for message content'),
+          search_term: z.string().optional().describe('Search query for message content'),
+          search: z.string().optional().describe('Search query for message content'),
+          limit: z.number().optional().describe('Number of messages to retrieve (defaults to 15, max 50)'),
+        }),
+        execute: async (args: any) => {
+          try {
+            const channelName = args.channelName ?? args.channel_name ?? args.channel ?? 'general';
+            const searchTerm = args.searchTerm ?? args.search_term ?? args.search;
+            const limit = Math.min(args.limit ?? 15, 50);
+            const supabase = await createServerSupabaseClient();
+            
+            // Resolve channel name to ID
+            const { data: channels, error: chErr } = await supabase
+              .from('chat_channels')
+              .select('id, name')
+              .abortSignal((globalThis as any).reqAbortSignal);
+            
+            if (chErr) return { error: chErr.message };
+            const lowerName = channelName.toLowerCase();
+            const targetChannel = channels?.find(ch => 
+              ch.id.toLowerCase().includes(lowerName) || 
+              ch.name.toLowerCase().includes(lowerName)
+            ) || channels?.find(ch => ch.id === 'chan_general');
+            
+            if (!targetChannel) return { error: `Could not find chat channel matching "${channelName}"` };
+            
+            let query = supabase
+              .from('chat_messages')
+              .select(`
+                id, content, created_at, is_pinned, sender_id,
+                sender:profiles(name, role)
+              `)
+              .eq('channel_id', targetChannel.id)
+              .eq('is_deleted', false)
+              .order('created_at', { ascending: false })
+              .abortSignal((globalThis as any).reqAbortSignal);
+            
+            if (searchTerm) {
+              query = query.ilike('content', `%${searchTerm}%`);
+            }
+            
+            const { data: messages, error: msgErr } = await query.limit(limit);
+            if (msgErr) return { error: msgErr.message };
+            
+            const mappedMessages = (messages || []).map((m: any) => {
+              let senderName = 'Unknown User';
+              let senderRole = 'viewer';
+              if (m.sender) {
+                if (Array.isArray(m.sender)) {
+                  senderName = m.sender[0]?.name || 'Unknown User';
+                  senderRole = m.sender[0]?.role || 'viewer';
+                } else {
+                  senderName = m.sender.name || 'Unknown User';
+                  senderRole = m.sender.role || 'viewer';
+                }
+              }
+              return {
+                id: m.id,
+                content: m.content,
+                createdAt: m.created_at,
+                isPinned: m.is_pinned,
+                senderName,
+                senderRole
+              };
+            });
+            
+            return {
+              channelName: targetChannel.name,
+              channelId: targetChannel.id,
+              messages: mappedMessages
+            };
+          } catch (err: any) {
+            return { error: err.message || 'Chat feed query failed' };
+          }
+        }
+      }),
     };
 
     // ── 5. Robust Provider Failover with Pre-flight Check ───────────

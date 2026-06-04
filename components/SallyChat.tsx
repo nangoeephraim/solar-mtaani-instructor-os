@@ -37,14 +37,20 @@ export function SallyChat({ currentView }: { currentView?: string }) {
 
   // Helper to extract text content from a modular message
   const getMessageText = (message: any) => {
-    if (message.content) return message.content;
-    if (message.parts && Array.isArray(message.parts)) {
-      return message.parts
+    let rawText = '';
+    if (message.content) {
+      rawText = message.content;
+    } else if (message.parts && Array.isArray(message.parts)) {
+      rawText = message.parts
         .filter((part: any) => part.type === 'text')
         .map((part: any) => part.text)
         .join('');
     }
-    return '';
+    // Clean up asterisks for both non-markdown UI display and vocal narration
+    if (message.role === 'assistant') {
+      return rawText.replace(/\*/g, '');
+    }
+    return rawText;
   };
 
   // Helper to extract tool invocations from a modular message
@@ -66,10 +72,11 @@ export function SallyChat({ currentView }: { currentView?: string }) {
     transport: new DefaultChatTransport({
       api: '/api/ai/chat',
     }),
-    onFinish: ({ message }) => {
-      // Speak final assistant response if speech is enabled
-      if (speechEnabled && message.role === 'assistant') {
-        speak(getMessageText(message));
+    onFinish: (response: any) => {
+      // Extract assistant response safely from the event payload
+      const msg = response?.responseMessage || response;
+      if (speechEnabled && msg && msg.role === 'assistant') {
+        speak(getMessageText(msg));
       }
     }
   });

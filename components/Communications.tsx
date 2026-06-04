@@ -1958,7 +1958,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                                  <span className="text-xs ml-auto opacity-70 animate-pulse hidden sm:inline">Recording voice message...</span>
                                              </div>
                                          ) : (
-                                             <textarea ref={textareaRef} value={messageInput} onChange={handleInputChange} onKeyDown={handleKeyDown} onFocus={() => setIsInputFocused(true)} onBlur={() => setTimeout(() => { setIsInputFocused(false); setShowMentions(false); }, 200)} placeholder={activeChannel.type === 'announcement' ? 'Compose broadcast message...' : `Message #${activeChannel.name}`} className="flex-1 bg-transparent py-2 px-2 outline-none resize-none overflow-y-auto max-h-32 min-h-[36px] text-[15px] font-google font-medium text-[var(--md-sys-color-on-surface)] scrollbar-none" rows={1} />
+                                             <textarea ref={textareaRef} value={messageInput} onChange={handleInputChange} onKeyDown={handleKeyDown} onFocus={() => setIsInputFocused(true)} onBlur={() => setTimeout(() => { setIsInputFocused(false); setShowMentions(false); }, 200)} placeholder={activeChannel.type === 'announcement' ? 'Compose broadcast message...' : `Message #${activeChannel.name}`} className="flex-1 bg-transparent py-2 px-2 border-none outline-none focus:outline-none focus:ring-0 resize-none overflow-y-auto max-h-32 min-h-[36px] text-[15px] font-google font-medium text-[var(--md-sys-color-on-surface)] scrollbar-none" rows={1} />
                                          )}
 
                                          <div className="flex items-center gap-1">
