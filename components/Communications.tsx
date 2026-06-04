@@ -268,6 +268,7 @@ const MessageGroupRenderer = React.memo(({
     channelData,
     chatFontSize,
     triggerHaptics,
+    chatBubbleTheme,
 }: any) => {
     const first = group[0];
 
@@ -301,6 +302,42 @@ const MessageGroupRenderer = React.memo(({
                         const isFirst = mIdx === 0;
                         const isLast = mIdx === group.length - 1;
 
+                        const getBubbleStyleAndClass = () => {
+                            let baseClass = "";
+                            let inlineStyle: React.CSSProperties = {};
+
+                            if (!isMyMsg) {
+                                baseClass = `rounded-r-2xl text-[var(--md-sys-color-on-surface)] ${isFirst ? 'rounded-tl-2xl' : 'rounded-tl-md'} ${isLast ? 'rounded-bl-2xl' : 'rounded-bl-md'}`;
+                                inlineStyle = { background: 'var(--md-sys-color-surface)' };
+                            } else {
+                                const cornerClasses = `${isFirst ? 'rounded-tr-2xl' : 'rounded-tr-md'} ${isLast ? 'rounded-br-2xl' : 'rounded-br-md'} rounded-l-2xl`;
+                                switch (chatBubbleTheme) {
+                                    case 'lavender':
+                                        baseClass = `bg-indigo-600 dark:bg-indigo-500 text-white ${cornerClasses}`;
+                                        break;
+                                    case 'rose':
+                                        baseClass = `bg-rose-600 dark:bg-rose-500 text-white ${cornerClasses}`;
+                                        break;
+                                    case 'ocean':
+                                        baseClass = `bg-sky-600 dark:bg-sky-500 text-white ${cornerClasses}`;
+                                        break;
+                                    case 'emerald':
+                                        baseClass = `bg-emerald-600 dark:bg-emerald-500 text-white ${cornerClasses}`;
+                                        break;
+                                    case 'amethyst':
+                                        baseClass = `bg-purple-600 dark:bg-purple-500 text-white ${cornerClasses}`;
+                                        break;
+                                    case 'default':
+                                    default:
+                                        baseClass = `bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] ${cornerClasses}`;
+                                        break;
+                                }
+                            }
+                            return { className: baseClass, style: inlineStyle };
+                        };
+
+                        const bubbleData = getBubbleStyleAndClass();
+
                         return (
                             <SwipeableMessage
                                 key={msg.id}
@@ -309,11 +346,12 @@ const MessageGroupRenderer = React.memo(({
                                 onSwipeReply={onSwipeReply}
                                 onSwipeEdit={onSwipeEdit}
                             >
-                            <motion.div layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className={clsx("relative px-3 py-2 group/msg break-words shadow-sm transition-shadow hover:shadow-md", getFontSizeClass(),
-                                isMyMsg
-                                    ? `bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] ${isFirst ? 'rounded-tr-2xl' : 'rounded-tr-md'} ${isLast ? 'rounded-br-2xl' : 'rounded-br-md'} rounded-l-2xl`
-                                    : `rounded-r-2xl text-[var(--md-sys-color-on-surface)] ${isFirst ? 'rounded-tl-2xl' : 'rounded-tl-md'} ${isLast ? 'rounded-bl-2xl' : 'rounded-bl-md'}`
-                            )} style={!isMyMsg ? { background: 'var(--md-sys-color-surface)' } : {}}
+                            <motion.div 
+                                layout 
+                                initial={{ opacity: 0, y: 10 }} 
+                                animate={{ opacity: 1, y: 0 }} 
+                                className={clsx("relative px-3 py-2 group/msg break-words shadow-sm transition-shadow hover:shadow-md", getFontSizeClass(), bubbleData.className)} 
+                                style={bubbleData.style}
                                 onMouseEnter={() => setHoveredMsgId(msg.id)}
                                 onMouseLeave={() => { setHoveredMsgId(null); setShowEmojiPicker(null); }}
                                 onPointerDown={(e: any) => {
@@ -407,9 +445,9 @@ const MessageGroupRenderer = React.memo(({
                                                 {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                             </span>
                                             {isRead ? (
-                                                <CheckCheck size={12} style={{ color: 'var(--md-sys-color-primary)', filter: 'brightness(1.3)' }} />
+                                                <CheckCheck size={12} style={{ color: '#38bdf8' }} />
                                             ) : (
-                                                <CheckCheck size={12} className="opacity-50" />
+                                                <CheckCheck size={12} className="text-white/50" />
                                             )}
                                         </div>
                                     );
@@ -652,11 +690,17 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
     const [enableHaptics, setEnableHaptics] = useState<boolean>(() => {
         return localStorage.getItem('prism_enable_haptics') !== 'false';
     });
+    const [chatBubbleTheme, setChatBubbleTheme] = useState<'default' | 'lavender' | 'rose' | 'ocean' | 'emerald' | 'amethyst'>(() => {
+        return (localStorage.getItem('prism_chat_bubble_theme') as any) || 'default';
+    });
     const [showCustomSettings, setShowCustomSettings] = useState(false);
 
     useEffect(() => {
         localStorage.setItem('prism_chat_wallpaper', chatWallpaper);
     }, [chatWallpaper]);
+    useEffect(() => {
+        localStorage.setItem('prism_chat_bubble_theme', chatBubbleTheme);
+    }, [chatBubbleTheme]);
     useEffect(() => {
         localStorage.setItem('prism_enter_is_send', String(enterIsSend));
     }, [enterIsSend]);
@@ -771,9 +815,15 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
 
     const [visibleGroupsCount, setVisibleGroupsCount] = useState(30);
 
-    // Reset visible count when channel changes
+    // Reset visible count and input state when channel changes
     useEffect(() => {
         setVisibleGroupsCount(30);
+        setMessageInput('');
+        setReplyToMsg(null);
+        setPendingAttachments([]);
+        if (textareaRef.current) {
+            textareaRef.current.style.height = 'auto';
+        }
     }, [activeChannelId]);
 
     // Fetch users for DM directory AND eagerly pre-load all their avatars
@@ -1187,6 +1237,24 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
         setMessageInput(parts.join(' '));
         setShowMentions(false);
         textareaRef.current?.focus();
+    };
+
+    const insertEmoji = (emoji: string) => {
+        const t = textareaRef.current;
+        if (!t) {
+            setMessageInput(prev => prev + emoji);
+            return;
+        }
+        const s = t.selectionStart, e = t.selectionEnd;
+        const val = messageInput;
+        const newVal = val.substring(0, s) + emoji + val.substring(e);
+        setMessageInput(newVal);
+        setTimeout(() => {
+            t.style.height = 'auto';
+            t.style.height = `${Math.min(t.scrollHeight, 128)}px`;
+            t.focus();
+            t.setSelectionRange(s + emoji.length, s + emoji.length);
+        }, 0);
     };
 
     const handleEditSave = async (chId: string, msgId: string) => {
@@ -1644,6 +1712,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                                             channelData={activeChannel}
                                                             chatFontSize={chatFontSize}
                                                             triggerHaptics={triggerHaptics}
+                                                            chatBubbleTheme={chatBubbleTheme}
                                                         />
                                                     </React.Fragment>
                                                 );
@@ -1801,7 +1870,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                                         { icon: <FileText size={22} />, label: 'Document', color: '#f59e0b', action: () => docInputRef.current?.click() },
                                                         { icon: <Mic size={22} />, label: 'Audio', color: '#8b5cf6', action: () => { setShowMobileAttachSheet(false); startRecording(); } },
                                                     ].map(({ icon, label, color, action }) => (
-                                                        <button key={label} type="button" onClick={action} className="flex flex-col items-center gap-2 active:scale-95 transition-transform">
+                                                <button key={label} type="button" onClick={action} className="flex flex-col items-center gap-2 active:scale-95 transition-transform">
                                                             <div className="w-14 h-14 rounded-2xl flex items-center justify-center shadow-md" style={{ background: color + '22', color }}>
                                                                 {icon}
                                                             </div>
@@ -1813,57 +1882,102 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                         )}
                                     </AnimatePresence>
 
-                                    <div className={clsx("flex items-end rounded-[32px] transition-all duration-300 backdrop-blur-md", isInputFocused || isRecording ? "shadow-lg bg-[var(--md-sys-color-surface-variant)] scale-[1.01]" : "bg-[var(--md-sys-color-surface)] hover:bg-[var(--md-sys-color-surface-variant)] shadow-sm")} style={{ border: '1px solid', borderColor: isInputFocused || isRecording ? 'var(--md-sys-color-primary)' : 'var(--md-sys-color-outline-variant)' }}>
-                                        <div className="pl-2 pb-2 pt-2 flex items-center h-full gap-0.5">
-                                            {/* Mobile: '+' opens the attach sheet */}
-                                            <button type="button" onClick={() => setShowMobileAttachSheet(p => !p)} className="md:hidden p-2.5 rounded-full hover:bg-[var(--md-sys-color-surface-2)] transition-all active:scale-90" style={{ color: 'var(--md-sys-color-secondary)' }} title="Attach">
-                                                <motion.div animate={{ rotate: showMobileAttachSheet ? 45 : 0 }} transition={{ type: 'spring', stiffness: 400, damping: 20 }}>
-                                                    <Plus size={20} />
+                                    {/* ── Input Emoji Picker Popover ── */}
+                                    <AnimatePresence>
+                                        {showEmojiPicker === 'input' && (
+                                            <>
+                                                <div className="fixed inset-0 z-20" onClick={() => setShowEmojiPicker(null)} />
+                                                <motion.div 
+                                                    initial={{ opacity: 0, y: 10, scale: 0.95 }} 
+                                                    animate={{ opacity: 1, y: 0, scale: 1 }} 
+                                                    exit={{ opacity: 0, y: 10, scale: 0.95 }} 
+                                                    className="absolute bottom-[calc(100%+8px)] left-2 md:left-4 z-30 p-3 rounded-2xl glass-panel w-72 max-w-[calc(100vw-32px)]"
+                                                    style={{ boxShadow: 'var(--shadow-elevation-3)', background: 'var(--md-sys-color-surface)' }}
+                                                >
+                                                    <div className="text-xs font-bold mb-2 uppercase tracking-wider text-[var(--md-sys-color-secondary)]">Insert Emoji</div>
+                                                    <div className="grid grid-cols-6 gap-1 max-h-40 overflow-y-auto custom-scrollbar">
+                                                        {['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '👏', '🎉', '✅', '👀', '✨', '🤔', '💡', '🚀', '💯', '😊', '🥳', '😎', '😅', '👋', '⭐', '❌', '📅'].map(emoji => (
+                                                            <button 
+                                                                key={emoji} 
+                                                                type="button" 
+                                                                onClick={() => {
+                                                                    triggerHaptics('light');
+                                                                    insertEmoji(emoji);
+                                                                }} 
+                                                                className="w-10 h-10 rounded-xl hover:bg-[var(--md-sys-color-surface-variant)] flex items-center justify-center text-xl transition-all hover:scale-110 active:scale-95"
+                                                            >
+                                                                {emoji}
+                                                            </button>
+                                                        ))}
+                                                    </div>
                                                 </motion.div>
-                                            </button>
-                                            {/* Desktop: paperclip opens full picker */}
-                                            <button type="button" onClick={() => fileInputRef.current?.click()} className="hidden md:flex p-2.5 rounded-full hover:bg-[var(--md-sys-color-surface-2)] transition-colors hover:text-[var(--md-sys-color-primary)]" style={{ color: 'var(--md-sys-color-secondary)' }} title="Attach file (or drag & drop / paste image)"><Paperclip size={18} /></button>
-                                            {/* Dedicated Sally AI Copilot Button (resolves keyboard Send/Enter overlap layout clash) */}
-                                            <button 
-                                                type="button" 
-                                                onClick={() => {
-                                                    triggerHaptics('light');
-                                                    window.dispatchEvent(new Event('open-sally-chat'));
-                                                }} 
-                                                className="p-2.5 rounded-full hover:bg-[var(--md-sys-color-surface-2)] transition-colors hover:text-emerald-500 text-emerald-600 flex items-center justify-center animate-pulse" 
-                                                title="Ask Sally AI Assistant"
-                                            >
-                                                <Sparkles size={18} />
-                                            </button>
-                                        </div>
-
-                                        {isRecording ? (
-                                            <div className="flex-1 flex items-center gap-3 py-4 px-3">
-                                                <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
-                                                <span className="font-google font-bold text-red-500 text-sm">{Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}</span>
-                                                <span className="text-xs ml-auto opacity-70 animate-pulse hidden sm:inline">Recording...</span>
-                                            </div>
-                                        ) : (
-                                            <textarea ref={textareaRef} value={messageInput} onChange={handleInputChange} onKeyDown={handleKeyDown} onFocus={() => setIsInputFocused(true)} onBlur={() => setTimeout(() => { setIsInputFocused(false); setShowMentions(false); }, 200)} placeholder={activeChannel.type === 'announcement' ? 'Compose broadcast message...' : `Message #${activeChannel.name}`} className="flex-1 bg-transparent py-4 px-2 outline-none resize-none overflow-hidden max-h-32 min-h-[56px] text-[15px] font-google font-medium text-[var(--md-sys-color-on-surface)]" rows={1} />
+                                            </>
                                         )}
+                                    </AnimatePresence>
 
-                                        <div className="pr-3 pb-3 pt-3 flex items-center h-full gap-1">
-                                            {isRecording ? (
-                                                <>
-                                                    <button type="button" onClick={() => stopRecording(true)} className="p-2 text-red-500 hover:bg-red-500/10 rounded-full transition-colors"><Trash2 size={18} /></button>
-                                                    <button type="button" onClick={() => stopRecording(false)} className="bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] w-10 h-10 flex items-center justify-center rounded-full hover:scale-105 transition-all shadow-md active:scale-95"><Send size={16} className="ml-0.5" /></button>
-                                                </>
-                                            ) : (
-                                                <button type="button" onClick={e => {
-                                                    if (!messageInput.trim() && pendingAttachments.length === 0) { startRecording(); }
-                                                    else { handleSendMessage(e as any); }
-                                                }} disabled={isUploadingAttachment} className="bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] w-10 h-10 flex items-center justify-center rounded-full disabled:opacity-40 hover:scale-105 transition-all shadow-md active:scale-95 disabled:hover:scale-100">
-                                                    {isUploadingAttachment
-                                                        ? <div className="w-4 h-4 rounded-full border-2 border-[var(--md-sys-color-on-primary)] border-t-transparent animate-spin" />
-                                                        : (!messageInput.trim() && pendingAttachments.length === 0) ? <Mic size={18} /> : <Send size={16} className="ml-0.5" />}
-                                                </button>
-                                            )}
-                                        </div>
+                                    <div className={clsx("flex items-end rounded-[28px] transition-all duration-300 backdrop-blur-md p-1.5 gap-1.5", isInputFocused || isRecording ? "shadow-lg bg-[var(--md-sys-color-surface-variant)] scale-[1.01]" : "bg-[var(--md-sys-color-surface)] hover:bg-[var(--md-sys-color-surface-variant)] shadow-sm")} style={{ border: '1px solid', borderColor: isInputFocused || isRecording ? 'var(--md-sys-color-primary)' : 'var(--md-sys-color-outline-variant)' }}>
+                                         <div className="flex items-center gap-0.5">
+                                             {/* Mobile: '+' opens the attach sheet */}
+                                             <button type="button" onClick={() => setShowMobileAttachSheet(p => !p)} className="md:hidden p-2 rounded-full hover:bg-[var(--md-sys-color-surface-2)] transition-all active:scale-90" style={{ color: 'var(--md-sys-color-secondary)' }} title="Attach">
+                                                 <motion.div animate={{ rotate: showMobileAttachSheet ? 45 : 0 }} transition={{ type: 'spring', stiffness: 400, damping: 20 }}>
+                                                     <Plus size={20} />
+                                                 </motion.div>
+                                             </button>
+                                             {/* Desktop: paperclip opens full picker */}
+                                             <button type="button" onClick={() => fileInputRef.current?.click()} className="hidden md:flex p-2 rounded-full hover:bg-[var(--md-sys-color-surface-2)] transition-colors hover:text-[var(--md-sys-color-primary)]" style={{ color: 'var(--md-sys-color-secondary)' }} title="Attach file (or drag & drop / paste image)"><Paperclip size={18} /></button>
+                                             {/* Dedicated Sally AI Copilot Button (resolves keyboard Send/Enter overlap layout clash) */}
+                                             <button 
+                                                 type="button" 
+                                                 onClick={() => {
+                                                     triggerHaptics('light');
+                                                     window.dispatchEvent(new Event('open-sally-chat'));
+                                                 }} 
+                                                 className="p-2 rounded-full hover:bg-[var(--md-sys-color-surface-2)] transition-colors hover:text-emerald-500 text-emerald-600 flex items-center justify-center animate-pulse" 
+                                                 title="Ask Sally AI Assistant"
+                                             >
+                                                 <Sparkles size={18} />
+                                             </button>
+                                             {/* Emoji Picker Toggle Button */}
+                                             <button 
+                                                 type="button" 
+                                                 onClick={() => {
+                                                     triggerHaptics('light');
+                                                     setShowEmojiPicker(showEmojiPicker === 'input' ? null : 'input');
+                                                 }} 
+                                                 className={clsx("p-2 rounded-full hover:bg-[var(--md-sys-color-surface-2)] transition-colors", showEmojiPicker === 'input' ? "text-[var(--md-sys-color-primary)]" : "text-[var(--md-sys-color-secondary)]")}
+                                                 title="Insert emoji"
+                                             >
+                                                 <Smile size={18} />
+                                             </button>
+                                         </div>
+
+                                         {isRecording ? (
+                                             <div className="flex-1 flex items-center gap-3 py-2 px-3 min-h-[36px]">
+                                                 <div className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse" />
+                                                 <span className="font-google font-bold text-red-500 text-sm">{Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}</span>
+                                                 <span className="text-xs ml-auto opacity-70 animate-pulse hidden sm:inline">Recording voice message...</span>
+                                             </div>
+                                         ) : (
+                                             <textarea ref={textareaRef} value={messageInput} onChange={handleInputChange} onKeyDown={handleKeyDown} onFocus={() => setIsInputFocused(true)} onBlur={() => setTimeout(() => { setIsInputFocused(false); setShowMentions(false); }, 200)} placeholder={activeChannel.type === 'announcement' ? 'Compose broadcast message...' : `Message #${activeChannel.name}`} className="flex-1 bg-transparent py-2 px-2 outline-none resize-none overflow-y-auto max-h-32 min-h-[36px] text-[15px] font-google font-medium text-[var(--md-sys-color-on-surface)] scrollbar-none" rows={1} />
+                                         )}
+
+                                         <div className="flex items-center gap-1">
+                                             {isRecording ? (
+                                                 <>
+                                                     <button type="button" onClick={() => stopRecording(true)} className="p-2 text-red-500 hover:bg-red-500/10 rounded-full transition-colors"><Trash2 size={18} /></button>
+                                                     <button type="button" onClick={() => stopRecording(false)} className="bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] w-9 h-9 flex items-center justify-center rounded-full hover:scale-105 transition-all shadow-md active:scale-95"><Send size={15} className="ml-0.5" /></button>
+                                                 </>
+                                             ) : (
+                                                 <button type="button" onClick={e => {
+                                                     if (!messageInput.trim() && pendingAttachments.length === 0) { startRecording(); }
+                                                     else { handleSendMessage(e as any); }
+                                                 }} disabled={isUploadingAttachment} className="bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] w-9 h-9 flex items-center justify-center rounded-full disabled:opacity-40 hover:scale-105 transition-all shadow-md active:scale-95 disabled:hover:scale-100">
+                                                     {isUploadingAttachment
+                                                         ? <div className="w-4 h-4 rounded-full border-2 border-[var(--md-sys-color-on-primary)] border-t-transparent animate-spin" />
+                                                         : (!messageInput.trim() && pendingAttachments.length === 0) ? <Mic size={18} /> : <Send size={15} className="ml-0.5" />}
+                                                 </button>
+                                             )}
+                                         </div>
                                     </div>
                                 </form>
                             </div>
@@ -2220,6 +2334,35 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                             >
                                                 <div className="absolute inset-0.5 rounded-lg" style={{ background: wp.bg }} />
                                                 <span className="relative z-10 text-[9px] font-bold text-white bg-black/40 px-1 rounded truncate max-w-full">{wp.label}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Bubble Color Theme Selection */}
+                                <div>
+                                    <label className="text-xs font-bold uppercase tracking-wider block mb-2" style={{ color: 'var(--md-sys-color-secondary)' }}>Message Bubble Theme</label>
+                                    <div className="grid grid-cols-6 gap-2">
+                                        {[
+                                            { id: 'default', label: 'Default', bg: 'var(--md-sys-color-primary)' },
+                                            { id: 'lavender', label: 'Indigo', bg: '#4f46e5' },
+                                            { id: 'rose', label: 'Rose', bg: '#e11d48' },
+                                            { id: 'ocean', label: 'Sky', bg: '#0284c7' },
+                                            { id: 'emerald', label: 'Emerald', bg: '#059669' },
+                                            { id: 'amethyst', label: 'Purple', bg: '#9333ea' },
+                                        ].map((theme) => (
+                                            <button 
+                                                key={theme.id} 
+                                                type="button"
+                                                onClick={() => { triggerHaptics('light'); setChatBubbleTheme(theme.id as any); }}
+                                                className={clsx(
+                                                    "h-12 rounded-xl border-2 transition-all flex flex-col items-center justify-center p-1 relative overflow-hidden",
+                                                    chatBubbleTheme === theme.id ? "border-[var(--md-sys-color-primary)] scale-105" : "border-[var(--md-sys-color-outline)] opacity-70 hover:opacity-100"
+                                                )}
+                                                title={theme.label}
+                                            >
+                                                <div className="w-6 h-6 rounded-full" style={{ background: theme.bg }} />
+                                                <span className="relative z-10 text-[8px] font-bold text-white bg-black/40 px-1 mt-1 rounded truncate max-w-full">{theme.label}</span>
                                             </button>
                                         ))}
                                     </div>
