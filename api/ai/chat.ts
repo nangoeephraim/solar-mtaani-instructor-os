@@ -70,6 +70,11 @@ Current time: ${new Date().toISOString()}`;
 
 // ── Main Handler ─────────────────────────────────────────────────────
 export default async function handler(req: Request) {
+  // Enforce an absolute hard stop at 6 seconds to prevent Vercel container hang
+  const reqAbortController = new AbortController();
+  const reqTimeout = setTimeout(() => reqAbortController.abort(), 6000);
+  (globalThis as any).reqAbortSignal = reqAbortController.signal;
+
   if (req.method !== 'POST') {
     return new Response('Method Not Allowed', { status: 405 });
   }
@@ -140,7 +145,7 @@ export default async function handler(req: Request) {
         execute: async ({ locationName, itemName }: any) => {
           try {
             const supabase = await createServerSupabaseClient();
-            let query = supabase.from('equipment_inventory').select('*').ilike('location', `%${locationName}%`);
+            let query = supabase.from('equipment_inventory').select('*').ilike('location', `%${locationName}%`).abortSignal((globalThis as any).reqAbortSignal);
             if (itemName) query = query.ilike('item_name', `%${itemName}%`);
             const { data, error } = await query;
             if (error) return { error: error.message };
@@ -164,7 +169,8 @@ export default async function handler(req: Request) {
             const { data: students, error: stdErr } = await supabase
               .from('students')
               .select('id, name')
-              .ilike('name', `%${studentName}%`);
+              .ilike('name', `%${studentName}%`)
+              .abortSignal((globalThis as any).reqAbortSignal);
             if (stdErr || !students?.length) return { error: `Could not find student "${studentName}"` };
             const targetStudent = students[0];
             const { error: insErr } = await supabase

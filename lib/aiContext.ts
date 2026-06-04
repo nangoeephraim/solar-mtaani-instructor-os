@@ -82,7 +82,8 @@ export async function buildPrismAIContext(): Promise<PrismAIContext> {
             instructor:instructors(full_name),
             students(id, attendance_rate, average_score)
           `)
-          .eq('status', 'ACTIVE'),
+          .eq('status', 'ACTIVE')
+          .abortSignal((globalThis as any).reqAbortSignal),
       'cohorts'
     ),
 
@@ -91,7 +92,7 @@ export async function buildPrismAIContext(): Promise<PrismAIContext> {
     // Supabase JS client doesn't support column-to-column comparisons.
     // Instead, fetch all inventory and filter client-side.
     safeQuery<any[]>(
-      async () => await supabase.from('equipment_inventory').select('*'),
+      async () => await supabase.from('equipment_inventory').select('*').abortSignal((globalThis as any).reqAbortSignal),
       'inventory'
     ),
 
@@ -104,7 +105,8 @@ export async function buildPrismAIContext(): Promise<PrismAIContext> {
             student:students(full_name)
           `)
           .order('graded_at', { ascending: false })
-          .limit(10),
+          .limit(10)
+          .abortSignal((globalThis as any).reqAbortSignal),
       'assessments'
     ),
   ]);
