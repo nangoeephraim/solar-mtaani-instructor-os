@@ -68,6 +68,8 @@ Be concise, professional, and technical when needed. Use occasional technical hu
 
 Current time: ${new Date().toISOString()}`;
 
+export const config = { runtime: 'edge' };
+
 // ── Main Handler ─────────────────────────────────────────────────────
 export default async function handler(req: Request) {
   // Enforce an absolute hard stop at 6 seconds to prevent Vercel container hang
