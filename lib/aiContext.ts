@@ -36,39 +36,81 @@ interface AssessmentContext {
 }
 
 /**
- * Fetch and construct the active training data packet from Supabase
+ * Safely run a Supabase query with a per-query timeout.
+ * Returns null on failure instead of throwing, so other
+ * queries in the parallel batch are not affected.
+ */
+async function safeQuery<T>(
+  queryFn: () => Promise<{ data: T | null; error: any }>,
+  label: string,
+  timeoutMs = 6000
+): Promise<T | null> {
+  try {
+    const result = await Promise.race([
+      queryFn(),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`${label} query timed out after ${timeoutMs}ms`)), timeoutMs)
+      ),
+    ]);
+    if (result.error) {
+      console.warn(`[aiContext] ${label} query error:`, result.error.message);
+      return null;
+    }
+    return result.data;
+  } catch (err: any) {
+    console.warn(`[aiContext] ${label} failed:`, err.message);
+    return null;
+  }
+}
+
+/**
+ * Fetch and construct the active training data packet from Supabase.
+ * Each query is individually guarded with a timeout and error handler
+ * so that a single slow/failing query doesn't block the entire context.
  */
 export async function buildPrismAIContext(): Promise<PrismAIContext> {
   const supabase = await createServerSupabaseClient();
 
-  // Parallel fetch DB snapshots
-  const [cohortsRes, inventoryRes, assessmentsRes] = await Promise.all([
-    supabase
-      .from('cohorts')
-      .select(`
-        id, name, location, current_module, status,
-        instructor:instructors(full_name),
-        students(id, attendance_rate, average_score)
-      `)
-      .eq('status', 'ACTIVE'),
+  // Parallel fetch DB snapshots — each query is independently resilient
+  const [cohortsData, inventoryData, assessmentsData] = await Promise.all([
+    safeQuery(
+      () =>
+        supabase
+          .from('cohorts')
+          .select(`
+            id, name, location, current_module, status,
+            instructor:instructors(full_name),
+            students(id, attendance_rate, average_score)
+          `)
+          .eq('status', 'ACTIVE'),
+      'cohorts'
+    ),
 
-    supabase
-      .from('equipment_inventory')
-      .select('*')
-      .lt('available_qty', 'low_stock_threshold'), // fetch low stock alerts
+    // FIX: The previous query `.lt('available_qty', 'low_stock_threshold')`
+    // compared a column to a string literal, not another column.
+    // Supabase JS client doesn't support column-to-column comparisons.
+    // Instead, fetch all inventory and filter client-side.
+    safeQuery(
+      () => supabase.from('equipment_inventory').select('*'),
+      'inventory'
+    ),
 
-    supabase
-      .from('assessments')
-      .select(`
-        score, module_name, graded_at,
-        student:students(full_name)
-      `)
-      .order('graded_at', { ascending: false })
-      .limit(10)
+    safeQuery(
+      () =>
+        supabase
+          .from('assessments')
+          .select(`
+            score, module_name, graded_at,
+            student:students(full_name)
+          `)
+          .order('graded_at', { ascending: false })
+          .limit(10),
+      'assessments'
+    ),
   ]);
 
   // Map Cohorts
-  const activeCohorts: CohortContext[] = (cohortsRes.data || []).map((c: any) => {
+  const activeCohorts: CohortContext[] = (cohortsData || []).map((c: any) => {
     const students = c.students || [];
     const studentCount = students.length;
     const avgAttendance = studentCount > 0 
@@ -101,17 +143,24 @@ export async function buildPrismAIContext(): Promise<PrismAIContext> {
     };
   });
 
-  // Map Low Stock Inventory
-  const lowStockItems: InventoryContext[] = (inventoryRes.data || []).map((item: any) => ({
-    itemName: item.item_name,
-    category: item.category,
-    location: item.location,
-    available: item.available_qty,
-    threshold: item.low_stock_threshold
-  }));
+  // Map Low Stock Inventory — filter client-side where available < threshold
+  const allInventory = inventoryData || [];
+  const lowStockItems: InventoryContext[] = (allInventory as any[])
+    .filter((item: any) => {
+      const available = Number(item.available_qty ?? item.quantity ?? 0);
+      const threshold = Number(item.low_stock_threshold ?? 5);
+      return available < threshold;
+    })
+    .map((item: any) => ({
+      itemName: item.item_name,
+      category: item.category,
+      location: item.location,
+      available: Number(item.available_qty ?? item.quantity ?? 0),
+      threshold: Number(item.low_stock_threshold ?? 5),
+    }));
 
   // Map Recent Grades
-  const recentAssessments: AssessmentContext[] = (assessmentsRes.data || []).map((a: any) => {
+  const recentAssessments: AssessmentContext[] = (assessmentsData || []).map((a: any) => {
     let studentName = 'Unknown Student';
     if (a.student) {
       if (Array.isArray(a.student)) {
