@@ -115,7 +115,7 @@ export default async function handler(req: Request) {
       const ctx = await Promise.race([
         buildPrismAIContext(),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Context build exceeded timeout')), 5000)
+          setTimeout(() => reject(new Error('Context build exceeded timeout')), 1500)
         ),
       ]);
       systemPrompt = buildPrismSystemPrompt(ctx);
@@ -194,7 +194,7 @@ export default async function handler(req: Request) {
           temperature: 0.7,
           tools,
           maxRetries: 0,
-          abortSignal: AbortSignal.timeout(1500) // Fast 1.5s timeout to fit Vercel 10s limit!
+          abortSignal: AbortSignal.timeout(1200) // Ultra-fast 1.2s timeout to fit Vercel 10s limit!
         });
 
         // Convert to UIMessageStream internally which emits JSON stream chunks
