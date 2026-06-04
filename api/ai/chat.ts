@@ -200,9 +200,13 @@ export default async function handler(req: Request) {
         const uiStreamResponse = result.toUIMessageStream();
         
         // Wait for the FIRST chunk to prove the provider actually works.
-        // We do this by intercepting the readable stream.
         const reader = uiStreamResponse.getReader();
-        const firstChunk = await reader.read(); // Will throw if API key bad, rate limited, or timeout
+        const firstChunk = await Promise.race([
+          reader.read(),
+          new Promise<any>((_, reject) => 
+            setTimeout(() => reject(new Error('Stream read timeout')), 1500)
+          )
+        ]);
 
         console.log(`[Sally] Successfully established stream with ${config.provider}`);
 
