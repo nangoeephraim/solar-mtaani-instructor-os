@@ -33,8 +33,7 @@ function getProviderConfigsFromEnv(): ProviderConfig[] {
   ];
 
   return mapping
-    .filter(m => !!process.env[m.envKey] || !!m.fallback)
-    .map(m => ({ provider: m.provider, apiKey: process.env[m.envKey] || m.fallback! }));
+    .map(m => ({ provider: m.provider, apiKey: (process.env[m.envKey] || m.fallback!).replace(/\n/g, '').trim() }))
 }
 
 // ── Model Factory ────────────────────────────────────────────────────
