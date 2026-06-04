@@ -7,9 +7,8 @@ import { buildPrismAIContext, buildPrismSystemPrompt } from '../../lib/aiContext
 import { createServerSupabaseClient } from '../../lib/supabase-server.js';
 
 // ── Vercel Serverless Configuration ──────────────────────────────────
-// Request up to 60 seconds of execution time (Hobby plan max).
-// Without this export, Vercel uses a much shorter default that causes
-// FUNCTION_INVOCATION_TIMEOUT before the AI stream even starts.
+// Use the Edge runtime to bypass the 10-second Hobby plan Serverless Function limit.
+export const runtime = 'edge';
 export const maxDuration = 60;
 
 // Ensure the Gemini API key alias is propagated
