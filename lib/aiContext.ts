@@ -73,9 +73,9 @@ export async function buildPrismAIContext(): Promise<PrismAIContext> {
 
   // Parallel fetch DB snapshots — each query is independently resilient
   const [cohortsData, inventoryData, assessmentsData] = await Promise.all([
-    safeQuery(
-      () =>
-        supabase
+    safeQuery<any[]>(
+      async () =>
+        await supabase
           .from('cohorts')
           .select(`
             id, name, location, current_module, status,
@@ -90,14 +90,14 @@ export async function buildPrismAIContext(): Promise<PrismAIContext> {
     // compared a column to a string literal, not another column.
     // Supabase JS client doesn't support column-to-column comparisons.
     // Instead, fetch all inventory and filter client-side.
-    safeQuery(
-      () => supabase.from('equipment_inventory').select('*'),
+    safeQuery<any[]>(
+      async () => await supabase.from('equipment_inventory').select('*'),
       'inventory'
     ),
 
-    safeQuery(
-      () =>
-        supabase
+    safeQuery<any[]>(
+      async () =>
+        await supabase
           .from('assessments')
           .select(`
             score, module_name, graded_at,

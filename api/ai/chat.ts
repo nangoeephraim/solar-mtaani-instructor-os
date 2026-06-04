@@ -235,7 +235,6 @@ export default async function handler(req: Request) {
       model,
       system: systemPrompt,
       messages: modelMessages,
-      maxTokens: 1548,
       temperature: 0.7,
       tools,
     });
