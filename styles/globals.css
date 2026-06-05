@@ -476,6 +476,12 @@ h6,
   outline-offset: 2px;
 }
 
+textarea:focus,
+textarea:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 /* Touch-friendly tap targets (minimum 44px) */
 .tap-target {
   min-height: 44px;
