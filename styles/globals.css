@@ -477,9 +477,14 @@ h6,
 }
 
 textarea:focus,
-textarea:focus-visible {
+textarea:focus-visible,
+textarea:active {
   outline: none !important;
+  outline-width: 0 !important;
+  border: none !important;
+  border-width: 0 !important;
   box-shadow: none !important;
+  -webkit-tap-highlight-color: transparent !important;
 }
 
 /* Touch-friendly tap targets (minimum 44px) */

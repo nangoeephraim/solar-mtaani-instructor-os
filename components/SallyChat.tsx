@@ -13,6 +13,7 @@ export function SallyChat({ currentView }: { currentView?: string }) {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [input, setInput] = useState('');
   const messageEndRef = useRef<HTMLDivElement | null>(null);
+  const activeUtterancesRef = useRef<SpeechSynthesisUtterance[]>([]);
 
   // Listen to Capacitor native back gesture to close AI drawer
   useEffect(() => {
@@ -88,12 +89,13 @@ export function SallyChat({ currentView }: { currentView?: string }) {
     messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
-  // Speech synthesis implementation (Using Web Speech API)
+  // Speech synthesis implementation (Using Web Speech API with sequential queuing)
   const speak = (text: string) => {
     if (typeof window === 'undefined' || !window.speechSynthesis) return;
     
-    // Cancel current speaking
+    // Cancel current speaking and clear references
     window.speechSynthesis.cancel();
+    activeUtterancesRef.current = [];
     setIsSpeaking(false);
 
     // Remove markdown characters that break vocal narration
@@ -104,50 +106,70 @@ export function SallyChat({ currentView }: { currentView?: string }) {
 
     if (!cleanText) return;
 
-    // Split text into individual sentences to avoid browser buffers clogging
+    // Split text into individual sentences/clauses
     const sentences = cleanText.match(/[^.!?]+[.!?]+/g) || [cleanText];
-    let speakCount = 0;
     
-    sentences.forEach((sentence) => {
-      const utterance = new SpeechSynthesisUtterance(sentence.trim());
+    // Filter out empty sentences
+    const filteredSentences = sentences
+      .map(s => s.trim())
+      .filter(s => s.length > 0);
+
+    if (filteredSentences.length === 0) return;
+
+    // Get the friendly voice once
+    const voices = window.speechSynthesis.getVoices();
+    const friendlyVoice = voices.find(v => 
+      v.name.includes('Samantha') || 
+      v.name.includes('Emma') || 
+      v.name.includes('Google UK English Female') ||
+      (v.lang.startsWith('en') && v.name.toLowerCase().includes('female'))
+    );
+
+    // Build the queue of SpeechSynthesisUtterance objects
+    const queue = filteredSentences.map((sentence) => {
+      const utterance = new SpeechSynthesisUtterance(sentence);
       utterance.rate = 1.1; // Snappy conversational pacing
       utterance.pitch = 1.05; // Slightly warmer pitch
-      
-      // Attempt to load standard friendly female voices (Samantha/Emma/Google UK English Female)
-      const voices = window.speechSynthesis.getVoices();
-      const friendlyVoice = voices.find(v => 
-        v.name.includes('Samantha') || 
-        v.name.includes('Emma') || 
-        v.name.includes('Google UK English Female') ||
-        (v.lang.startsWith('en') && v.name.toLowerCase().includes('female'))
-      );
       if (friendlyVoice) utterance.voice = friendlyVoice;
+      return utterance;
+    });
 
-      utterance.onstart = () => {
-        setIsSpeaking(true);
-      };
+    // Store the queue in the ref to keep strong references (prevents GC)
+    activeUtterancesRef.current = queue;
+    setIsSpeaking(true);
+
+    let index = 0;
+
+    const playNext = () => {
+      if (index >= queue.length) {
+        setIsSpeaking(false);
+        activeUtterancesRef.current = [];
+        return;
+      }
+
+      const utterance = queue[index];
 
       utterance.onend = () => {
-        speakCount++;
-        if (speakCount === sentences.length) {
-          setIsSpeaking(false);
-        }
+        index++;
+        playNext();
       };
 
-      utterance.onerror = () => {
-        speakCount++;
-        if (speakCount === sentences.length) {
-          setIsSpeaking(false);
-        }
+      utterance.onerror = (e) => {
+        console.error("SpeechSynthesis error:", e);
+        index++;
+        playNext();
       };
 
       window.speechSynthesis.speak(utterance);
-    });
+    };
+
+    playNext();
   };
 
   const toggleSpeech = () => {
     if (speechEnabled) {
       window.speechSynthesis?.cancel();
+      activeUtterancesRef.current = [];
       setIsSpeaking(false);
     }
     setSpeechEnabled(!speechEnabled);
@@ -166,6 +188,7 @@ export function SallyChat({ currentView }: { currentView?: string }) {
     return () => {
       if (typeof window !== 'undefined' && window.speechSynthesis) {
         window.speechSynthesis.cancel();
+        activeUtterancesRef.current = [];
       }
     };
   }, []);

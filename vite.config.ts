@@ -23,7 +23,7 @@ export default defineConfig({
   },
   build: {
     emptyOutDir: false,
-    minify: 'esbuild',
+    minify: false,
     rollupOptions: {
       output: {
         // Removed manualChunks to resolve Node.js OOM crashes during Rollup graph optimization
