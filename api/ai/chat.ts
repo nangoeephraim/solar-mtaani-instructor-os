@@ -6,8 +6,13 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { buildPrismAIContext, buildPrismSystemPrompt } from '../../lib/aiContext.js';
 import { createServerSupabaseClient } from '../../lib/supabase-server.js';
 
-// Cast tool helper to any to bypass dependency Zod version mismatch checks in tool definitions
-const tool = aiTool as any;
+// Cast tool helper to any and automatically apply passthrough() to allow extra properties safely
+const tool: any = (options: any) => {
+  if (options.parameters && typeof options.parameters.passthrough === 'function') {
+    options.parameters = options.parameters.passthrough();
+  }
+  return aiTool(options);
+};
 
 // ── Vercel Serverless Configuration ──────────────────────────────────
 // Ensure maxDuration is 60 (ignored on Hobby, but good practice).
