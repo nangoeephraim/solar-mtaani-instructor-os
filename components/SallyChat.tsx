@@ -6,8 +6,130 @@ import { DefaultChatTransport } from 'ai';
 import { Sparkles, Send, Volume2, VolumeX, MessageSquare, X, Box, ClipboardCheck, ArrowUpRight, CheckCircle2, AlertTriangle, HelpCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
+import { useTheme } from '../contexts/ThemeContext';
 
 export function SallyChat({ currentView }: { currentView?: string }) {
+  const { preferences } = useTheme();
+  const instType = preferences?.institutionType || 'tvet';
+
+  const copilotDescription = React.useMemo(() => {
+    switch (instType) {
+      case 'primary':
+      case 'jss':
+        return 'Your academic copilot for CBC curriculum guidelines, student portfolios, and competency assessments.';
+      case 'highschool':
+        return 'Your academic copilot for secondary curriculum, syllabus specs, exam preparation, and grading reports.';
+      case 'university':
+        return 'Your academic copilot for courses, semesters, GPA tracking, and student evaluations.';
+      case 'tvet':
+      default:
+        return 'Your technical copilot for curriculum specs, solar inventory checks, and student assessments.';
+    }
+  }, [instType]);
+
+  const suggestedPrompts = React.useMemo(() => {
+    switch (instType) {
+      case 'primary':
+      case 'jss':
+        return [
+          {
+            label: "Explain CBC Competencies",
+            subtext: "View 7 core KICD competencies",
+            prompt: "What are the 7 core competencies under Kenya CBC?",
+            icon: HelpCircle,
+            color: "amber"
+          },
+          {
+            label: "Log Kiswahili competency",
+            subtext: "Log level for a grade 4 student",
+            prompt: "Log level 3 in Communication for student John Doe with comment 'Well spoken'",
+            icon: ClipboardCheck,
+            color: "indigo"
+          },
+          {
+            label: "Class Performance Summary",
+            subtext: "Summarize current grades",
+            prompt: "Which students are performing below average in their CBC competencies?",
+            icon: Box,
+            color: "emerald"
+          }
+        ];
+      case 'highschool':
+        return [
+          {
+            label: "Calculate Grade Averages",
+            subtext: "Formula for KCSE mean grade",
+            prompt: "How is the KCSE mean grade calculated for high school students?",
+            icon: HelpCircle,
+            color: "amber"
+          },
+          {
+            label: "Log Biology exam score",
+            subtext: "Submit a grade for Form 2 CAT",
+            prompt: "Log a score of 78 in Biology CAT 1 for student John Doe with comment 'Great improvement'",
+            icon: ClipboardCheck,
+            color: "indigo"
+          },
+          {
+            label: "Lab Equipment Stock Check",
+            subtext: "Check science lab inventories",
+            prompt: "Check the physics lab equipment inventory stock",
+            icon: Box,
+            color: "emerald"
+          }
+        ];
+      case 'university':
+        return [
+          {
+            label: "Check Semester GPA",
+            subtext: "How to calculate student GPAs",
+            prompt: "What is the formula for calculating GPA in tertiary systems?",
+            icon: HelpCircle,
+            color: "amber"
+          },
+          {
+            label: "Log Year 2 exam marks",
+            subtext: "Submit grade for Computer Science",
+            prompt: "Log a score of 82 in Computer Science for student John Doe with comment 'Excellent code submission'",
+            icon: ClipboardCheck,
+            color: "indigo"
+          },
+          {
+            label: "Department Stock",
+            subtext: "Check department laptops",
+            prompt: "Check laptop stock in the computer science department",
+            icon: Box,
+            color: "emerald"
+          }
+        ];
+      case 'tvet':
+      default:
+        return [
+          {
+            label: "Check Multimeters in Kibera",
+            subtext: "Query real-time stock levels",
+            prompt: "Check the multimeter stock in Kibera",
+            icon: Box,
+            color: "emerald"
+          },
+          {
+            label: "Log student PV Sizing grade",
+            subtext: "Submit a score of 85% for John Doe",
+            prompt: "Log a score of 85 in PV Sizing for student John Doe with comment 'Excellent wiring'",
+            icon: ClipboardCheck,
+            color: "indigo"
+          },
+          {
+            label: "PV Array Ratio Calculator",
+            subtext: "How to size a PV array for a 500W load",
+            prompt: "How do I calculate the solar PV array size for a 500W load in Nairobi?",
+            icon: HelpCircle,
+            color: "amber"
+          }
+        ];
+    }
+  }, [instType]);
+
   const [isOpen, setIsOpen] = useState(false);
   const [speechEnabled, setSpeechEnabled] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
@@ -316,34 +438,12 @@ export function SallyChat({ currentView }: { currentView?: string }) {
                   </div>
                   <h4 className="font-bold text-slate-200 text-sm mb-1 font-space">Meet Sally, PRISM Companion</h4>
                   <p className="text-xs text-slate-400 max-w-[260px] leading-relaxed mb-6">
-                    Your technical copilot for curriculum specs, solar inventory checks, and student assessments.
+                    {copilotDescription}
                   </p>
                   
                   {/* Suggested Prompts Cards Grid */}
                   <div className="grid grid-cols-1 gap-2.5 w-full max-w-sm">
-                    {[
-                      {
-                        label: "Check Multimeters in Kibera",
-                        subtext: "Query real-time stock levels",
-                        prompt: "Check the multimeter stock in Kibera",
-                        icon: Box,
-                        color: "emerald"
-                      },
-                      {
-                        label: "Log student PV Sizing grade",
-                        subtext: "Submit a score of 85% for John Doe",
-                        prompt: "Log a score of 85 in PV Sizing for student John Doe with comment 'Excellent wiring'",
-                        icon: ClipboardCheck,
-                        color: "indigo"
-                      },
-                      {
-                        label: "PV Array Ratio Calculator",
-                        subtext: "How to size a PV array for a 500W load",
-                        prompt: "How do I calculate the solar PV array size for a 500W load in Nairobi?",
-                        icon: HelpCircle,
-                        color: "amber"
-                      }
-                    ].map((item, idx) => (
+                    {suggestedPrompts.map((item, idx) => (
                       <motion.button
                         key={idx}
                         whileHover={{ scale: 1.02, x: 2 }}

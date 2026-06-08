@@ -2,18 +2,18 @@ import React, { useState, useEffect } from 'react';
 import { AppData, Student, CompetencyLevel, COMPETENCY_LABELS, AssessmentSystem, UnitAssessment, GradeKNEC, VerdictCBET } from '../types';
 import { Check, ChevronRight, ClipboardList, UserCheck, UserX, BookOpen, Zap, Monitor, Award, CheckCircle2, XCircle, BarChart3, GraduationCap, Calculator, Scale, FileText, Lock, Unlock, Save, X, AlertCircle, FileDown, Download } from 'lucide-react';
 import clsx from 'clsx';
-import { STUDENT_GROUPS, getLevelsForGroup, getDefaultLevel } from '../constants/educationLevels';
+import { getStudentGroups, getLevelsForGroup, getDefaultLevel } from '../constants/educationLevels';
 import type { StudentGroup } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from './Toast';
 import PageHeader from './PageHeader';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface AssessmentProps {
    data: AppData;
    onUpdateStudent: (student: Student, notify?: boolean) => void;
 }
 
-// ... existing competencies constants ...
 // NITA Solar PV Installer II Competencies (KNQF Level 3)
 const SOLAR_COMPETENCIES = {
    siteAssessment: {
@@ -21,7 +21,6 @@ const SOLAR_COMPETENCIES = {
       description: 'Energy audits, load analysis, site surveys',
       outcomes: ['Conduct site surveys', 'Perform energy audits', 'Calculate load requirements', 'Assess roof/ground suitability']
    },
-   // ... rest of solar competencies
    panelInstallation: {
       name: 'Panel Installation',
       description: 'Mounting, orientation, connection modes',
@@ -55,10 +54,9 @@ const ICT_COMPETENCIES = {
       description: 'Document formatting, tables, mail merge',
       outcomes: ['Format documents professionally', 'Create and edit tables', 'Perform mail merge', 'Insert headers/footers/graphics']
    },
-   // ... rest of ICT competencies
    msExcel: {
       name: 'Microsoft Excel',
-      description: 'Formulas, functions, charts, data management',
+      description: 'Formulas, functions, data management',
       outcomes: ['Create and edit worksheets', 'Apply formulas and functions', 'Use cell referencing', 'Create charts and graphs']
    },
    msPowerPoint: {
@@ -96,6 +94,54 @@ const ICT_PRACTICAL = [
    { id: 'typing', label: 'Complete typing test (30+ WPM)', category: 'Typing' }
 ];
 
+// KICD CBC Core Competencies
+const CBC_COMPETENCIES = {
+   communication_collaboration: {
+      name: 'Communication and Collaboration',
+      description: 'Speaking, writing, active listening, and working in teams effectively',
+      outcomes: ['Express ideas clearly', 'Listen to others attentively', 'Work harmoniously in groups', 'Resolve team conflicts peacefully']
+   },
+   critical_thinking: {
+      name: 'Critical Thinking and Problem Solving',
+      description: 'Analyzing situations, evaluating options, and designing solutions',
+      outcomes: ['Analyze problems systematically', 'Identify multiple solutions', 'Evaluate outcomes objectively', 'Apply logical reasoning']
+   },
+   creativity_imagination: {
+      name: 'Creativity and Imagination',
+      description: 'Generating novel ideas, creating artistic products, and thinking outside the box',
+      outcomes: ['Develop original concepts', 'Express creativity through arts', 'Adapt to new challenges resourcefully', 'Explore unique perspectives']
+   },
+   citizenship: {
+      name: 'Citizenship',
+      description: 'Understanding rights, duties, community service, and national values',
+      outcomes: ['Demonstrate civic awareness', 'Respect diverse cultural identities', 'Participate in community service', 'Uphold national values and laws']
+   },
+   self_efficacy: {
+      name: 'Self-efficacy',
+      description: 'Building confidence, setting goals, and managing emotions',
+      outcomes: ['Set personal learning goals', 'Manage emotions and behavior', 'Demonstrate self-reliance', 'Show resilience under pressure']
+   },
+   digital_literacy: {
+      name: 'Digital Literacy',
+      description: 'Accessing, analyzing, and communicating information using digital devices',
+      outcomes: ['Operate digital devices confidently', 'Access educational resources online', 'Understand internet safety and ethics', 'Create simple digital content']
+   },
+   learning_to_learn: {
+      name: 'Learning to Learn',
+      description: 'Developing curiosity, self-directed learning, and continuous improvement',
+      outcomes: ['Seek new knowledge independently', 'Reflect on personal learning progress', 'Apply study strategies effectively', 'Embrace feedback for growth']
+   }
+};
+
+const CBC_PRACTICAL = [
+   { id: 'teamwork', label: 'Collaborates productively in group tasks', category: 'Collaboration' },
+   { id: 'problem_solving', label: 'Solves situational problems logically', category: 'Thinking' },
+   { id: 'artistic_expression', label: 'Creates a piece of art or unique craft', category: 'Creativity' },
+   { id: 'community_respect', label: 'Helps clean the classroom or environment', category: 'Citizenship' },
+   { id: 'digital_use', label: 'Types a paragraph or plays educational game on tablet', category: 'Digital' },
+   { id: 'independent_study', label: 'Completes a self-guided workbook session', category: 'Learning' }
+];
+
 const LEVEL_COLORS = {
    1: 'bg-red-100 border-red-300 text-red-800',
    2: 'bg-orange-100 border-orange-300 text-orange-800',
@@ -103,10 +149,62 @@ const LEVEL_COLORS = {
    4: 'bg-green-100 border-green-300 text-green-800'
 };
 
+const getDynamicCompetencies = (subject: string, instType: string) => {
+   if (instType === 'primary' || instType === 'jss') {
+      return CBC_COMPETENCIES;
+   }
+   if (subject === 'Solar') return SOLAR_COMPETENCIES;
+   if (subject === 'ICT') return ICT_COMPETENCIES;
+
+   // Dynamic fallback for custom subject
+   const baseKey = subject.toLowerCase().replace(/[^a-z0-9]/g, '_');
+   return {
+      [`${baseKey}_foundations`]: {
+         name: `${subject} Foundations`,
+         description: `Basic principles, concepts, and terminologies in ${subject}`,
+         outcomes: [`Explain fundamental concepts of ${subject}`, `Identify key elements and terminology`, `Demonstrate safety and introductory theory`]
+      },
+      [`${baseKey}_practical`]: {
+         name: `${subject} Practical Application`,
+         description: `Hands-on practice, tools handling, and practical exercises`,
+         outcomes: [`Utilize tools and equipment correctly`, `Execute practical procedures in ${subject}`, `Maintain clean and secure workshop environment`]
+      },
+      [`${baseKey}_advanced`]: {
+         name: `${subject} Core Specialization`,
+         description: `Core techniques, troubleshooting, and advanced operations`,
+         outcomes: [`Perform complex procedures independently`, `Troubleshoot common issues and errors`, `Apply specialized standards to tasks`]
+      },
+      [`${baseKey}_assessment`]: {
+         name: `${subject} Project & Evaluation`,
+         description: `Final project deliverables, presentations, or exam outcomes`,
+         outcomes: [`Complete final project specifications`, `Present outcomes clearly to instructor`, `Evaluate quality of final deliverables`]
+      }
+   };
+};
+
+const getDynamicPractical = (subject: string, instType: string) => {
+   if (instType === 'primary' || instType === 'jss') {
+      return CBC_PRACTICAL;
+   }
+   if (subject === 'Solar') return SOLAR_PRACTICAL;
+   if (subject === 'ICT') return ICT_PRACTICAL;
+
+   // Dynamic fallback
+   const labelSubject = subject || 'Unit';
+   return [
+      { id: 'theory_check', label: `Passes written theory check for ${labelSubject}`, category: 'Theory' },
+      { id: 'tools_check', label: `Handles workspace tools and resources safely`, category: 'Practical' },
+      { id: 'procedure_check', label: `Executes core procedural task correctly`, category: 'Practical' },
+      { id: 'troubleshoot_check', label: `Identifies and fixes basic faults in a setup`, category: 'Trouble' },
+      { id: 'final_check', label: `Completes final project work according to rubrics`, category: 'Final' }
+   ];
+};
+
 const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
-   const [selectedGrade, setSelectedGrade] = useState<string>('L3');
+   const { preferences } = useTheme();
+   const [selectedGrade, setSelectedGrade] = useState<string>('');
    const [selectedGroup, setSelectedGroup] = useState<StudentGroup>('Academy');
-   const [selectedSubject, setSelectedSubject] = useState<'Solar' | 'ICT'>('Solar');
+   const [selectedSubject, setSelectedSubject] = useState<string>('');
    const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
    const [assessmentSystem, setAssessmentSystem] = useState<AssessmentSystem>('CBET');
    const [activeUnit, setActiveUnit] = useState<string | null>(null);
@@ -118,11 +216,30 @@ const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
       remarks: ''
    });
 
+   // Initialize state when preferences load
+   useEffect(() => {
+      if (preferences) {
+         const instType = preferences.institutionType || 'tvet';
+         const groups = getStudentGroups(instType);
+         const defaultGroup = groups[0] || 'Academy';
+         const defaultGrade = getDefaultLevel(defaultGroup, instType);
+         const defaultSub = preferences.defaultSubject && preferences.defaultSubject !== 'All'
+            ? preferences.defaultSubject
+            : (preferences.customSubjects?.[0] || 'Solar');
+         const defaultSystem = preferences.assessmentSystem || 'CBET';
+
+         setSelectedGroup(defaultGroup);
+         setSelectedGrade(defaultGrade);
+         setSelectedSubject(defaultSub);
+         setAssessmentSystem(defaultSystem);
+      }
+   }, [preferences]);
+
    const studentsInClass = data.students.filter(s => s.grade === selectedGrade && s.subject === selectedSubject);
    const selectedStudent = data.students.find(s => s.id === selectedStudentId);
 
-   const competencies = selectedSubject === 'Solar' ? SOLAR_COMPETENCIES : ICT_COMPETENCIES;
-   const practicalSkills = selectedSubject === 'Solar' ? SOLAR_PRACTICAL : ICT_PRACTICAL;
+   const competencies = getDynamicCompetencies(selectedSubject, preferences.institutionType || 'tvet');
+   const practicalSkills = getDynamicPractical(selectedSubject, preferences.institutionType || 'tvet');
 
    const [cbetChecks, setCbetChecks] = useState<string[]>([]);
 
@@ -235,7 +352,7 @@ const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
          {/* Header */}
          <PageHeader
             title="Academic Assessment"
-            subtitle={assessmentSystem === 'KNEC' ? 'KNEC Standard Grading (TVET)' : 'NITA/CDAC Competency Based Assessment'}
+            subtitle={assessmentSystem === 'KNEC' ? 'KNEC Standard Grading' : 'Competency Based Assessment (CBC/CBET)'}
             icon={Award}
             color="bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-blue-500/20"
             action={
@@ -247,7 +364,7 @@ const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
                         assessmentSystem === 'CBET' ? "bg-[var(--md-sys-color-surface)] shadow text-violet-600" : "text-[var(--md-sys-color-secondary)] hover:text-[var(--md-sys-color-on-surface)]"
                      )}
                   >
-                     <CheckCircle2 size={14} /> CBET (NITA)
+                     <CheckCircle2 size={14} /> CBC / CBET
                   </button>
                   <button
                      onClick={() => setAssessmentSystem('KNEC')}
@@ -256,7 +373,7 @@ const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
                         assessmentSystem === 'KNEC' ? "bg-[var(--md-sys-color-surface)] shadow text-blue-600" : "text-[var(--md-sys-color-secondary)] hover:text-[var(--md-sys-color-on-surface)]"
                      )}
                   >
-                     <Scale size={14} /> KNEC (Standard)
+                     <Scale size={14} /> KNEC Exam
                   </button>
                </div>
             }
@@ -269,13 +386,13 @@ const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
                <div className="glass-panel p-5 rounded-[28px] shadow-elevation-1">
                   <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-wider block mb-3">Filter Candidates</label>
                   <div className="space-y-3">
-                     <div className="flex bg-[var(--md-sys-color-surface-variant)]/60 border border-[var(--md-sys-color-outline-variant)] rounded-xl p-1">
-                        {(['Solar', 'ICT'] as const).map(sub => (
+                     <div className="flex bg-[var(--md-sys-color-surface-variant)]/60 border border-[var(--md-sys-color-outline-variant)] rounded-xl p-1 overflow-x-auto custom-scrollbar">
+                        {(preferences.customSubjects || ['Solar', 'ICT']).map(sub => (
                            <button
                               key={sub}
                               onClick={() => { setSelectedSubject(sub); setSelectedStudentId(null); setActiveUnit(null); }}
                               className={clsx(
-                                 "flex-1 py-1.5 text-xs font-bold rounded-lg transition-all",
+                                 "flex-1 py-1.5 text-xs font-bold rounded-lg transition-all px-3 whitespace-nowrap",
                                  selectedSubject === sub ? "bg-[var(--md-sys-color-surface)] text-[var(--md-sys-color-primary)] shadow-sm" : "text-[var(--md-sys-color-secondary)] hover:text-[var(--md-sys-color-on-surface)]"
                               )}
                            >
@@ -283,22 +400,24 @@ const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
                            </button>
                         ))}
                      </div>
+                     {getStudentGroups(preferences.institutionType).length > 1 && (
+                        <div className="flex bg-[var(--md-sys-color-surface-variant)]/60 border border-[var(--md-sys-color-outline-variant)] rounded-xl p-1 overflow-x-auto custom-scrollbar">
+                           {getStudentGroups(preferences.institutionType).map(grp => (
+                              <button
+                                 key={grp}
+                                 onClick={() => { setSelectedGroup(grp); setSelectedGrade(getDefaultLevel(grp, preferences.institutionType)); setSelectedStudentId(null); }}
+                                 className={clsx(
+                                    "flex-1 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap px-3",
+                                    selectedGroup === grp ? "bg-[var(--md-sys-color-surface)] text-[var(--md-sys-color-primary)] shadow-sm" : "text-[var(--md-sys-color-secondary)] hover:text-[var(--md-sys-color-on-surface)]"
+                                 )}
+                              >
+                                 {grp}
+                              </button>
+                           ))}
+                        </div>
+                     )}
                      <div className="flex bg-[var(--md-sys-color-surface-variant)]/60 border border-[var(--md-sys-color-outline-variant)] rounded-xl p-1 overflow-x-auto custom-scrollbar">
-                        {STUDENT_GROUPS.map(grp => (
-                           <button
-                              key={grp}
-                              onClick={() => { setSelectedGroup(grp); setSelectedGrade(getDefaultLevel(grp)); setSelectedStudentId(null); }}
-                              className={clsx(
-                                 "flex-1 py-1.5 text-xs font-bold rounded-lg transition-all whitespace-nowrap px-3",
-                                 selectedGroup === grp ? "bg-[var(--md-sys-color-surface)] text-[var(--md-sys-color-primary)] shadow-sm" : "text-[var(--md-sys-color-secondary)] hover:text-[var(--md-sys-color-on-surface)]"
-                              )}
-                           >
-                              {grp}
-                           </button>
-                        ))}
-                     </div>
-                     <div className="flex bg-[var(--md-sys-color-surface-variant)]/60 border border-[var(--md-sys-color-outline-variant)] rounded-xl p-1 overflow-x-auto custom-scrollbar">
-                        {getLevelsForGroup(selectedGroup).map(lvl => (
+                        {getLevelsForGroup(selectedGroup, preferences.institutionType).map(lvl => (
                            <button
                               key={lvl.id}
                               onClick={() => { setSelectedGrade(lvl.id); setSelectedStudentId(null); }}
@@ -371,7 +490,7 @@ const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
                               <h2 className="text-2xl font-google font-bold text-[var(--md-sys-color-on-surface)] mt-1">{selectedStudent.name}</h2>
                               <div className="flex flex-wrap gap-4 mt-2 text-sm text-[var(--md-sys-color-on-surface-variant)]">
                                  <span className="flex items-center gap-1.5"><GraduationCap size={15} className="text-[var(--md-sys-color-primary)]" /> {selectedStudent.admissionNumber || 'N/A'}</span>
-                                 <span className="flex items-center gap-1.5"><CheckCircle2 size={15} className="text-green-500" /> {selectedStudent.nitaNumber || 'No NITA Reg'}</span>
+                                 {selectedStudent.nitaNumber && <span className="flex items-center gap-1.5"><CheckCircle2 size={15} className="text-green-500" /> {selectedStudent.nitaNumber}</span>}
                               </div>
                            </div>
                            <div className="flex items-center gap-4 self-end sm:self-auto">
@@ -448,7 +567,7 @@ const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
                                                 <p className="text-[10px] text-[var(--md-sys-color-secondary)] uppercase font-bold mb-1">Grade</p>
                                                 <p className={clsx("text-lg font-bold leading-none", unitData.finalGrade === 'Fail' ? "text-red-500" : "text-blue-500")}>
                                                    {unitData.finalGrade}
-                                                </p>
+                                                 </p>
                                              </div>
                                           </div>
                                        ) : assessmentSystem === 'CBET' && unitData?.practicalChecks ? (
@@ -523,7 +642,7 @@ const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
                         <p className="text-white/80 text-sm font-medium">
                            Candidate: <span className="text-white font-bold">{selectedStudent.name}</span> • {selectedStudent.admissionNumber || 'No Adm No'}
                         </p>
-                     </div>
+                      </div>
 
                      {/* Modal Body */}
                      <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
@@ -681,7 +800,7 @@ const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
 
                                     <div className="space-y-3 mt-6">
                                        <p className="text-sm font-bold text-[var(--md-sys-color-on-surface)] mb-4">Select outcomes demonstrated by candidate:</p>
-                                       {currentComp.outcomes.map((outcome: string, idx: number) => {
+                                       {currentComp?.outcomes.map((outcome: string, idx: number) => {
                                           const isChecked = cbetChecks.includes(outcome);
                                           return (
                                              <div

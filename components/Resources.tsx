@@ -7,6 +7,7 @@ import { useToast } from './Toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import LibraryTab from './LibraryTab';
+import { getSubjectPill } from '../utils/subjectUtils';
 
 interface ResourcesProps {
     data: AppData;
@@ -695,7 +696,8 @@ export default function Resources({
                                                                 <div className="flex items-center gap-3">
                                                                     <div className={clsx(
                                                                         "p-2 rounded-lg",
-                                                                        slot.subject === 'Solar' ? "bg-orange-100 text-orange-600" : "bg-blue-100 text-blue-600"
+                                                                        getSubjectPill(slot.subject || '').bg,
+                                                                        getSubjectPill(slot.subject || '').text
                                                                     )}>
                                                                         <Calendar size={18} />
                                                                     </div>

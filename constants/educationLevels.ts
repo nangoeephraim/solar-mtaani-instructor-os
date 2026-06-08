@@ -8,7 +8,7 @@
  * - Campus: Year 1-4
  */
 
-import { StudentGroup } from '../types';
+import { StudentGroup, InstitutionType } from '../types';
 
 export interface EducationLevel {
     id: string;        // Stored in DB: 'L3', 'G7', 'F2', 'Y1'
@@ -56,14 +56,53 @@ export const EDUCATION_LEVELS: Record<StudentGroup, EducationLevel[]> = {
 /** All student group options */
 export const STUDENT_GROUPS: StudentGroup[] = ['Academy', 'CBC', 'High School', 'Campus'];
 
-/** Get all levels for a given student group */
-export const getLevelsForGroup = (group: StudentGroup): EducationLevel[] => {
-    return EDUCATION_LEVELS[group] || EDUCATION_LEVELS['Academy'];
+/** Get the active preferences from localStorage synchronously */
+const getPreferences = () => {
+    try {
+        const stored = localStorage.getItem('prism_instructor_settings_v1');
+        if (stored) {
+            const parsed = JSON.parse(stored);
+            return parsed.preferences || {};
+        }
+    } catch (e) {
+        console.error("Failed to read preferences in educationLevels", e);
+    }
+    return {};
+};
+
+/** Get the valid student groups for a given institution type */
+export const getStudentGroups = (institutionType?: InstitutionType): StudentGroup[] => {
+    const instType = institutionType || getPreferences().institutionType || 'tvet';
+    if (instType === 'primary') return ['CBC'];
+    if (instType === 'jss') return ['CBC'];
+    if (instType === 'highschool') return ['High School', 'CBC'];
+    if (instType === 'university') return ['Campus'];
+    if (instType === 'tvet') return ['Academy'];
+    return ['Academy', 'CBC', 'High School', 'Campus'];
+};
+
+/** Get all levels for a given student group, adapted to active school context */
+export const getLevelsForGroup = (group: StudentGroup, institutionType?: InstitutionType): EducationLevel[] => {
+    const instType = institutionType || getPreferences().institutionType || 'tvet';
+    const rawLevels = EDUCATION_LEVELS[group] || [];
+    
+    if (group === 'CBC') {
+        if (instType === 'primary') {
+            return rawLevels.filter(l => ['PP1', 'PP2', 'G1', 'G2', 'G3', 'G4', 'G5', 'G6'].includes(l.id));
+        }
+        if (instType === 'jss') {
+            return rawLevels.filter(l => ['G7', 'G8', 'G9'].includes(l.id));
+        }
+        if (instType === 'highschool') {
+            return rawLevels.filter(l => ['G10', 'G11', 'G12'].includes(l.id));
+        }
+    }
+    return rawLevels;
 };
 
 /** Get the default level for a given student group */
-export const getDefaultLevel = (group: StudentGroup): string => {
-    const levels = getLevelsForGroup(group);
+export const getDefaultLevel = (group: StudentGroup, institutionType?: InstitutionType): string => {
+    const levels = getLevelsForGroup(group, institutionType);
     return levels[0]?.id || 'L3';
 };
 

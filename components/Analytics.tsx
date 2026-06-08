@@ -13,6 +13,8 @@ import html2canvas from 'html2canvas';
 import { ClassAveragesResult, SubjectComparisonResult, AtRiskStudentResult, GradeDistributionResult } from '../types';
 import { supabase } from '../services/supabase';
 import { useToast } from './Toast';
+import { useTheme } from '../contexts/ThemeContext';
+import { getSubjectHex, getSubjectEmoji } from '../utils/subjectUtils';
 
 interface AnalyticsProps {
     data: AppData;
@@ -219,6 +221,7 @@ const ChartCard: React.FC<{
 ));
 
 const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
+    const { preferences } = useTheme();
     const [selectedMetric, setSelectedMetric] = useState<'performance' | 'attendance' | 'overview' | 'comparison'>('overview');
     const [hoveredStudent, setHoveredStudent] = useState<number | null>(null);
     const [timePeriod, setTimePeriod] = useState<'week' | 'month' | 'term'>('month');
@@ -272,13 +275,13 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
         attendance: g.avg_attendance
     })), [gradeDist]);
 
-    // Subject data mapping for Recharts (memoized)
+    // Subject data mapping for Recharts (memoized) — dynamic color via hash
     const subjectData = useMemo(() => subjectComp.map(s => ({
         name: s.subject,
         score: s.avg_score,
         students: s.student_count,
-        color: s.subject === 'Solar' ? '#f97316' : '#3b82f6',
-        icon: s.subject === 'Solar' ? '⚡' : '💻'
+        color: getSubjectHex(s.subject),
+        icon: getSubjectEmoji(s.subject)
     })), [subjectComp]);
 
     // Competency helper (memoized callback)
@@ -343,7 +346,9 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
 
     // Export Functions
     const exportToCSV = () => {
-        const headers = ['Name', 'Subject', 'Grade', 'Lot', 'Attendance %', 'Avg Competency'];
+        const cohortLabel = preferences.terminology?.cohortLabel || 'Lot';
+        const classLabel  = preferences.terminology?.classLabel  || 'Grade';
+        const headers = ['Name', 'Subject', classLabel, cohortLabel, 'Attendance %', 'Avg Competency'];
         const rows = data.students.map(s => [
             s.name,
             s.subject,
@@ -944,8 +949,8 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                                         <div className="flex-1 min-w-0">
                                             <p className="font-bold text-[var(--md-sys-color-on-surface)] text-sm truncate">{student.name}</p>
                                             <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] flex items-center gap-1">
-                                                {student.subject === 'Solar' ? <Zap size={10} /> : <Monitor size={10} />}
-                                                {student.subject} â€¢ {getLevelShortLabel(student.studentGroup, String(student.grade))}
+                                                <span>{getSubjectEmoji(student.subject)}</span>
+                                                {student.subject} • {getLevelShortLabel(student.studentGroup, String(student.grade))}
                                             </p>
                                         </div>
                                         <div className="text-right">

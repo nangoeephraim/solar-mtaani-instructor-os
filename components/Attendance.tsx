@@ -7,6 +7,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from './Toast';
 import { useAuth } from '../contexts/AuthContext';
 import { ChevronLeft, ChevronRight as ChevronRightIcon } from 'lucide-react';
+import { useTheme } from '../contexts/ThemeContext';
+import { getSubjectGradient, getSubjectBorderHover, getSubjectEmoji, getSubjectIconBg } from '../utils/subjectUtils';
 
 interface AttendanceProps {
     data: AppData;
@@ -17,6 +19,7 @@ interface AttendanceProps {
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 const Attendance: React.FC<AttendanceProps> = ({ data, onUpdateStudent, onNavigate }) => {
+    const { preferences } = useTheme();
     const [selectedClass, setSelectedClass] = useState<ScheduleSlot | null>(null);
     const [selectedDate, setSelectedDate] = useState<Date>(new Date());
     const [searchQuery, setSearchQuery] = useState('');
@@ -277,13 +280,15 @@ const Attendance: React.FC<AttendanceProps> = ({ data, onUpdateStudent, onNaviga
                                             "w-full p-4 rounded-xl text-left transition-all border-l-4",
                                             selectedClass?.id === slot.id
                                                 ? "bg-blue-50 dark:bg-blue-900/20 border-l-blue-600 shadow-sm"
-                                                : "bg-[var(--md-sys-color-surface-variant)] border-l-transparent hover:bg-[var(--md-sys-color-surface)]",
-                                            slot.subject === 'Solar' ? 'hover:border-l-orange-500' : 'hover:border-l-blue-500'
+                                                : "bg-[var(--md-sys-color-surface-variant)] border-l-transparent",
+                                            getSubjectBorderHover(slot.subject || '')
                                         )}
                                     >
                                         <div className="flex items-center justify-between mb-2">
                                             <div className="flex items-center gap-2">
-                                                {slot.subject === 'Solar' ? <Zap size={14} className="text-orange-500" /> : <Monitor size={14} className="text-blue-500" />}
+                                                <span className={clsx("w-5 h-5 rounded flex items-center justify-center text-white text-xs", getSubjectIconBg(slot.subject || ''))}>
+                                                    {getSubjectEmoji(slot.subject || '')}
+                                                </span>
                                                 <span className="text-xs font-bold uppercase tracking-wider text-[var(--md-sys-color-secondary)]">{slot.subject}</span>
                                             </div>
                                             <div className="flex items-center gap-1">
@@ -326,7 +331,7 @@ const Attendance: React.FC<AttendanceProps> = ({ data, onUpdateStudent, onNaviga
                         {/* Header */}
                         <div className={clsx(
                             "p-6 text-white relative overflow-hidden",
-                            selectedClass.subject === 'Solar' ? "bg-gradient-to-br from-orange-600 to-red-600" : "bg-gradient-to-br from-blue-600 to-indigo-700"
+                            getSubjectGradient(selectedClass.subject || '')
                         )}>
                             <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10" />
 

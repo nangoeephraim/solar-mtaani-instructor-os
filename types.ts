@@ -1,4 +1,4 @@
-export type Subject = 'Solar' | 'ICT';
+export type Subject = string;
 export type CompetencyLevel = 1 | 2 | 3 | 4; // Emerging, Developing, Competent, Mastered
 export type LessonStatus = 'Pending' | 'Completed' | 'Skipped' | 'Cancelled';
 export type StudentGroup = 'Campus' | 'Academy' | 'CBC' | 'High School';
@@ -45,12 +45,16 @@ export interface Student {
   guardianPhone?: string;
   address?: string;
 
-  // Regulatory Fields (NITA/EPRA/KNEC)
+  // Regulatory Fields (NITA/EPRA/KNEC/NEMIS)
   admissionNumber?: string;
   nitaNumber?: string; // NITA Registration Number
   epraLicenseStatus?: 'None' | 'T1' | 'T2' | 'T3';
   avatarId?: string; // e.g. "avatar_1", "avatar_2"
   kcseGrade?: string; // e.g., 'C-', 'D+'
+  nemisNumber?: string;
+  upi?: string;
+  kcpeMarks?: number;
+  nationalId?: string;
 
   // Assessment Data
   assessment: StudentAssessmentProfile;
@@ -299,12 +303,39 @@ export const COMPETENCY_COLORS: Record<number, string> = {
 };
 
 // Settings types
+export type InstitutionType = 'tvet' | 'primary' | 'jss' | 'highschool' | 'university' | 'custom';
+export type AssessmentSystemType = 'CBET' | 'KNEC';
+
 export interface AppPreferences {
   theme: 'light' | 'dark' | 'system';
   accentColor: 'blue' | 'orange' | 'green' | 'purple';
   enableAI: boolean;
   reducedMotion: boolean;
   notificationsEnabled: boolean;
+  mtaaniCenter?: string;
+  defaultSubject?: string;
+  enableSwahiliGreeting?: boolean;
+
+  // Generalized Institution Configurations
+  institutionType?: InstitutionType;
+  assessmentSystem?: AssessmentSystemType;
+  customSubjects?: string[];
+  enabledFields?: {
+    nemisNumber: boolean;
+    upi: boolean;
+    nitaNumber: boolean;
+    epraLicenseStatus: boolean;
+    kcseGrade: boolean;
+    kcpeMarks: boolean;
+    nationalId: boolean;
+    guardianDetails: boolean;
+    admissionNumber: boolean;
+  };
+  terminology?: {
+    cohortLabel: string;
+    classLabel: string;
+    periodLabel: string;
+  };
 }
 
 export interface InstructorSettings {
@@ -327,7 +358,29 @@ export const DEFAULT_SETTINGS: InstructorSettings = {
     accentColor: 'blue',
     enableAI: true,
     reducedMotion: false,
-    notificationsEnabled: true
+    notificationsEnabled: true,
+    mtaaniCenter: 'Kibera',
+    defaultSubject: 'All',
+    enableSwahiliGreeting: true,
+    institutionType: 'tvet',
+    assessmentSystem: 'CBET',
+    customSubjects: ['Solar', 'ICT'],
+    enabledFields: {
+      nemisNumber: false,
+      upi: false,
+      nitaNumber: true,
+      epraLicenseStatus: true,
+      kcseGrade: true,
+      kcpeMarks: false,
+      nationalId: true,
+      guardianDetails: true,
+      admissionNumber: true
+    },
+    terminology: {
+      cohortLabel: 'Lot',
+      classLabel: 'Course',
+      periodLabel: 'Module'
+    }
   }
 };
 

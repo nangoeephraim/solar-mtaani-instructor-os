@@ -5,6 +5,8 @@ import clsx from 'clsx';
 import { Student } from '../../types';
 import { getLevelShortLabel } from '../../constants/educationLevels';
 import { QuickAlertModal } from './QuickAlertModal';
+import { useTheme } from '../../contexts/ThemeContext';
+import { getSubjectEmoji, getSubjectPill } from '../../utils/subjectUtils';
 
 interface ProfileHeaderProps {
     student: Student;
@@ -22,6 +24,9 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
     onEditRequest
 }) => {
     const [showAlertModal, setShowAlertModal] = React.useState(false);
+    const { preferences } = useTheme();
+    const cohortLabel = preferences.terminology?.cohortLabel || 'Lot';
+    const pill = getSubjectPill(student.subject);
 
     return (
         <div className="relative w-full overflow-hidden glass-panel rounded-t-none rounded-b-3xl shadow-lg border-t-0">
@@ -67,11 +72,9 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
                             <div className="flex flex-wrap items-center gap-2 mb-3">
                                 <span className={clsx(
                                     "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border shadow-sm flex items-center gap-1.5",
-                                    student.subject === 'Solar'
-                                        ? "bg-amber-100/50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800/50"
-                                        : "bg-sky-100/50 text-sky-700 border-sky-200 dark:bg-sky-900/30 dark:text-sky-400 dark:border-sky-800/50"
+                                    pill.bg, pill.text, pill.border, pill.darkBg, pill.darkText, pill.darkBorder
                                 )}>
-                                    {student.subject === 'Solar' ? <Zap size={12} /> : <Monitor size={12} />}
+                                    <span>{getSubjectEmoji(student.subject)}</span>
                                     {student.subject}
                                 </span>
                                 <span className={clsx(
@@ -89,7 +92,7 @@ export const ProfileHeader: React.FC<ProfileHeaderProps> = ({
                             </div>
                             <div className="flex items-center gap-4 text-xs font-medium text-[var(--md-sys-color-on-surface-variant)]">
                                 <span className="flex items-center gap-1.5 bg-[var(--md-sys-color-surface-variant)] px-2 py-1 rounded-md border border-[var(--md-sys-color-outline)]"><span className="text-[var(--md-sys-color-secondary)]">ID</span> #{student.id.toString().padStart(4, '0')}</span>
-                                <span className="flex items-center gap-1.5"><BookOpen size={14} className="text-[var(--md-sys-color-secondary)]" /> Lot {student.lot}</span>
+                                <span className="flex items-center gap-1.5"><BookOpen size={14} className="text-[var(--md-sys-color-secondary)]" /> {cohortLabel} {student.lot}</span>
                             </div>
                         </motion.div>
 

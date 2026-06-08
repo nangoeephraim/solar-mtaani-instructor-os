@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AppData, Student, StudentGroup } from '../types';
-import { getLevelShortLabel, getLevelsForGroup, getDefaultLevel } from '../constants/educationLevels';
+import { getLevelShortLabel, getLevelsForGroup, getStudentGroups } from '../constants/educationLevels';
 import {
     Users, Search, Plus, Camera, Mail, Phone, Calendar, MapPin,
     User, ChevronRight, Filter, Grid3X3, List, Edit3, Save, X, Trash2,
@@ -12,7 +12,10 @@ import { useToast } from './Toast';
 import { useAuth } from '../contexts/AuthContext';
 import PageHeader from './PageHeader';
 import EditStudentModal from './EditStudentModal';
+import AddStudentModal from './AddStudentModal';
 import VirtualList from './VirtualList';
+import { useTheme } from '../contexts/ThemeContext';
+import { getSubjectEmoji, getSubjectIconBg, getSubjectPill } from '../utils/subjectUtils';
 
 interface StudentsProps {
     data: AppData;
@@ -31,8 +34,9 @@ const Students: React.FC<StudentsProps> = ({
     onNavigate,
     selectedStudentId: initialSelectedId
 }) => {
+    const { preferences } = useTheme();
     const [searchTerm, setSearchTerm] = useState('');
-    const [subjectFilter, setSubjectFilter] = useState<'All' | 'Solar' | 'ICT'>('All');
+    const [subjectFilter, setSubjectFilter] = useState<string>('All');
     const [groupFilter, setGroupFilter] = useState<'All' | StudentGroup>('All');
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [selectedStudent, setSelectedStudent] = useState<Student | null>(
@@ -90,44 +94,6 @@ const Students: React.FC<StudentsProps> = ({
         }
     };
 
-    // New student form state
-    const [newStudent, setNewStudent] = useState<Partial<Student>>({
-        name: '',
-        grade: 'L3',
-        lot: '',
-        subject: 'Solar',
-        studentGroup: 'Academy',
-        email: '',
-        phone: '',
-        guardianName: '',
-        guardianPhone: '',
-        nitaNumber: '',
-        admissionNumber: '',
-        kcseGrade: '',
-        epraLicenseStatus: 'None',
-        assessment: { units: {}, termStats: [] }
-    });
-
-    const handleAddNewStudent = () => {
-        if (!newStudent.name || !newStudent.lot) {
-            showToast('Please fill in name and lot number', 'error');
-            return;
-        }
-        onAddStudent({
-            ...newStudent as Student,
-            competencies: {},
-            attendancePct: 100,
-            attendanceHistory: [],
-            notes: [],
-            assessment: { units: {}, termStats: [] }
-        });
-        setShowAddModal(false);
-        setNewStudent({
-            name: '', grade: 'L3', lot: '', subject: 'Solar', studentGroup: 'Academy', email: '', phone: '', guardianName: '', guardianPhone: '',
-            nitaNumber: '', admissionNumber: '', kcseGrade: '', epraLicenseStatus: 'None', assessment: { units: {}, termStats: [] }
-        });
-    };
-
     return (
         <div className="h-full flex flex-col animate-fade-in pb-6 relative">
             {/* Main Content - Student Grid/List */}
@@ -172,7 +138,7 @@ const Students: React.FC<StudentsProps> = ({
                     <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto overflow-visible">
                         {/* Subject Filter Pills */}
                         <div className="flex bg-[var(--md-sys-color-surface-variant)]/60 rounded-lg p-1 border border-[var(--md-sys-color-outline)] overflow-x-auto custom-scrollbar flex-shrink-0">
-                            {(['All', 'Solar', 'ICT'] as const).map(sub => (
+                            {['All', ...(preferences.customSubjects || ['Solar', 'ICT'])].map(sub => (
                                 <button
                                     key={sub}
                                     onClick={() => setSubjectFilter(sub)}
@@ -183,34 +149,35 @@ const Students: React.FC<StudentsProps> = ({
                                             : "text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)] hover:bg-white/5"
                                     )}
                                 >
-                                    {sub === 'Solar' && <Zap size={12} />}
-                                    {sub === 'ICT' && <Monitor size={12} />}
+                                    {sub !== 'All' && <span className="text-[10px]">{getSubjectEmoji(sub)}</span>}
                                     {sub}
                                 </button>
                             ))}
                         </div>
 
                         {/* Group Filter Pills */}
-                        <div className="flex bg-[var(--md-sys-color-surface-variant)]/60 rounded-lg p-1 border border-[var(--md-sys-color-outline)] overflow-x-auto custom-scrollbar flex-shrink-0">
-                            {(['All', 'Campus', 'Academy', 'CBC', 'High School'] as const).map(grp => (
-                                <button
-                                    key={grp}
-                                    onClick={() => setGroupFilter(grp as any)}
-                                    className={clsx(
-                                        "px-2 sm:px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1 whitespace-nowrap flex-shrink-0 active:scale-95",
-                                        groupFilter === grp
-                                            ? "glass-card bg-[var(--md-sys-color-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm"
-                                            : "text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)] hover:bg-white/5"
-                                    )}
-                                >
-                                    {grp === 'Campus' && <Building2 size={12} />}
-                                    {grp === 'Academy' && <School size={12} />}
-                                    {grp === 'CBC' && <BookOpen size={12} />}
-                                    {grp === 'High School' && <GraduationCap size={12} />}
-                                    {grp}
-                                </button>
-                            ))}
-                        </div>
+                        {getStudentGroups(preferences.institutionType).length > 1 && (
+                            <div className="flex bg-[var(--md-sys-color-surface-variant)]/60 rounded-lg p-1 border border-[var(--md-sys-color-outline)] overflow-x-auto custom-scrollbar flex-shrink-0">
+                                {['All', ...getStudentGroups(preferences.institutionType)].map(grp => (
+                                    <button
+                                        key={grp}
+                                        onClick={() => setGroupFilter(grp as any)}
+                                        className={clsx(
+                                            "px-2 sm:px-3 py-1.5 text-xs font-bold rounded-md transition-all flex items-center gap-1 whitespace-nowrap flex-shrink-0 active:scale-95",
+                                            groupFilter === grp
+                                                ? "glass-card bg-[var(--md-sys-color-surface)] text-indigo-600 dark:text-indigo-400 shadow-sm"
+                                                : "text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)] hover:bg-white/5"
+                                        )}
+                                    >
+                                        {grp === 'Campus' && <Building2 size={12} />}
+                                        {grp === 'Academy' && <School size={12} />}
+                                        {grp === 'CBC' && <BookOpen size={12} />}
+                                        {grp === 'High School' && <GraduationCap size={12} />}
+                                        {grp}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
 
                         {/* View Toggle - hidden on small mobile */}
                         <div className="hidden sm:flex bg-[var(--md-sys-color-surface-variant)]/60 rounded-lg p-1 border border-[var(--md-sys-color-outline)]">
@@ -292,9 +259,9 @@ const Students: React.FC<StudentsProps> = ({
                                                 )}
                                                 <div className={clsx(
                                                     "absolute -bottom-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold shadow-md",
-                                                    student.subject === 'Solar' ? "bg-orange-500" : "bg-blue-500"
+                                                    getSubjectIconBg(student.subject)
                                                 )}>
-                                                    {student.subject === 'Solar' ? <Zap size={12} /> : <Monitor size={12} />}
+                                                    <span className="text-[10px]">{getSubjectEmoji(student.subject)}</span>
                                                 </div>
                                             </div>
 
@@ -313,7 +280,7 @@ const Students: React.FC<StudentsProps> = ({
 
                                             {/* Info */}
                                             <h3 className="font-bold text-[var(--md-sys-color-on-surface)] text-center truncate">{student.name}</h3>
-                                            <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] text-center mt-1">{getLevelShortLabel(student.studentGroup, String(student.grade))} • Lot {student.lot}</p>
+                                            <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] text-center mt-1">{getLevelShortLabel(student.studentGroup, String(student.grade))} • {preferences.terminology?.cohortLabel || 'Lot'} {student.lot}</p>
 
                                             {/* Stats */}
                                             <div className="flex justify-center gap-4 mt-4 pt-4 border-t border-[var(--md-sys-color-outline)]">
@@ -379,7 +346,7 @@ const Students: React.FC<StudentsProps> = ({
                                                     )}>
                                                         {student.studentGroup}
                                                     </span>
-                                                    • {student.subject} • {getLevelShortLabel(student.studentGroup, String(student.grade))} • Lot {student.lot}
+                                                    • {student.subject} • {getLevelShortLabel(student.studentGroup, String(student.grade))} • {preferences.terminology?.cohortLabel || 'Lot'} {student.lot}
                                                 </p>
                                             </div>
                                             <div className="flex items-center gap-4 text-sm">
@@ -438,7 +405,7 @@ const Students: React.FC<StudentsProps> = ({
                                 <div className="absolute inset-0 opacity-[0.03] dark:opacity-[0.05] pointer-events-none bg-[radial-gradient(#6366f1_1px,transparent_1px)] [background-size:16px_16px]"></div>
 
                                 <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none transition-transform group-hover:scale-110 duration-700">
-                                    <Zap size={140} />
+                                    <GraduationCap size={140} />
                                 </div>
 
                                 <button
@@ -453,7 +420,9 @@ const Students: React.FC<StudentsProps> = ({
                                 <div className="flex flex-col items-center relative z-0">
                                     {/* Organization Header */}
                                     <div className="text-center mb-6 w-full border-b border-dashed border-gray-300 dark:border-gray-700 pb-4">
-                                        <h2 className="text-sm font-bold tracking-widest text-[var(--md-sys-color-secondary)] uppercase">PRISM Technical Institute</h2>
+                                        <h2 className="text-sm font-bold tracking-widest text-[var(--md-sys-color-secondary)] uppercase">
+                                            {preferences.mtaaniCenter ? `${preferences.mtaaniCenter} Center` : 'PRISM Institute'}
+                                        </h2>
                                         <p className="text-[10px] text-[var(--md-sys-color-outline)] tracking-wider">OFFICIAL STUDENT IDENTIFICATION</p>
                                     </div>
 
@@ -476,11 +445,14 @@ const Students: React.FC<StudentsProps> = ({
                                             <div className="mt-3 text-center space-y-2">
                                                 <span className={clsx(
                                                     "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border shadow-sm",
-                                                    selectedStudent.subject === 'Solar'
-                                                        ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800"
-                                                        : "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-900/30 dark:text-sky-400 dark:border-sky-800"
+                                                    getSubjectPill(selectedStudent.subject).bg,
+                                                    getSubjectPill(selectedStudent.subject).text,
+                                                    getSubjectPill(selectedStudent.subject).border,
+                                                    getSubjectPill(selectedStudent.subject).darkBg,
+                                                    getSubjectPill(selectedStudent.subject).darkText,
+                                                    getSubjectPill(selectedStudent.subject).darkBorder
                                                 )}>
-                                                    {selectedStudent.subject}
+                                                    {getSubjectEmoji(selectedStudent.subject)} {selectedStudent.subject}
                                                 </span>
 
                                                 {/* Group dropdown */}
@@ -509,25 +481,55 @@ const Students: React.FC<StudentsProps> = ({
                                             </div>
 
                                             <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                                                {preferences.enabledFields?.nitaNumber && (
+                                                    <div>
+                                                        <span className="block text-[9px] text-[var(--md-sys-color-outline)] uppercase">NITA Reg No.</span>
+                                                        <span className="font-mono font-medium text-[var(--md-sys-color-on-surface)]">{selectedStudent.nitaNumber || 'Pending'}</span>
+                                                    </div>
+                                                )}
+                                                {preferences.enabledFields?.kcseGrade && (
+                                                    <div>
+                                                        <span className="block text-[9px] text-[var(--md-sys-color-outline)] uppercase">KCSE Grade</span>
+                                                        <span className="font-mono font-medium text-[var(--md-sys-color-on-surface)]">{selectedStudent.kcseGrade || '-'}</span>
+                                                    </div>
+                                                )}
+                                                {preferences.enabledFields?.epraLicenseStatus && (
+                                                    <div>
+                                                        <span className="block text-[9px] text-[var(--md-sys-color-outline)] uppercase">EPRA Status</span>
+                                                        <span className={clsx(
+                                                            "font-bold",
+                                                            selectedStudent.epraLicenseStatus === 'None' ? "text-gray-400" : "text-green-600"
+                                                        )}>
+                                                            {selectedStudent.epraLicenseStatus || 'None'}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                {preferences.enabledFields?.nemisNumber && (
+                                                    <div>
+                                                        <span className="block text-[9px] text-[var(--md-sys-color-outline)] uppercase">NEMIS ID</span>
+                                                        <span className="font-mono font-medium text-[var(--md-sys-color-on-surface)]">{selectedStudent.nemisNumber || '-'}</span>
+                                                    </div>
+                                                )}
+                                                {preferences.enabledFields?.upi && (
+                                                    <div>
+                                                        <span className="block text-[9px] text-[var(--md-sys-color-outline)] uppercase">UPI</span>
+                                                        <span className="font-mono font-medium text-[var(--md-sys-color-on-surface)]">{selectedStudent.upi || '-'}</span>
+                                                    </div>
+                                                )}
+                                                {preferences.enabledFields?.kcpeMarks && (
+                                                    <div>
+                                                        <span className="block text-[9px] text-[var(--md-sys-color-outline)] uppercase">KCPE Marks</span>
+                                                        <span className="font-medium text-[var(--md-sys-color-on-surface)]">{selectedStudent.kcpeMarks || '-'}</span>
+                                                    </div>
+                                                )}
+                                                {preferences.enabledFields?.nationalId && (
+                                                    <div>
+                                                        <span className="block text-[9px] text-[var(--md-sys-color-outline)] uppercase">National ID</span>
+                                                        <span className="font-mono font-medium text-[var(--md-sys-color-on-surface)]">{selectedStudent.nationalId || '-'}</span>
+                                                    </div>
+                                                )}
                                                 <div>
-                                                    <span className="block text-[9px] text-[var(--md-sys-color-outline)] uppercase">NITA Reg No.</span>
-                                                    <span className="font-mono font-medium text-[var(--md-sys-color-on-surface)]">{selectedStudent.nitaNumber || 'Pending'}</span>
-                                                </div>
-                                                <div>
-                                                    <span className="block text-[9px] text-[var(--md-sys-color-outline)] uppercase">KCSE Grade</span>
-                                                    <span className="font-mono font-medium text-[var(--md-sys-color-on-surface)]">{selectedStudent.kcseGrade || '-'}</span>
-                                                </div>
-                                                <div>
-                                                    <span className="block text-[9px] text-[var(--md-sys-color-outline)] uppercase">EPRA Status</span>
-                                                    <span className={clsx(
-                                                        "font-bold",
-                                                        selectedStudent.epraLicenseStatus === 'None' ? "text-gray-400" : "text-green-600"
-                                                    )}>
-                                                        {selectedStudent.epraLicenseStatus || 'None'}
-                                                    </span>
-                                                </div>
-                                                <div>
-                                                    <span className="block text-[9px] text-[var(--md-sys-color-outline)] uppercase">Cohort</span>
+                                                    <span className="block text-[9px] text-[var(--md-sys-color-outline)] uppercase">{preferences.terminology?.cohortLabel || 'Cohort'}</span>
                                                     <span className="font-medium text-[var(--md-sys-color-on-surface)]">{selectedStudent.lot}</span>
                                                 </div>
                                             </div>
@@ -570,20 +572,22 @@ const Students: React.FC<StudentsProps> = ({
                                 </div>
 
                                 {/* Guardian Info */}
-                                <div className="space-y-3">
-                                    <h4 className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-wider">Guardian Information</h4>
+                                {preferences.enabledFields?.guardianDetails && (
+                                    <div className="space-y-3">
+                                        <h4 className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-wider">Guardian Information</h4>
 
-                                    <div className="p-4 glass-panel rounded-xl bg-[var(--md-sys-color-surface-variant)]/40 border border-[var(--md-sys-color-outline)] space-y-3">
-                                        <div>
-                                            <label className="text-[10px] text-[var(--md-sys-color-secondary)] uppercase font-bold">Name</label>
-                                            <p className="text-sm font-medium text-[var(--md-sys-color-on-surface)]">{selectedStudent.guardianName || 'Not specified'}</p>
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] text-[var(--md-sys-color-secondary)] uppercase font-bold">Phone</label>
-                                            <p className="text-sm font-medium text-[var(--md-sys-color-on-surface)]">{selectedStudent.guardianPhone || 'Not specified'}</p>
+                                        <div className="p-4 glass-panel rounded-xl bg-[var(--md-sys-color-surface-variant)]/40 border border-[var(--md-sys-color-outline)] space-y-3">
+                                            <div>
+                                                <label className="text-[10px] text-[var(--md-sys-color-secondary)] uppercase font-bold">Name</label>
+                                                <p className="text-sm font-medium text-[var(--md-sys-color-on-surface)]">{selectedStudent.guardianName || 'Not specified'}</p>
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] text-[var(--md-sys-color-secondary)] uppercase font-bold">Phone</label>
+                                                <p className="text-sm font-medium text-[var(--md-sys-color-on-surface)]">{selectedStudent.guardianPhone || 'Not specified'}</p>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
+                                )}
 
                                 {/* Quick Stats */}
                                 <div className="space-y-3">
@@ -668,217 +672,15 @@ const Students: React.FC<StudentsProps> = ({
 
             {/* Add Student Modal */}
 
-            <AnimatePresence>
-                {showAddModal && (
-                    <motion.div
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-                        onClick={() => setShowAddModal(false)}
-                    >
-                        <motion.div
-                            initial={{ scale: 0.9, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.9, opacity: 0 }}
-                            className="glass-panel backdrop-blur-xl bg-[var(--md-sys-color-surface)]/95 rounded-2xl shadow-2xl w-[calc(100%-2rem)] max-w-md max-h-[85vh] flex flex-col overflow-hidden border border-[var(--md-sys-color-outline)]/40"
-                            onClick={e => e.stopPropagation()}
-                        >
-                            <div className="p-6 bg-gradient-to-r from-blue-600 to-indigo-600 flex-shrink-0">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
-                                        <div className="p-2 bg-white/20 rounded-lg">
-                                            <UserPlus size={20} className="text-white" />
-                                        </div>
-                                        <h3 className="text-xl font-bold text-white">Add New Student</h3>
-                                    </div>
-                                    <button onClick={() => setShowAddModal(false)} aria-label="Close modal" title="Close modal" className="p-2 hover:bg-white/10 rounded-lg transition-colors">
-                                        <X size={20} className="text-white" />
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div className="p-6 space-y-4 overflow-y-auto bg-[var(--md-sys-color-surface)]/80 backdrop-blur-md">
-                                <div>
-                                    <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase">Full Name *</label>
-                                    <div className="input-glow rounded-xl border border-[var(--md-sys-color-outline)] transition-all bg-[var(--md-sys-color-surface-variant)] mt-1">
-                                        <input
-                                            value={newStudent.name}
-                                            onChange={e => setNewStudent(prev => ({ ...prev, name: e.target.value }))}
-                                            className="w-full px-4 py-3 bg-transparent rounded-xl text-sm focus:outline-none text-[var(--md-sys-color-on-surface)]"
-                                            placeholder="Enter student name"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase">Lot Number *</label>
-                                        <div className="input-glow rounded-xl border border-[var(--md-sys-color-outline)] transition-all bg-[var(--md-sys-color-surface-variant)] mt-1">
-                                            <input
-                                                value={newStudent.lot}
-                                                onChange={e => setNewStudent(prev => ({ ...prev, lot: e.target.value }))}
-                                                className="w-full px-4 py-3 bg-transparent rounded-xl text-sm focus:outline-none text-[var(--md-sys-color-on-surface)]"
-                                                placeholder="e.g., L001"
-                                            />
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase">Level</label>
-                                        <div className="input-glow rounded-xl border border-[var(--md-sys-color-outline)] transition-all bg-[var(--md-sys-color-surface-variant)] mt-1">
-                                            <select
-                                                value={newStudent.grade}
-                                                onChange={e => setNewStudent(prev => ({ ...prev, grade: e.target.value }))}
-                                                aria-label="Education Level"
-                                                title="Education Level"
-                                                className="w-full px-4 py-3 bg-transparent rounded-xl text-sm focus:outline-none text-[var(--md-sys-color-on-surface)]"
-                                            >
-                                                {getLevelsForGroup(newStudent.studentGroup || 'Academy').map(lvl => <option key={lvl.id} value={lvl.id}>{lvl.label}</option>)}
-                                            </select>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase">Subject</label>
-                                        <div className="flex gap-2 mt-2">
-                                            {(['Solar', 'ICT'] as const).map(s => (
-                                                <button
-                                                    key={s}
-                                                    onClick={() => setNewStudent(prev => ({ ...prev, subject: s }))}
-                                                    className={clsx(
-                                                        "flex-1 py-3 rounded-xl border-2 text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all active:scale-95",
-                                                        newStudent.subject === s
-                                                            ? s === 'Solar' ? "border-orange-500 bg-orange-50/15 dark:bg-orange-950/20 text-orange-700 dark:text-orange-400 shadow-sm" : "border-blue-500 bg-blue-50/15 dark:bg-blue-950/20 text-blue-700 dark:text-blue-400 shadow-sm"
-                                                            : "border-[var(--md-sys-color-outline)] hover:border-violet-200 text-[var(--md-sys-color-on-surface-variant)] bg-[var(--md-sys-color-surface-variant)]/40"
-                                                    )}
-                                                >
-                                                    {s === 'Solar' ? <Zap size={14} /> : <Monitor size={14} />}
-                                                    {s}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase">Group *</label>
-                                        <div className="input-glow rounded-xl border border-[var(--md-sys-color-outline)] transition-all bg-[var(--md-sys-color-surface-variant)] mt-2">
-                                            <select
-                                                value={newStudent.studentGroup}
-                                                onChange={e => setNewStudent(prev => ({ ...prev, studentGroup: e.target.value as any }))}
-                                                aria-label="Student Group"
-                                                title="Student Group"
-                                                className="w-full px-4 py-4 bg-transparent rounded-xl text-sm focus:outline-none text-[var(--md-sys-color-on-surface)]"
-                                            >
-                                                <option value="Campus">Campus</option>
-                                                <option value="Academy">Academy</option>
-                                                <option value="CBC">CBC</option>
-                                                <option value="High School">High School</option>
-                                            </select>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase">Email</label>
-                                        <div className="input-glow rounded-xl border border-[var(--md-sys-color-outline)] transition-all bg-[var(--md-sys-color-surface-variant)] mt-1">
-                                            <input
-                                                type="email"
-                                                value={newStudent.email}
-                                                onChange={e => setNewStudent(prev => ({ ...prev, email: e.target.value }))}
-                                                className="w-full px-4 py-3 bg-transparent rounded-xl text-sm focus:outline-none text-[var(--md-sys-color-on-surface)]"
-                                                placeholder="Optional"
-                                            />
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase">Phone</label>
-                                        <div className="input-glow rounded-xl border border-[var(--md-sys-color-outline)] transition-all bg-[var(--md-sys-color-surface-variant)] mt-1">
-                                            <input
-                                                type="tel"
-                                                value={newStudent.phone}
-                                                onChange={e => setNewStudent(prev => ({ ...prev, phone: e.target.value }))}
-                                                className="w-full px-4 py-3 bg-transparent rounded-xl text-sm focus:outline-none text-[var(--md-sys-color-on-surface)]"
-                                                placeholder="Optional"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Regulatory Fields */}
-                                <div className="p-4 bg-[var(--md-sys-color-surface-variant)]/50 rounded-xl border border-[var(--md-sys-color-outline)] space-y-3">
-                                    <h4 className="text-xs font-bold text-[var(--md-sys-color-primary)] uppercase flex items-center gap-2">
-                                        <GraduationCap size={14} /> Official Registration
-                                    </h4>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="text-[10px] font-bold text-[var(--md-sys-color-secondary)] uppercase">Admission No.</label>
-                                            <div className="input-glow rounded-xl border border-[var(--md-sys-color-outline)] transition-all bg-[var(--md-sys-color-surface)] mt-1">
-                                                <input
-                                                    value={newStudent.admissionNumber || ''}
-                                                    onChange={e => setNewStudent(prev => ({ ...prev, admissionNumber: e.target.value }))}
-                                                    className="w-full px-3 py-2 bg-transparent rounded-xl text-sm focus:outline-none text-[var(--md-sys-color-on-surface)]"
-                                                    placeholder="e.g. ADM2023/001"
-                                                />
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] font-bold text-[var(--md-sys-color-secondary)] uppercase">NITA Reg No.</label>
-                                            <div className="input-glow rounded-xl border border-[var(--md-sys-color-outline)] transition-all bg-[var(--md-sys-color-surface)] mt-1">
-                                                <input
-                                                    value={newStudent.nitaNumber || ''}
-                                                    onChange={e => setNewStudent(prev => ({ ...prev, nitaNumber: e.target.value }))}
-                                                    className="w-full px-3 py-2 bg-transparent rounded-xl text-sm focus:outline-none text-[var(--md-sys-color-on-surface)]"
-                                                    placeholder="NITA/..."
-                                                />
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] font-bold text-[var(--md-sys-color-secondary)] uppercase">EPRA License</label>
-                                            <div className="input-glow rounded-xl border border-[var(--md-sys-color-outline)] transition-all bg-[var(--md-sys-color-surface)] mt-1">
-                                                <select
-                                                    value={newStudent.epraLicenseStatus || 'None'}
-                                                    onChange={e => setNewStudent(prev => ({ ...prev, epraLicenseStatus: e.target.value as any }))}
-                                                    aria-label="EPRA License"
-                                                    title="EPRA License"
-                                                    className="w-full px-3 py-2 bg-transparent rounded-xl text-sm focus:outline-none text-[var(--md-sys-color-on-surface)]"
-                                                >
-                                                    <option value="None">None</option>
-                                                    <option value="T1">PV T1</option>
-                                                    <option value="T2">PV T2</option>
-                                                    <option value="T3">PV T3</option>
-                                                </select>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <label className="text-[10px] font-bold text-[var(--md-sys-color-secondary)] uppercase">KCSE Grade</label>
-                                            <div className="input-glow rounded-xl border border-[var(--md-sys-color-outline)] transition-all bg-[var(--md-sys-color-surface)] mt-1">
-                                                <input
-                                                    value={newStudent.kcseGrade || ''}
-                                                    onChange={e => setNewStudent(prev => ({ ...prev, kcseGrade: e.target.value }))}
-                                                    className="w-full px-3 py-2 bg-transparent rounded-xl text-sm focus:outline-none text-[var(--md-sys-color-on-surface)]"
-                                                    placeholder="e.g. C-"
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="p-6 bg-[var(--md-sys-color-surface-variant)]/90 backdrop-blur-md border-t border-[var(--md-sys-color-outline)]">
-                                <button
-                                    onClick={handleAddNewStudent}
-                                    className="w-full py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold text-sm shadow-md hover:shadow-lg transition-all active:scale-95"
-                                >
-                                    Add Student
-                                </button>
-                            </div>
-                        </motion.div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
+            {/* Add Student Modal */}
+            <AddStudentModal
+                isOpen={showAddModal}
+                onClose={() => setShowAddModal(false)}
+                onAdd={(student) => {
+                    onAddStudent(student);
+                    showToast('Student added successfully!', 'success');
+                }}
+            />
         </div >
     );
 };

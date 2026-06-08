@@ -16,10 +16,17 @@ import {
     unassignInstructorFromClass,
     updateInstructorProfile,
 } from '../services/instructorService';
-import { STUDENT_GROUPS, getLevelsForGroup } from '../constants/educationLevels';
+import { getStudentGroups, getLevelsForGroup } from '../constants/educationLevels';
 import type { StudentGroup } from '../types';
+import { useTheme } from '../contexts/ThemeContext';
 
 const InstructorManagement: React.FC = () => {
+    const { preferences } = useTheme();
+    const activeSubjects = preferences.customSubjects && preferences.customSubjects.length > 0
+        ? preferences.customSubjects
+        : ['Solar', 'ICT'];
+    const activeGroups = getStudentGroups(preferences.institutionType);
+
     const [instructors, setInstructors] = useState<InstructorProfile[]>([]);
     const [workloads, setWorkloads] = useState<InstructorWorkload[]>([]);
     const [assignments, setAssignments] = useState<ClassAssignment[]>([]);
@@ -31,8 +38,8 @@ const InstructorManagement: React.FC = () => {
     // Assignment form state
     const [assignForm, setAssignForm] = useState({
         grade: '',
-        subject: 'Solar' as 'Solar' | 'ICT',
-        studentGroup: 'Academy' as StudentGroup,
+        subject: activeSubjects[0] as string,
+        studentGroup: activeGroups[0] as StudentGroup,
         term: 1 as 1 | 2 | 3,
     });
 
@@ -366,8 +373,8 @@ const InstructorManagement: React.FC = () => {
                                 {/* Subject */}
                                 <div>
                                     <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase block mb-1.5">Subject</label>
-                                    <div className="flex bg-[var(--md-sys-color-surface-variant)]/60 rounded-xl p-1 border border-[var(--md-sys-color-outline)]">
-                                        {(['Solar', 'ICT'] as const).map(sub => (
+                                    <div className="flex flex-wrap bg-[var(--md-sys-color-surface-variant)]/60 rounded-xl p-1 border border-[var(--md-sys-color-outline)] gap-1">
+                                        {activeSubjects.map(sub => (
                                             <button
                                                 key={sub}
                                                 onClick={() => setAssignForm(f => ({ ...f, subject: sub }))}
@@ -394,7 +401,7 @@ const InstructorManagement: React.FC = () => {
                                             className="w-full px-3 py-2.5 bg-transparent text-sm focus:outline-none text-[var(--md-sys-color-on-surface)] cursor-pointer"
                                             title="Select student group"
                                         >
-                                            {STUDENT_GROUPS.map(g => (
+                                            {activeGroups.map(g => (
                                                 <option key={g} value={g} className="bg-[var(--md-sys-color-surface)] text-[var(--md-sys-color-on-surface)]">{g}</option>
                                             ))}
                                         </select>

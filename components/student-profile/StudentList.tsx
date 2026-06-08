@@ -2,6 +2,8 @@ import React, { useMemo } from 'react';
 import { User, Search, Zap, Monitor, Phone, MessageSquare } from 'lucide-react';
 import clsx from 'clsx';
 import { Student } from '../../types';
+import { useTheme } from '../../contexts/ThemeContext';
+import { getSubjectEmoji, getSubjectTextColor } from '../../utils/subjectUtils';
 
 interface StudentListProps {
     students: Student[];
@@ -9,8 +11,8 @@ interface StudentListProps {
     onSelectStudent: (id: number) => void;
     searchTerm: string;
     onSearchChange: (term: string) => void;
-    subjectFilter: 'All' | 'Solar' | 'ICT';
-    onFilterChange: (filter: 'All' | 'Solar' | 'ICT') => void;
+    subjectFilter: string;
+    onFilterChange: (filter: string) => void;
     onAddStudent: () => void;
 }
 
@@ -50,6 +52,11 @@ export const StudentList: React.FC<StudentListProps> = ({
     onFilterChange,
     onAddStudent
 }) => {
+    const { preferences } = useTheme();
+    const activeSubjects = preferences.customSubjects && preferences.customSubjects.length > 0
+        ? preferences.customSubjects
+        : ['Solar', 'ICT'];
+
     const filteredStudents = useMemo(() => {
         return students.filter(s => {
             const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || s.lot.includes(searchTerm);
@@ -78,20 +85,19 @@ export const StudentList: React.FC<StudentListProps> = ({
                 </div>
 
                 {/* Subject Filter Toggle */}
-                <div className="flex bg-[var(--md-sys-color-surface-variant)]/40 p-1.5 rounded-2xl mb-3 border border-[var(--md-sys-color-outline)]/40 backdrop-blur-sm">
-                    {(['All', 'Solar', 'ICT'] as const).map(sub => (
+                <div className="flex bg-[var(--md-sys-color-surface-variant)]/40 p-1.5 rounded-2xl mb-3 border border-[var(--md-sys-color-outline)]/40 backdrop-blur-sm overflow-x-auto custom-scrollbar gap-1">
+                    {(['All', ...activeSubjects]).map(sub => (
                         <button
                             key={sub}
                             onClick={() => onFilterChange(sub)}
                             className={clsx(
-                                "flex-1 py-1.5 text-xs font-bold rounded-xl transition-all duration-300 flex items-center justify-center gap-1.5 active:scale-95",
+                                "flex-shrink-0 py-1.5 px-2 text-xs font-bold rounded-xl transition-all duration-300 flex items-center justify-center gap-1.5 active:scale-95",
                                 subjectFilter === sub 
                                     ? "bg-[var(--md-sys-color-surface)] shadow-md text-[var(--md-sys-color-primary)] border border-[var(--md-sys-color-outline)]" 
                                     : "text-[var(--md-sys-color-secondary)] hover:text-[var(--md-sys-color-on-surface)] hover:bg-[var(--md-sys-color-surface-variant)]/20"
                             )}
                         >
-                            {sub === 'Solar' && <Zap size={12} />}
-                            {sub === 'ICT' && <Monitor size={12} />}
+                            {sub !== 'All' && <span className="text-[11px]">{getSubjectEmoji(sub)}</span>}
                             {sub}
                         </button>
                     ))}
@@ -157,7 +163,7 @@ export const StudentList: React.FC<StudentListProps> = ({
                                     <div className="flex items-center gap-2 mt-1">
                                         <span className={clsx(
                                             "text-[10px] font-bold uppercase tracking-wider",
-                                            student.subject === 'Solar' ? "text-amber-500" : "text-sky-500"
+                                            getSubjectTextColor(student.subject)
                                         )}>
                                             {student.subject}
                                         </span>

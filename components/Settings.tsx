@@ -13,7 +13,8 @@ import {
     AlertTriangle, FileDown, Moon, Sun, Palette, Sparkles,
     Bell, Upload, Database, Eye, Shield, LogOut, Users, ChevronRight,
     Laptop, Check, Info, Keyboard, HardDrive,
-    Zap, Activity, Camera, Phone, Building2, FileText, X, Trash2, BellRing
+    Zap, Activity, Camera, Phone, Building2, FileText, X, Trash2, BellRing,
+    GraduationCap, School, BookOpen, Briefcase, Sliders, Plus
 } from 'lucide-react';
 import { ToggleSwitch } from './ToggleSwitch';
 import clsx from 'clsx';
@@ -107,6 +108,195 @@ const Settings: React.FC<SettingsProps> = ({ onDataReset }) => {
     const [permissionStatus, setPermissionStatus] = useState<NotificationPermission>('default');
     const [testNotificationDelay, setTestNotificationDelay] = useState<number>(3); // seconds
     const [isSchedulingTest, setIsSchedulingTest] = useState(false);
+
+    const [newSubjectInput, setNewSubjectInput] = useState('');
+
+    const INSTITUTION_CONFIGS: Record<string, {
+        assessmentSystem: 'CBET' | 'KNEC';
+        customSubjects: string[];
+        terminology: { cohortLabel: string; classLabel: string; periodLabel: string; };
+        enabledFields: {
+            nemisNumber: boolean;
+            upi: boolean;
+            nitaNumber: boolean;
+            epraLicenseStatus: boolean;
+            kcseGrade: boolean;
+            kcpeMarks: boolean;
+            nationalId: boolean;
+            guardianDetails: boolean;
+            admissionNumber: boolean;
+        };
+    }> = {
+        primary: {
+            assessmentSystem: 'CBET',
+            customSubjects: ['Mathematics', 'Kiswahili', 'English', 'Science & Tech', 'Social Studies', 'Agriculture', 'Creative Arts', 'Religious Ed'],
+            terminology: { cohortLabel: 'Stream', classLabel: 'Class', periodLabel: 'Term' },
+            enabledFields: {
+                nemisNumber: true,
+                upi: true,
+                nitaNumber: false,
+                epraLicenseStatus: false,
+                kcseGrade: false,
+                kcpeMarks: false,
+                nationalId: false,
+                guardianDetails: true,
+                admissionNumber: true,
+            }
+        },
+        jss: {
+            assessmentSystem: 'CBET',
+            customSubjects: ['Mathematics', 'Kiswahili', 'English', 'Integrated Science', 'Pre-Technical', 'Social Studies', 'Agriculture', 'Creative Arts'],
+            terminology: { cohortLabel: 'Stream', classLabel: 'Class', periodLabel: 'Term' },
+            enabledFields: {
+                nemisNumber: true,
+                upi: true,
+                nitaNumber: false,
+                epraLicenseStatus: false,
+                kcseGrade: false,
+                kcpeMarks: true,
+                nationalId: false,
+                guardianDetails: true,
+                admissionNumber: true,
+            }
+        },
+        highschool: {
+            assessmentSystem: 'KNEC',
+            customSubjects: ['Mathematics', 'English', 'Kiswahili', 'Biology', 'Chemistry', 'Physics', 'History', 'Geography', 'CRE', 'Agriculture', 'Business', 'Computer'],
+            terminology: { cohortLabel: 'Stream', classLabel: 'Form', periodLabel: 'Term' },
+            enabledFields: {
+                nemisNumber: true,
+                upi: true,
+                nitaNumber: false,
+                epraLicenseStatus: false,
+                kcseGrade: true,
+                kcpeMarks: true,
+                nationalId: false,
+                guardianDetails: true,
+                admissionNumber: true,
+            }
+        },
+        tvet: {
+            assessmentSystem: 'CBET',
+            customSubjects: ['Solar', 'ICT', 'Electrical', 'Plumbing', 'Masonry'],
+            terminology: { cohortLabel: 'Lot', classLabel: 'Course', periodLabel: 'Module' },
+            enabledFields: {
+                nemisNumber: false,
+                upi: false,
+                nitaNumber: true,
+                epraLicenseStatus: true,
+                kcseGrade: true,
+                kcpeMarks: false,
+                nationalId: true,
+                guardianDetails: true,
+                admissionNumber: true,
+            }
+        },
+        university: {
+            assessmentSystem: 'KNEC',
+            customSubjects: ['Computer Science', 'Business Admin', 'Engineering Maths', 'Communication Skills'],
+            terminology: { cohortLabel: 'Cohort', classLabel: 'Year', periodLabel: 'Semester' },
+            enabledFields: {
+                nemisNumber: false,
+                upi: false,
+                nitaNumber: false,
+                epraLicenseStatus: false,
+                kcseGrade: true,
+                kcpeMarks: false,
+                nationalId: true,
+                guardianDetails: false,
+                admissionNumber: true,
+            }
+        },
+        custom: {
+            assessmentSystem: 'CBET',
+            customSubjects: ['Solar', 'ICT'],
+            terminology: { cohortLabel: 'Cohort', classLabel: 'Class', periodLabel: 'Term' },
+            enabledFields: {
+                nemisNumber: true,
+                upi: true,
+                nitaNumber: true,
+                epraLicenseStatus: true,
+                kcseGrade: true,
+                kcpeMarks: true,
+                nationalId: true,
+                guardianDetails: true,
+                admissionNumber: true,
+            }
+        }
+    };
+
+    const handleConfigureInstitution = (type: string) => {
+        const config = INSTITUTION_CONFIGS[type];
+        if (!config) return;
+
+        setPreference('institutionType', type as any);
+        setPreference('assessmentSystem', config.assessmentSystem);
+        setPreference('customSubjects', config.customSubjects);
+        setPreference('terminology', config.terminology);
+        setPreference('enabledFields', config.enabledFields);
+        setPreference('defaultSubject', config.customSubjects[0] || 'All');
+
+        showToast(`Workspace configured for ${type.toUpperCase()} standards!`, 'success');
+    };
+
+    const handleAddSubject = () => {
+        const trimmed = newSubjectInput.trim();
+        if (!trimmed) return;
+        
+        const currentSubjects = preferences.customSubjects || ['Solar', 'ICT'];
+        if (currentSubjects.map(s => s.toLowerCase()).includes(trimmed.toLowerCase())) {
+            showToast('Subject already exists', 'warning');
+            return;
+        }
+
+        const updated = [...currentSubjects, trimmed];
+        setPreference('customSubjects', updated);
+        setNewSubjectInput('');
+        showToast(`Subject "${trimmed}" added!`, 'success');
+    };
+
+    const handleRemoveSubject = (subToRemove: string) => {
+        const currentSubjects = preferences.customSubjects || ['Solar', 'ICT'];
+        if (currentSubjects.length <= 1) {
+            showToast('Must have at least one subject', 'warning');
+            return;
+        }
+
+        const updated = currentSubjects.filter(s => s !== subToRemove);
+        setPreference('customSubjects', updated);
+        
+        // Adjust default focus if deleted
+        if (preferences.defaultSubject === subToRemove) {
+            setPreference('defaultSubject', updated[0]);
+        }
+        showToast(`Subject "${subToRemove}" removed!`, 'info');
+    };
+
+    const handleUpdateTerminology = (key: string, value: string) => {
+        const currentTerminology = preferences.terminology || { cohortLabel: 'Lot', classLabel: 'Course', periodLabel: 'Module' };
+        setPreference('terminology', {
+            ...currentTerminology,
+            [key]: value
+        });
+    };
+
+    const handleToggleField = (fieldKey: string, isEnabled: boolean) => {
+        const currentFields = preferences.enabledFields || {
+            nemisNumber: false,
+            upi: false,
+            nitaNumber: true,
+            epraLicenseStatus: true,
+            kcseGrade: true,
+            kcpeMarks: false,
+            nationalId: true,
+            guardianDetails: true,
+            admissionNumber: true
+        };
+        setPreference('enabledFields', {
+            ...currentFields,
+            [fieldKey]: isEnabled
+        });
+    };
 
     useEffect(() => {
         if ('Notification' in window) {
@@ -530,6 +720,310 @@ const Settings: React.FC<SettingsProps> = ({ onDataReset }) => {
                                     </button>
                                 );
                             })}
+                        </div>
+                    </div>
+                </div>
+            </motion.div>
+
+            {/* ═══ GENERALIZED INSTITUTION CONFIGURATOR ═══ */}
+            <motion.div className="glass-panel rounded-3xl overflow-hidden animate-fade-in" custom={2.5} initial="hidden" animate="visible" variants={cardVariant}>
+                <div className="p-5 pb-2"><SectionHeader icon={<Building2 size={18} />} title="Institution Configurator" iconColor="text-emerald-500" badge="Kenyan Standards" /></div>
+                <div className="px-5 pb-5 pt-1 space-y-6">
+                    <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] leading-relaxed">
+                        Configure this workspace for your learning institution. Switching your niche adapts terminology, assessment models (CBET vs KNEC), subjects, and student profile fields.
+                    </p>
+
+                    {/* Niche Selector Cards */}
+                    <div className="space-y-3">
+                        <label className="text-[11px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-widest block px-1">Choose Institution Niche</label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                            {[
+                                { id: 'primary', label: 'Primary School (CBC)', desc: 'PP1 to Grade 6, CBC Competencies, NEMIS & UPI, Class/Stream terminology', icon: <School size={20} className="text-blue-500" /> },
+                                { id: 'jss', label: 'Junior Secondary (JSS)', desc: 'Grade 7 to 9, CBC Competencies, KCPE Marks, Class/Stream terminology', icon: <BookOpen size={20} className="text-teal-500" /> },
+                                { id: 'highschool', label: 'High School', desc: 'Form 1 to 4, KNEC Exam Grades, KCPE/KCSE Fields, Form/Stream terminology', icon: <GraduationCap size={20} className="text-purple-500" /> },
+                                { id: 'tvet', label: 'TVET College', desc: 'KNQF Levels, CBET Competencies, NITA/EPRA/National ID, Course/Lot terminology', icon: <Briefcase size={20} className="text-orange-500" /> },
+                                { id: 'university', label: 'University / Tertiary', desc: 'Years 1 to 4, Semester system, GPA Grades, Course/Cohort terminology', icon: <Building2 size={20} className="text-indigo-500" /> },
+                                { id: 'custom', label: 'Custom / Generic', desc: 'Fully customizable trade school, custom subjects, and field toggles', icon: <Sliders size={20} className="text-pink-500" /> },
+                            ].map(niche => {
+                                const isSelected = preferences.institutionType === niche.id;
+                                return (
+                                    <button
+                                        key={niche.id}
+                                        type="button"
+                                        onClick={() => handleConfigureInstitution(niche.id)}
+                                        className={clsx(
+                                            "flex flex-col text-left p-4 rounded-2xl border transition-all duration-300 relative group cursor-pointer h-full select-none justify-between",
+                                            isSelected
+                                                ? "border-[var(--accent-primary)] bg-[var(--md-sys-color-primary-container)] shadow-[0_0_15px_rgba(var(--accent-primary-rgb),0.15)] ring-1 ring-[var(--accent-primary)]"
+                                                : "border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-variant)] hover:bg-[var(--md-sys-color-surface-1)] hover:border-[var(--md-sys-color-outline)]"
+                                        )}
+                                    >
+                                        <div className="space-y-2">
+                                            <div className="flex items-center justify-between">
+                                                <div className="p-2 rounded-xl bg-[var(--md-sys-color-surface-1)] border border-[var(--md-sys-color-outline-variant)] group-hover:scale-110 transition-transform duration-200">
+                                                    {niche.icon}
+                                                </div>
+                                                {isSelected && (
+                                                    <div className="w-5 h-5 rounded-full bg-[var(--accent-primary)] text-white flex items-center justify-center animate-scale-in">
+                                                        <Check size={12} strokeWidth={3} />
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div>
+                                                <h4 className={clsx("text-xs font-bold font-google", isSelected ? "text-[var(--md-sys-color-primary)] font-black" : "text-[var(--md-sys-color-on-surface)]")}>
+                                                    {niche.label}
+                                                </h4>
+                                                <p className="text-[11px] text-[var(--md-sys-color-on-surface-variant)] mt-1 leading-relaxed">
+                                                    {niche.desc}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-[var(--md-sys-color-outline-variant)]">
+                        {/* Terminology Overrides */}
+                        <div className="space-y-3">
+                            <h4 className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-wider flex items-center gap-2">
+                                <Sliders size={14} /> Terminology Overrides
+                            </h4>
+                            <p className="text-[11px] text-[var(--md-sys-color-on-surface-variant)] leading-relaxed">
+                                Customize the names used for cohorts, groups, and academic sessions.
+                            </p>
+                            <div className="grid grid-cols-3 gap-2">
+                                <div>
+                                    <label className="text-[9px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase block mb-1">Cohort (e.g. Lot, Stream)</label>
+                                    <input
+                                        type="text"
+                                        value={preferences.terminology?.cohortLabel || ''}
+                                        onChange={e => handleUpdateTerminology('cohortLabel', e.target.value)}
+                                        placeholder="e.g. Lot"
+                                        className="w-full px-3 py-2 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl text-xs font-medium text-[var(--md-sys-color-on-surface)] focus:outline-none input-glow transition-all"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[9px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase block mb-1">Class (e.g. Grade, Form)</label>
+                                    <input
+                                        type="text"
+                                        value={preferences.terminology?.classLabel || ''}
+                                        onChange={e => handleUpdateTerminology('classLabel', e.target.value)}
+                                        placeholder="e.g. Course"
+                                        className="w-full px-3 py-2 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl text-xs font-medium text-[var(--md-sys-color-on-surface)] focus:outline-none input-glow transition-all"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-[9px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase block mb-1">Period (e.g. Term, Semester)</label>
+                                    <input
+                                        type="text"
+                                        value={preferences.terminology?.periodLabel || ''}
+                                        onChange={e => handleUpdateTerminology('periodLabel', e.target.value)}
+                                        placeholder="e.g. Module"
+                                        className="w-full px-3 py-2 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl text-xs font-medium text-[var(--md-sys-color-on-surface)] focus:outline-none input-glow transition-all"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Dynamic Subjects Manager */}
+                        <div className="space-y-3">
+                            <h4 className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-wider flex items-center gap-2">
+                                <BookOpen size={14} /> Dynamic Subjects / Units
+                            </h4>
+                            <p className="text-[11px] text-[var(--md-sys-color-on-surface-variant)] leading-relaxed">
+                                Manage the courses or subjects available in your school system.
+                            </p>
+                            
+                            <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto p-1 border border-[var(--md-sys-color-outline-variant)] rounded-xl bg-[var(--md-sys-color-surface-variant)]">
+                                {(preferences.customSubjects || ['Solar', 'ICT']).map((sub) => (
+                                    <span
+                                        key={sub}
+                                        className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-primary)] border border-[var(--md-sys-color-outline-variant)] hover:scale-105 transition-transform duration-150"
+                                    >
+                                        {sub}
+                                        <button
+                                            type="button"
+                                            onClick={() => handleRemoveSubject(sub)}
+                                            className="text-[var(--md-sys-color-primary)] hover:text-red-500 transition-colors cursor-pointer"
+                                        >
+                                            <X size={10} strokeWidth={3} />
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
+
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={newSubjectInput}
+                                    onChange={e => setNewSubjectInput(e.target.value)}
+                                    placeholder="Add new subject name..."
+                                    onKeyDown={e => e.key === 'Enter' && handleAddSubject()}
+                                    className="flex-1 px-3 py-2 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl text-xs font-medium text-[var(--md-sys-color-on-surface)] focus:outline-none input-glow transition-all"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={handleAddSubject}
+                                    className="px-3 py-2 bg-[var(--accent-primary)] hover:bg-[var(--accent-hover)] text-white text-xs font-bold rounded-xl flex items-center gap-1 transition-all shadow-sm"
+                                >
+                                    <Plus size={14} /> Add
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Student Form Profile Fields toggling */}
+                    <div className="pt-4 border-t border-[var(--md-sys-color-outline-variant)] space-y-3">
+                        <h4 className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-wider flex items-center gap-2">
+                            <Sliders size={14} /> Student Profile Field Controls
+                        </h4>
+                        <p className="text-[11px] text-[var(--md-sys-color-on-surface-variant)] leading-relaxed">
+                            Configure which input fields are visible on the student registry registration and edit forms.
+                        </p>
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 px-1">
+                            {[
+                                { key: 'admissionNumber', label: 'Admission Number' },
+                                { key: 'nemisNumber', label: 'NEMIS ID' },
+                                { key: 'upi', label: 'UPI (Unique Personal Identifier)' },
+                                { key: 'nationalId', label: 'National ID / Alien ID' },
+                                { key: 'nitaNumber', label: 'NITA Registration No' },
+                                { key: 'epraLicenseStatus', label: 'EPRA License Status' },
+                                { key: 'kcseGrade', label: 'KCSE Mean Grade' },
+                                { key: 'kcpeMarks', label: 'KCPE Marks' },
+                                { key: 'guardianDetails', label: 'Guardian Details' }
+                            ].map(field => {
+                                const currentFields = preferences.enabledFields || {
+                                    nemisNumber: false,
+                                    upi: false,
+                                    nitaNumber: true,
+                                    epraLicenseStatus: true,
+                                    kcseGrade: true,
+                                    kcpeMarks: false,
+                                    nationalId: true,
+                                    guardianDetails: true,
+                                    admissionNumber: true
+                                };
+                                const isChecked = !!(currentFields as any)[field.key];
+                                return (
+                                    <div key={field.key} className="flex items-center justify-between p-2 rounded-xl bg-[var(--md-sys-color-surface-variant)] hover:bg-[var(--md-sys-color-surface-1)] transition-colors">
+                                        <span className="text-xs text-[var(--md-sys-color-on-surface)] font-medium pl-1">{field.label}</span>
+                                        <ToggleSwitch
+                                            checked={isChecked}
+                                            onChange={v => handleToggleField(field.key, v)}
+                                        />
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* Regional Settings */}
+                    <div className="pt-4 border-t border-[var(--md-sys-color-outline-variant)] space-y-4">
+                        <h4 className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-wider flex items-center gap-2">
+                            <Building2 size={14} /> Regional Localization
+                        </h4>
+                        
+                        <div className="space-y-4">
+                            {/* Center Select */}
+                            <div>
+                                <label className="text-[11px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase block mb-2 px-1">Training Center / Branch</label>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                    {['Kibera', 'Mathare', 'Mukuru', 'Kawangware', 'Mombasa', 'Kisumu', 'Other'].map(center => {
+                                        const isSelected = (preferences.mtaaniCenter === center) || 
+                                                           (center === 'Other' && !['Kibera', 'Mathare', 'Mukuru', 'Kawangware', 'Mombasa', 'Kisumu'].includes(preferences.mtaaniCenter || ''));
+                                        return (
+                                            <button
+                                                key={center}
+                                                type="button"
+                                                onClick={() => {
+                                                    if (center !== 'Other') {
+                                                        setPreference('mtaaniCenter', center);
+                                                    } else {
+                                                        setPreference('mtaaniCenter', ''); // Clear to prompt custom input
+                                                    }
+                                                }}
+                                                className={clsx(
+                                                    "py-2 px-3 rounded-xl border text-xs font-bold font-google transition-all tap-target-premium cursor-pointer",
+                                                    isSelected
+                                                        ? "border-[var(--accent-primary)] bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-primary)] font-black animate-scale-in"
+                                                        : "border-transparent bg-[var(--md-sys-color-surface-variant)] text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-surface-1)]"
+                                                )}
+                                            >
+                                                {center}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Custom Center Input */}
+                                {!['Kibera', 'Mathare', 'Mukuru', 'Kawangware', 'Mombasa', 'Kisumu'].includes(preferences.mtaaniCenter || '') && (
+                                    <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="mt-3">
+                                        <input
+                                            type="text"
+                                            value={preferences.mtaaniCenter || ''}
+                                            onChange={e => setPreference('mtaaniCenter', e.target.value)}
+                                            placeholder="Enter custom center name (e.g. Kangemi, Nakuru)"
+                                            className="w-full px-4 py-2.5 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl text-xs font-medium text-[var(--md-sys-color-on-surface)] focus:outline-none input-glow transition-all font-google animate-fade-in"
+                                        />
+                                    </motion.div>
+                                )}
+                            </div>
+
+                            {/* Default Subject Focus */}
+                            <div>
+                                <label className="text-[11px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase block mb-2 px-1">Default Subject Focus</label>
+                                <div className="flex flex-wrap gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setPreference('defaultSubject', 'All')}
+                                        className={clsx(
+                                            "py-2 px-3 rounded-xl border text-xs font-bold font-google transition-all tap-target-premium cursor-pointer",
+                                            (preferences.defaultSubject === 'All' || !preferences.defaultSubject)
+                                                ? "border-[var(--accent-primary)] bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-primary)] font-black"
+                                                : "border-transparent bg-[var(--md-sys-color-surface-variant)] text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-surface-1)]"
+                                        )}
+                                    >
+                                        All Subjects
+                                    </button>
+                                    {(preferences.customSubjects || ['Solar', 'ICT']).map(sub => {
+                                        const isSelected = preferences.defaultSubject === sub;
+                                        return (
+                                            <button
+                                                key={sub}
+                                                type="button"
+                                                onClick={() => setPreference('defaultSubject', sub)}
+                                                className={clsx(
+                                                    "py-2 px-3 rounded-xl border text-xs font-bold font-google transition-all tap-target-premium cursor-pointer",
+                                                    isSelected
+                                                        ? "border-[var(--accent-primary)] bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-primary)] font-black"
+                                                        : "border-transparent bg-[var(--md-sys-color-surface-variant)] text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-surface-1)]"
+                                                )}
+                                            >
+                                                {sub}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Swahili Greetings toggle */}
+                            <div className="pt-2 border-t border-[var(--md-sys-color-outline-variant)]">
+                                <SettingsRow
+                                    icon={<Sparkles size={18} className="text-white" />}
+                                    iconBg="bg-gradient-to-br from-amber-400 to-orange-500"
+                                    title="Swahili Localization & Greetings"
+                                    subtitle="Use localized greetings and Swahili phrases in banners"
+                                    action={
+                                        <ToggleSwitch
+                                            checked={preferences.enableSwahiliGreeting ?? true}
+                                            onChange={v => setPreference('enableSwahiliGreeting', v)}
+                                        />
+                                    }
+                                />
+                            </div>
                         </div>
                     </div>
                 </div>

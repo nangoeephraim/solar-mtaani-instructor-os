@@ -5,6 +5,7 @@ import { Mail, Lock, ArrowRight, ShieldCheck, Loader2, UserPlus, User, Sparkles,
 import clsx from 'clsx';
 import { SlideshowBackground } from './SlideshowBackground';
 import WordRotator from './WordRotator';
+import { useTheme } from '../contexts/ThemeContext';
 
 // Feature badges for the scrolling carousel
 const FEATURES = [
@@ -62,6 +63,10 @@ const FeatureCarousel: React.FC = () => (
 
 export default function LoginPage() {
     const { login, setupAdmin, registerInstructor, checkAdminExists, isLoading, loginError, clearLoginError } = useAuth();
+    const { preferences } = useTheme();
+    const brandingName = preferences?.mtaaniCenter 
+        ? `Mfumo wa ${preferences.mtaaniCenter}` 
+        : 'Mfumo wa PRISM OS';
 
     const [view, setView] = useState<'login' | 'setup' | 'register'>('login');
     const [adminExists, setAdminExists] = useState<boolean | null>(null); // null = loading
@@ -170,10 +175,45 @@ export default function LoginPage() {
             <div className="login-particles" />
 
             {/* Animated Gradient Mesh */}
-            <div className="absolute inset-0 z-[1] pointer-events-none opacity-60">
-                <div className="absolute top-1/4 -left-1/4 w-[60vw] h-[60vw] rounded-full bg-indigo-600/10 blur-[120px]" />
-                <div className="absolute bottom-1/4 -right-1/4 w-[50vw] h-[50vw] rounded-full bg-violet-500/8 blur-[100px]" />
-                <div className="absolute top-3/4 left-1/3 w-[40vw] h-[40vw] rounded-full bg-cyan-500/6 blur-[80px]" />
+            <div className="absolute inset-0 z-[1] pointer-events-none opacity-60 overflow-hidden">
+                <motion.div 
+                    animate={{
+                        x: [0, 40, -20, 0],
+                        y: [0, -30, 20, 0],
+                        scale: [1, 1.1, 0.95, 1],
+                    }}
+                    transition={{
+                        duration: 15,
+                        repeat: Infinity,
+                        ease: "easeInOut"
+                    }}
+                    className="absolute top-1/4 -left-1/4 w-[60vw] h-[60vw] rounded-full bg-indigo-600/15 blur-[120px]" 
+                />
+                <motion.div 
+                    animate={{
+                        x: [0, -30, 40, 0],
+                        y: [0, 20, -30, 0],
+                        scale: [1, 0.9, 1.1, 1],
+                    }}
+                    transition={{
+                        duration: 18,
+                        repeat: Infinity,
+                        ease: "easeInOut"
+                    }}
+                    className="absolute bottom-1/4 -right-1/4 w-[50vw] h-[50vw] rounded-full bg-violet-500/12 blur-[100px]" 
+                />
+                <motion.div 
+                    animate={{
+                        x: [0, 20, -10, 0],
+                        y: [0, 30, -20, 0],
+                    }}
+                    transition={{
+                        duration: 12,
+                        repeat: Infinity,
+                        ease: "easeInOut"
+                    }}
+                    className="absolute top-3/4 left-1/3 w-[40vw] h-[40vw] rounded-full bg-cyan-500/10 blur-[80px]" 
+                />
             </div>
 
             <motion.div
@@ -207,22 +247,30 @@ export default function LoginPage() {
                                                 src="/logo.png" 
                                                 alt="PRISM Logo" 
                                                 onClick={() => window.dispatchEvent(new CustomEvent('prism-logo-tap'))}
-                                                className="w-full h-full object-contain drop-shadow-lg cursor-pointer" 
+                                                className="w-full h-full object-contain drop-shadow-lg cursor-pointer hover:scale-105 transition-transform" 
                                             />
                                         </motion.div>
                                         <motion.p
                                             initial={{ opacity: 0, y: 5 }}
                                             animate={{ opacity: 1, y: 0 }}
                                             transition={{ delay: 0.2 }}
-                                            className="text-indigo-500 dark:text-indigo-400 font-black text-[10px] tracking-[0.25em] uppercase mb-4"
+                                            className="text-indigo-500 dark:text-indigo-400 font-black text-[10px] tracking-[0.25em] uppercase mb-1.5"
                                         >
                                             Illuminating Learning
+                                        </motion.p>
+                                        <motion.p
+                                            initial={{ opacity: 0, y: 5 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            transition={{ delay: 0.25 }}
+                                            className="text-emerald-500 dark:text-emerald-400 font-black text-[11px] tracking-widest uppercase mb-4 font-google"
+                                        >
+                                            {brandingName}
                                         </motion.p>
                                         <motion.p
                                             initial={{ opacity: 0 }}
                                             animate={{ opacity: 1 }}
                                             transition={{ delay: 0.3 }}
-                                            className="text-slate-500 dark:text-white/50 text-sm"
+                                            className="text-slate-500 dark:text-white/50 text-sm font-medium"
                                         >
                                             Sign in to your PRISM workspace
                                         </motion.p>
@@ -322,10 +370,11 @@ export default function LoginPage() {
                                                 src="/logo.png" 
                                                 alt="PRISM Logo" 
                                                 onClick={() => window.dispatchEvent(new CustomEvent('prism-logo-tap'))}
-                                                className="w-full h-full object-contain drop-shadow-lg cursor-pointer" 
+                                                className="w-full h-full object-contain drop-shadow-lg cursor-pointer hover:scale-105 transition-transform" 
                                             />
                                         </div>
-                                        <p className="text-indigo-500 dark:text-indigo-400 font-black text-[10px] tracking-[0.25em] uppercase mb-2">Illuminating Learning</p>
+                                        <p className="text-indigo-500 dark:text-indigo-400 font-black text-[10px] tracking-[0.25em] uppercase mb-1">Illuminating Learning</p>
+                                        <p className="text-emerald-500 dark:text-emerald-400 font-black text-[10px] tracking-widest uppercase mb-3 font-google">{brandingName}</p>
                                         <h1 className="text-xl font-google font-bold text-slate-900 dark:text-white mb-1">Setup Administrator</h1>
                                         <p className="text-slate-500 dark:text-white/50 text-sm">Create the root admin account for PRISM.</p>
                                     </div>
@@ -370,10 +419,11 @@ export default function LoginPage() {
                                                 src="/logo.png" 
                                                 alt="PRISM Logo" 
                                                 onClick={() => window.dispatchEvent(new CustomEvent('prism-logo-tap'))}
-                                                className="w-full h-full object-contain drop-shadow-lg cursor-pointer" 
+                                                className="w-full h-full object-contain drop-shadow-lg cursor-pointer hover:scale-105 transition-transform" 
                                             />
                                         </div>
-                                        <p className="text-indigo-500 dark:text-indigo-400 font-black text-[10px] tracking-[0.25em] uppercase mb-2">Illuminating Learning</p>
+                                        <p className="text-indigo-500 dark:text-indigo-400 font-black text-[10px] tracking-[0.25em] uppercase mb-1">Illuminating Learning</p>
+                                        <p className="text-emerald-500 dark:text-emerald-400 font-black text-[10px] tracking-widest uppercase mb-3 font-google">{brandingName}</p>
                                         <h1 className="text-xl font-google font-bold text-slate-900 dark:text-white mb-1">Join PRISM</h1>
                                         <p className="text-slate-500 dark:text-white/50 text-sm">Create your instructor account</p>
                                     </div>

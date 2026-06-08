@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { AppData, Student, InstructorSettings, DEFAULT_SETTINGS } from '../types';
-import { getSettings } from '../services/storageService';
+import { useTheme } from '../contexts/ThemeContext';
 import {
   Clock, Users, AlertTriangle, BookOpen, CheckCircle, Trophy,
   ArrowUpRight, Zap, Monitor, Calendar, Play, ChevronRight,
@@ -261,25 +261,21 @@ interface DashboardProps {
 
 const Dashboard: React.FC<DashboardProps> = ({ data, onNavigate }) => {
   const { user } = useAuth();
-  const [currentSettings, setCurrentSettings] = useState<InstructorSettings>(getSettings());
+  const { preferences, settings: currentSettings } = useTheme();
   const [activeDeckTab, setActiveDeckTab] = useState<'actions' | 'tasks'>('actions');
   const [expandedRiskId, setExpandedRiskId] = useState<number | null>(null);
-
-  useEffect(() => {
-    const loaded = getSettings();
-    setCurrentSettings(!loaded.preferences ? { ...loaded, preferences: DEFAULT_SETTINGS.preferences } : loaded);
-  }, []);
 
   const today = new Date();
   const currentHour = today.getHours();
 
   // ── Greeting ──
   const greeting = useMemo(() => {
-    if (currentHour < 6) return { text: 'Good Night', icon: <Moon size={28} />, gradient: 'bg-gradient-to-br from-indigo-500 to-purple-600' };
-    if (currentHour < 12) return { text: 'Good Morning', icon: <Sunrise size={28} />, gradient: 'bg-gradient-to-br from-amber-400 to-orange-500' };
-    if (currentHour < 17) return { text: 'Good Afternoon', icon: <Sun size={28} />, gradient: 'bg-gradient-to-br from-sky-400 to-blue-500' };
-    return { text: 'Good Evening', icon: <Coffee size={28} />, gradient: 'bg-gradient-to-br from-purple-500 to-indigo-600' };
-  }, [currentHour]);
+    const isSwahili = preferences.enableSwahiliGreeting ?? true;
+    if (currentHour < 6) return { text: isSwahili ? 'Usiku Mwema' : 'Good Night', icon: <Moon size={28} />, gradient: 'bg-gradient-to-br from-indigo-500 to-purple-600' };
+    if (currentHour < 12) return { text: isSwahili ? 'Habari za Asubuhi' : 'Good Morning', icon: <Sunrise size={28} />, gradient: 'bg-gradient-to-br from-amber-400 to-orange-500' };
+    if (currentHour < 17) return { text: isSwahili ? 'Habari za Mchana' : 'Good Afternoon', icon: <Sun size={28} />, gradient: 'bg-gradient-to-br from-sky-400 to-blue-500' };
+    return { text: isSwahili ? 'Habari za Jioni' : 'Good Evening', icon: <Coffee size={28} />, gradient: 'bg-gradient-to-br from-purple-500 to-indigo-600' };
+  }, [currentHour, preferences.enableSwahiliGreeting]);
 
   // ── Today's Classes ──
   const todaysClasses = useMemo(() => {
@@ -288,10 +284,16 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onNavigate }) => {
     const recurring = data.schedule.filter(s => s.dayOfWeek === dayIdx && !s.overrideDate);
     const overrides = data.schedule.filter(s => s.overrideDate === todayStr);
     const replacedIds = new Set(overrides.filter(o => o.replacesSlotId).map(o => o.replacesSlotId));
-    return [...recurring.filter(r => !replacedIds.has(r.id)), ...overrides]
-      .filter(s => s.status !== 'Cancelled')
-      .sort((a, b) => a.startTime.localeCompare(b.startTime));
-  }, [data.schedule]);
+    let classes = [...recurring.filter(r => !replacedIds.has(r.id)), ...overrides]
+      .filter(s => s.status !== 'Cancelled');
+    
+    // Filter by preferred subject focus
+    if (preferences.defaultSubject && preferences.defaultSubject !== 'All') {
+      classes = classes.filter(s => s.subject === preferences.defaultSubject);
+    }
+    
+    return classes.sort((a, b) => a.startTime.localeCompare(b.startTime));
+  }, [data.schedule, preferences.defaultSubject]);
 
   const currentClass = todaysClasses.find(s => {
     const [h, m] = s.startTime.split(':').map(Number);
@@ -337,29 +339,48 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onNavigate }) => {
       const rec = data.schedule.filter(s => s.dayOfWeek === di && !s.overrideDate);
       const ovr = data.schedule.filter(s => s.overrideDate === ds);
       const rIds = new Set(ovr.filter(o => o.replacesSlotId).map(o => o.replacesSlotId));
-      const active = [...rec.filter(r => !rIds.has(r.id)), ...ovr].filter(s => s.status !== 'Cancelled');
+      let active = [...rec.filter(r => !rIds.has(r.id)), ...ovr].filter(s => s.status !== 'Cancelled');
+      
+      if (preferences.defaultSubject && preferences.defaultSubject !== 'All') {
+        active = active.filter(s => s.subject === preferences.defaultSubject);
+      }
+      
       total += active.length;
       completed += active.filter(s => s.status === 'Completed').length;
     }
     return { total, completed, pct: total > 0 ? Math.round((completed / total) * 100) : 0 };
-  }, [data.schedule]);
+  }, [data.schedule, preferences.defaultSubject]);
+
+  // Filter students based on preferred subject
+  const filteredStudents = useMemo(() => {
+    if (preferences.defaultSubject && preferences.defaultSubject !== 'All') {
+      return data.students.filter(s => s.subject === preferences.defaultSubject);
+    }
+    return data.students;
+  }, [data.students, preferences.defaultSubject]);
 
   // ── At-Risk Students (memoized — expensive O(n) filter with nested reduce) ──
-  const atRiskStudents = useMemo(() => data.students.filter(s => {
+  const atRiskStudents = useMemo(() => filteredStudents.filter(s => {
     const vals = Object.values(s.competencies);
     const avg = vals.length > 0 ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
     return avg < 2.5 || s.attendancePct < 80;
-  }), [data.students]);
+  }), [filteredStudents]);
 
   // ── Aggregate Stats (memoized — O(n) reduce on every render otherwise) ──
   const avgAttendance = useMemo(() => Math.round(
-    data.students.reduce((a, s) => a + s.attendancePct, 0) / Math.max(data.students.length, 1)
-  ), [data.students]);
+    filteredStudents.reduce((a, s) => a + s.attendancePct, 0) / Math.max(filteredStudents.length, 1)
+  ), [filteredStudents]);
 
-  const avgCompetency = useMemo(() => parseFloat((data.students.reduce((a, s) => {
+  const avgCompetency = useMemo(() => parseFloat((filteredStudents.reduce((a, s) => {
     const v = Object.values(s.competencies);
     return a + (v.reduce((x, y) => x + y, 0) / Math.max(v.length, 1));
-  }, 0) / Math.max(data.students.length, 1)).toFixed(1)), [data.students]);
+  }, 0) / Math.max(filteredStudents.length, 1)).toFixed(1)), [filteredStudents]);
+
+  const curriculumCount = useMemo(() => {
+    // Sum all available curriculum items regardless of subject type
+    const allItems = Object.values(data.curriculum || {}).flat();
+    return allItems.length;
+  }, [data.curriculum]);
 
   // ── AI Insights ──
   const insights = useMemo(() => {
@@ -444,11 +465,26 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onNavigate }) => {
                     {greeting.icon}
                   </motion.div>
                   <div>
-                    <h1 className="text-2xl sm:text-3xl font-google font-black text-[var(--md-sys-color-on-surface)] tracking-tight leading-none">
-                      {greeting.text}, {currentSettings.name?.split(' ')[0] || 'Instructor'}
+                    <h1 className="text-2xl sm:text-3xl font-google font-black text-[var(--md-sys-color-on-surface)] tracking-tight leading-none flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span>{greeting.text},</span>
+                      <span className="bg-gradient-to-r from-[var(--md-sys-color-primary)] to-indigo-500 bg-clip-text text-transparent">{currentSettings.name?.split(' ')[0] || 'Instructor'}!</span>
                     </h1>
-                    <div className="text-[11px] font-bold tracking-widest text-[var(--md-sys-color-primary)] uppercase mt-1.5 min-h-[16px] flex items-center">
-                      <WordRotator words={["Empowering Solar Minds", "Advancing ICT Access", "Shaping Community Leaders", "Optimizing Workloads", "Illuminating Futures"]} intervalMs={4000} className="w-full" />
+                    <p className="text-xs sm:text-sm font-semibold text-[var(--md-sys-color-secondary)] mt-2 flex items-center gap-1.5 select-none animate-fade-in">
+                      <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                      <span>{preferences.enableSwahiliGreeting ?? true ? 'Karibu' : 'Welcome to'}</span>
+                      <span className="font-extrabold text-[var(--md-sys-color-on-surface)] border-b-2 border-dashed border-[var(--md-sys-color-primary)]/30 pb-0.5">{preferences.mtaaniCenter || 'Kibera'}</span>
+                      <span>Mtaani Center</span>
+                    </p>
+                    <div className="text-[11px] font-bold tracking-widest text-[var(--md-sys-color-primary)] uppercase mt-2.5 min-h-[16px] flex items-center">
+                      <WordRotator 
+                        words={
+                          preferences.enableSwahiliGreeting ?? true 
+                            ? ["Kazi iendelee Mtaani", "Elimu ni Mwanga wetu", "Kukuza Vijana wa Leo", "Pamoja Tunaweza", "Nguvu ya Elimu"]
+                            : ["Empowering Every Learner", "Advancing Education Access", "Shaping Community Leaders", "Optimizing Workloads", "Illuminating Futures"]
+                        } 
+                        intervalMs={4000} 
+                        className="w-full animate-fade-in" 
+                      />
                     </div>
                   </div>
                 </div>
@@ -627,16 +663,16 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onNavigate }) => {
         {/* ═══ STAT CARDS (Grid 4) ═══ */}
         <div className="xl:col-span-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
           <StatCard
-            icon={<Users size={22} />} label="Total Students" value={data.students.length} sub="Across all grades"
+            icon={<Users size={22} />} label="Total Students" value={filteredStudents.length} sub={preferences.defaultSubject && preferences.defaultSubject !== 'All' ? `${preferences.defaultSubject} students` : "Across all grades"}
             gradient="bg-gradient-to-r from-blue-500 to-indigo-600" accentColor="#4f46e5" delay={0.25}
             onClick={() => onNavigate('students')}
-            trendData={[{ value: data.students.length - 8 }, { value: data.students.length - 3 }, { value: data.students.length - 1 }, { value: data.students.length }]}
+            trendData={[{ value: Math.max(0, filteredStudents.length - 8) }, { value: Math.max(0, filteredStudents.length - 3) }, { value: Math.max(0, filteredStudents.length - 1) }, { value: filteredStudents.length }]}
           />
           <StatCard
-            icon={<BookOpen size={22} />} label="Curriculum" value={data.curriculum.solar.length + data.curriculum.ict.length} sub="Active modules"
+            icon={<BookOpen size={22} />} label="Curriculum" value={curriculumCount} sub={preferences.defaultSubject && preferences.defaultSubject !== 'All' ? `${preferences.defaultSubject} modules` : "Active modules"}
             gradient="bg-gradient-to-r from-teal-400 to-emerald-500" accentColor="#10b981" delay={0.3}
             onClick={() => onNavigate('curriculum')}
-            trendData={[{ value: 8 }, { value: 12 }, { value: 16 }, { value: data.curriculum.solar.length + data.curriculum.ict.length }]}
+            trendData={[{ value: Math.max(0, curriculumCount - 4) }, { value: Math.max(0, curriculumCount - 2) }, { value: Math.max(0, curriculumCount - 1) }, { value: curriculumCount }]}
           />
           <StatCard
             icon={<CheckCircle size={22} />} label="Attendance" value={avgAttendance} suffix="%" sub="Past 30 days"

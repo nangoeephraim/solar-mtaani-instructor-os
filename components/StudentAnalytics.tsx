@@ -16,6 +16,8 @@ import {
 } from 'recharts';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
+import { useTheme } from '../contexts/ThemeContext';
+import { getSubjectEmoji, getSubjectPill } from '../utils/subjectUtils';
 
 interface StudentAnalyticsProps {
     data: AppData;
@@ -364,16 +366,19 @@ const StudentAnalytics: React.FC<StudentAnalyticsProps> = ({ data, studentId, on
                                         {student.name}
                                     </h1>
                                     <div className="flex items-center gap-3 mt-1 5">
-                                        <span className={clsx(
-                                            "px-2 5 py-1 rounded flex items-center gap-1 5 text-xs font-bold uppercase tracking-wider border",
-                                            student.subject === 'Solar'
-                                                ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
-                                                : "bg-cyan-500/10 text-cyan-400 border-cyan-500/20"
-                                        )}>
-                                            {student.subject === 'Solar' ? <Zap size={12} /> : <Monitor size={12} />}
-                                            {student.subject}
-                                        </span>
-                                        <span className="text-slate-400 text-xs font-medium">Lot {student.lot}</span>
+                                        {(() => {
+                                            const pill = getSubjectPill(student.subject);
+                                            return (
+                                                <span className={clsx(
+                                                    "px-2 5 py-1 rounded flex items-center gap-1 5 text-xs font-bold uppercase tracking-wider border",
+                                                    pill.bg, pill.text, pill.border, pill.darkBg, pill.darkText, pill.darkBorder
+                                                )}>
+                                                    <span>{getSubjectEmoji(student.subject)}</span>
+                                                    {student.subject}
+                                                </span>
+                                            );
+                                        })()}
+                                        <span className="text-slate-400 text-xs font-medium">Cohort {student.lot}</span>
                                         <span className="text-slate-500 text-xs hidden md:inline font-mono bg-slate-800/50 px-2 py-0.5 rounded">ID_{student.id.toString().padStart(4, '0')}</span>
                                     </div>
                                 </div>

@@ -1,12 +1,12 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { AppData, ScheduleSlot, Student, StudentGroup } from '../types';
 import { useLocalStorage } from '../hooks/useLocalStorage';
-import { EDUCATION_LEVELS, STUDENT_GROUPS, getLevelsForGroup, getDefaultLevel, getLevelShortLabel } from '../constants/educationLevels';
+import { EDUCATION_LEVELS, STUDENT_GROUPS, getLevelsForGroup, getDefaultLevel, getLevelShortLabel, getStudentGroups } from '../constants/educationLevels';
 import {
   Calendar as CalendarIcon, ChevronLeft, ChevronRight, Plus, Trash2, Settings, Zap, Monitor,
   Sparkles, Edit3, CheckCircle2, XCircle, Users, Copy, LayoutGrid, List,
   Maximize2, Minimize2, Check, GripVertical, RefreshCw, AlertTriangle, Box,
-  FileDown, Printer, Wand2, ArrowRight, Bell
+  FileDown, Printer, Wand2, ArrowRight, Bell, BookOpen
 } from 'lucide-react';
 import {
   DndContext, DragOverlay, useDraggable, useDroppable,
@@ -23,6 +23,43 @@ import { useAuth } from '../contexts/AuthContext';
 import { DraggableSlot, DroppableDayColumn } from './ScheduleDnD';
 import { detectConflicts, timeToMinutes, isHoliday, findBestSlot } from '../utils/scheduling';
 import { notificationService } from '../services/notificationService';
+import { useTheme } from '../contexts/ThemeContext';
+
+const getSubjectIcon = (subject: string, size = 14) => {
+  const normalized = (subject || '').toLowerCase();
+  if (normalized.includes('solar') || normalized.includes('energy') || normalized.includes('electrical')) {
+    return <Zap size={size} fill="currentColor" />;
+  }
+  if (normalized.includes('ict') || normalized.includes('computer') || normalized.includes('tech') || normalized.includes('digital')) {
+    return <Monitor size={size} />;
+  }
+  return <BookOpen size={size} />;
+};
+
+const getSubjectIconLarge = (subject: string, size = 24) => {
+  const normalized = (subject || '').toLowerCase();
+  if (normalized.includes('solar') || normalized.includes('energy') || normalized.includes('electrical')) {
+    return <Zap size={size} className="text-orange-500" />;
+  }
+  if (normalized.includes('ict') || normalized.includes('computer') || normalized.includes('tech') || normalized.includes('digital')) {
+    return <Monitor size={size} className="text-blue-500" />;
+  }
+  return <BookOpen size={size} className="text-violet-500" />;
+};
+
+const getSubjectEmoji = (subject: string) => {
+  const normalized = (subject || '').toLowerCase();
+  if (normalized.includes('solar') || normalized.includes('energy') || normalized.includes('electrical')) return '☀️';
+  if (normalized.includes('ict') || normalized.includes('computer') || normalized.includes('tech') || normalized.includes('digital')) return '💻';
+  if (normalized.includes('math')) return '🧮';
+  if (normalized.includes('english') || normalized.includes('kiswahili') || normalized.includes('language') || normalized.includes('french')) return '🗣️';
+  if (normalized.includes('science') || normalized.includes('physics') || normalized.includes('chemistry') || normalized.includes('biology')) return '🔬';
+  if (normalized.includes('art') || normalized.includes('creative') || normalized.includes('music')) return '🎨';
+  if (normalized.includes('history') || normalized.includes('geography') || normalized.includes('social')) return '🌍';
+  if (normalized.includes('agriculture')) return '🌾';
+  if (normalized.includes('business')) return '💼';
+  return '📚';
+};
 
 interface ScheduleProps {
   data: AppData;
@@ -78,6 +115,7 @@ const ProgressRing: React.FC<{ pct: number; size?: number; stroke?: number }> = 
 };
 
 const Schedule: React.FC<ScheduleProps> = ({ data, onUpdateSchedule, onUpdateStudent, onAddSlot, onEditSlot, onDeleteSlot, onResetSchedule, onNavigate }) => {
+  const { preferences } = useTheme();
   const [selectedSlot, setSelectedSlot] = useState<ScheduleSlot | null>(null);
   const [isEditingSlot, setIsEditingSlot] = useState(false);
   const [editSlotData, setEditSlotData] = useState<ScheduleSlot | null>(null);
@@ -94,6 +132,12 @@ const Schedule: React.FC<ScheduleProps> = ({ data, onUpdateSchedule, onUpdateStu
   const [customDuration, setCustomDuration] = useState<number | ''>('');
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  const subjects = useMemo(() => {
+    return preferences?.customSubjects && preferences.customSubjects.length > 0
+      ? preferences.customSubjects
+      : ['Solar', 'ICT'];
+  }, [preferences?.customSubjects]);
 
   const [gridDensity, setGridDensity] = useLocalStorage<'compact' | 'comfortable'>('schedule_density', 'comfortable');
   const [showCompletedClasses, setShowCompletedClasses] = useLocalStorage<boolean>('schedule_show_completed', true);
@@ -233,6 +277,23 @@ const Schedule: React.FC<ScheduleProps> = ({ data, onUpdateSchedule, onUpdateStu
   const [newSlot, setNewSlot] = useState<Partial<ScheduleSlot>>({
     dayOfWeek: 1, startTime: '09:00', durationMinutes: 60, subject: 'Solar', grade: 'L3', studentGroup: 'Academy', status: 'Pending'
   });
+
+  const openAddModal = useCallback(() => {
+    const availableGroups = getStudentGroups(preferences?.institutionType);
+    const defaultGroup = availableGroups[0] || 'Academy';
+    const defaultLevel = getDefaultLevel(defaultGroup, preferences?.institutionType);
+    setNewSlotGroup(defaultGroup);
+    setNewSlot({
+      dayOfWeek: 1,
+      startTime: '09:00',
+      durationMinutes: 60,
+      subject: (preferences?.defaultSubject || subjects[0] || 'Solar') as any,
+      grade: defaultLevel,
+      studentGroup: defaultGroup,
+      status: 'Pending'
+    });
+    setShowAddModal(true);
+  }, [preferences, subjects]);
 
   const { showToast } = useToast();
 
@@ -420,8 +481,16 @@ const Schedule: React.FC<ScheduleProps> = ({ data, onUpdateSchedule, onUpdateStu
   }, [weekDates, referenceDate, view, data.schedule, showCompletedClasses, isTemplateMode]);
 
   const getSlotColor = (slot: ScheduleSlot) => {
-    const idx = classColors[slot.id] ?? (slot.subject === 'Solar' ? 4 : 3);
-    return CLASS_COLORS[idx] || CLASS_COLORS[3];
+    if (classColors[slot.id] !== undefined) {
+      return CLASS_COLORS[classColors[slot.id]] || CLASS_COLORS[3];
+    }
+    const sub = slot.subject || '';
+    let hash = 0;
+    for (let i = 0; i < sub.length; i++) {
+      hash = sub.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const idx = Math.abs(hash) % CLASS_COLORS.length;
+    return CLASS_COLORS[idx];
   };
 
   const handleStatusChange = (status: ScheduleSlot['status'], slotOverride?: ScheduleSlot) => {
@@ -491,12 +560,12 @@ const Schedule: React.FC<ScheduleProps> = ({ data, onUpdateSchedule, onUpdateStu
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
         e.preventDefault();
-        if (user?.role !== 'viewer') setShowAddModal(true);
+        if (user?.role !== 'viewer') openAddModal();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showAddModal, selectedSlot, confirmDialog.isOpen, user?.role]);
+  }, [showAddModal, selectedSlot, confirmDialog.isOpen, user?.role, openAddModal]);
 
   const miniCalendarDays = useMemo(() => {
     const year = referenceDate.getFullYear();
@@ -560,7 +629,7 @@ const Schedule: React.FC<ScheduleProps> = ({ data, onUpdateSchedule, onUpdateStu
               </div>
               {/* Mobile-only Add button */}
               {isMobile && user?.role !== 'viewer' && (
-                <button onClick={() => setShowAddModal(true)} aria-label="Add Class" className="p-2.5 bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] rounded-xl shadow-md flex-shrink-0">
+                <button onClick={openAddModal} aria-label="Add Class" className="p-2.5 bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] rounded-xl shadow-md flex-shrink-0">
                   <Plus size={20} />
                 </button>
               )}
@@ -580,7 +649,7 @@ const Schedule: React.FC<ScheduleProps> = ({ data, onUpdateSchedule, onUpdateStu
                   <button onClick={() => setIsTemplateMode(!isTemplateMode)} className={clsx("px-4 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2", isTemplateMode ? "bg-amber-100 text-amber-900 border border-amber-300" : "bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] hover:bg-[var(--md-sys-color-surface-variant)]")}>
                     <Edit3 size={16} /> {isTemplateMode ? 'Done Editing' : 'Edit Template'}
                   </button>
-                  <button onClick={() => setShowAddModal(true)} className="px-5 py-2.5 bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] rounded-xl text-sm font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all flex items-center gap-2">
+                  <button onClick={openAddModal} className="px-5 py-2.5 bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] rounded-xl text-sm font-bold shadow-md hover:shadow-lg hover:-translate-y-0.5 transition-all flex items-center gap-2">
                     <Plus size={18} /> Add Class
                   </button>
                 </>
@@ -857,7 +926,7 @@ const Schedule: React.FC<ScheduleProps> = ({ data, onUpdateSchedule, onUpdateStu
                               <div className="flex-1 min-w-0 flex flex-col">
                                 <div className="flex justify-between items-start gap-1">
                                   <div className={clsx("font-bold text-sm leading-tight flex items-center gap-1.5 truncate", color.text)}>
-                                    {slot.subject === 'Solar' ? <Zap size={14} fill="currentColor" /> : <Monitor size={14} />}
+                                    {getSubjectIcon(slot.subject, 14)}
                                     <span>{slot.subject}</span>
                                   </div>
 
@@ -948,30 +1017,34 @@ const Schedule: React.FC<ScheduleProps> = ({ data, onUpdateSchedule, onUpdateStu
                     {/* Quick Selection Pills */}
                     <div>
                       <label className="block text-[11px] font-bold text-[var(--md-sys-color-secondary)] uppercase mb-2">Subject</label>
-                      <div className="flex gap-2">
-                        {['Solar', 'ICT'].map(s => (
-                          <button key={s} aria-pressed={newSlot.subject === s} onClick={() => setNewSlot({ ...newSlot, subject: s as any })} className={clsx("flex-1 py-3 rounded-2xl font-bold text-sm border transition-all focus-visible:ring-2 focus-visible:ring-violet-500", newSlot.subject === s ? "bg-violet-100 border-violet-300 text-violet-800 dark:bg-violet-900/30 dark:border-violet-600 dark:text-violet-300 shadow-sm" : "border-[var(--md-sys-color-outline-variant)] text-[var(--md-sys-color-secondary)] hover:bg-[var(--md-sys-color-surface-variant)]")}>
-                            {s === 'Solar' ? '☀️ ' : '💻 '} {s}
+                      <div className="flex gap-2 flex-wrap">
+                        {subjects.map(s => (
+                          <button key={s} aria-pressed={newSlot.subject === s} onClick={() => setNewSlot({ ...newSlot, subject: s as any })} className={clsx("px-4 py-2.5 rounded-2xl font-bold text-sm border transition-all focus-visible:ring-2 focus-visible:ring-violet-500", newSlot.subject === s ? "bg-violet-100 border-violet-300 text-violet-800 dark:bg-violet-900/30 dark:border-violet-600 dark:text-violet-300 shadow-sm" : "border-[var(--md-sys-color-outline-variant)] text-[var(--md-sys-color-secondary)] hover:bg-[var(--md-sys-color-surface-variant)]")}>
+                            {getSubjectEmoji(s)} {s}
                           </button>
                         ))}
                       </div>
                     </div>
 
-                    <div>
-                      <label className="block text-[11px] font-bold text-[var(--md-sys-color-secondary)] uppercase mb-2">Student Group</label>
-                      <div className="flex gap-2 flex-wrap">
-                        {STUDENT_GROUPS.map(g => (
-                          <button key={g} aria-pressed={newSlotGroup === g} onClick={() => { setNewSlotGroup(g); setNewSlot({ ...newSlot, grade: getDefaultLevel(g), studentGroup: g }); }} className={clsx("px-3 py-2 rounded-xl font-bold text-xs border transition-all focus-visible:ring-2 focus-visible:ring-violet-500", newSlotGroup === g ? "bg-violet-100 border-violet-300 text-violet-800 dark:bg-violet-900/30 dark:border-violet-600 dark:text-violet-300 shadow-sm" : "border-[var(--md-sys-color-outline-variant)] text-[var(--md-sys-color-secondary)] hover:bg-[var(--md-sys-color-surface-variant)]")}>
-                            {g}
-                          </button>
-                        ))}
+                    {getStudentGroups(preferences?.institutionType).length > 1 && (
+                      <div>
+                        <label className="block text-[11px] font-bold text-[var(--md-sys-color-secondary)] uppercase mb-2">Student Group</label>
+                        <div className="flex gap-2 flex-wrap">
+                          {getStudentGroups(preferences?.institutionType).map(g => (
+                            <button key={g} aria-pressed={newSlotGroup === g} onClick={() => { setNewSlotGroup(g); setNewSlot({ ...newSlot, grade: getDefaultLevel(g, preferences?.institutionType), studentGroup: g }); }} className={clsx("px-3 py-2 rounded-xl font-bold text-xs border transition-all focus-visible:ring-2 focus-visible:ring-violet-500", newSlotGroup === g ? "bg-violet-100 border-violet-300 text-violet-800 dark:bg-violet-900/30 dark:border-violet-600 dark:text-violet-300 shadow-sm" : "border-[var(--md-sys-color-outline-variant)] text-[var(--md-sys-color-secondary)] hover:bg-[var(--md-sys-color-surface-variant)]")}>
+                              {g}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     <div>
-                      <label className="block text-[11px] font-bold text-[var(--md-sys-color-secondary)] uppercase mb-2">Level</label>
+                      <label className="block text-[11px] font-bold text-[var(--md-sys-color-secondary)] uppercase mb-2">
+                        {preferences?.terminology?.classLabel || 'Level'}
+                      </label>
                       <div className="flex gap-2 flex-wrap">
-                        {getLevelsForGroup(newSlotGroup).map(lvl => (
+                        {getLevelsForGroup(newSlotGroup, preferences?.institutionType).map(lvl => (
                           <button key={lvl.id} aria-pressed={newSlot.grade === lvl.id} onClick={() => setNewSlot({ ...newSlot, grade: lvl.id })} className={clsx("px-3 py-2.5 rounded-2xl font-bold text-sm border transition-all focus-visible:ring-2 focus-visible:ring-violet-500", newSlot.grade === lvl.id ? "bg-violet-100 border-violet-300 text-violet-800 dark:bg-violet-900/30 dark:border-violet-600 dark:text-violet-300 shadow-sm" : "border-[var(--md-sys-color-outline-variant)] text-[var(--md-sys-color-secondary)] hover:bg-[var(--md-sys-color-surface-variant)]")}>
                             {lvl.shortLabel}
                           </button>
@@ -1080,31 +1153,35 @@ const Schedule: React.FC<ScheduleProps> = ({ data, onUpdateSchedule, onUpdateStu
                       <div className="space-y-4">
                         <div>
                           <label className="block text-[11px] font-bold text-[var(--md-sys-color-secondary)] uppercase mb-1.5">Subject</label>
-                          <div className="flex gap-2">
-                            {['Solar', 'ICT'].map(s => (
-                              <button key={s} aria-pressed={editSlotData.subject === s} onClick={() => setEditSlotData({ ...editSlotData, subject: s as any })} className={clsx("flex-1 py-2.5 rounded-xl font-bold text-sm border transition-all", editSlotData.subject === s ? "bg-violet-100 border-violet-300 text-violet-800 dark:bg-violet-900/30 dark:border-violet-600 dark:text-violet-300" : "border-[var(--md-sys-color-outline-variant)] text-[var(--md-sys-color-secondary)] hover:bg-[var(--md-sys-color-surface-variant)]")}>
-                                {s === 'Solar' ? '☀️ ' : '💻 '} {s}
+                          <div className="flex gap-2 flex-wrap">
+                            {subjects.map(s => (
+                              <button key={s} aria-pressed={editSlotData.subject === s} onClick={() => setEditSlotData({ ...editSlotData, subject: s as any })} className={clsx("px-3 py-2 rounded-xl font-bold text-sm border transition-all", editSlotData.subject === s ? "bg-violet-100 border-violet-300 text-violet-800 dark:bg-violet-900/30 dark:border-violet-600 dark:text-violet-300" : "border-[var(--md-sys-color-outline-variant)] text-[var(--md-sys-color-secondary)] hover:bg-[var(--md-sys-color-surface-variant)]")}>
+                                {getSubjectEmoji(s)} {s}
                               </button>
                             ))}
                           </div>
                         </div>
 
-                        <div>
-                          <label className="block text-[11px] font-bold text-[var(--md-sys-color-secondary)] uppercase mb-1.5">Student Group</label>
-                          <div className="flex gap-2 flex-wrap">
-                            {STUDENT_GROUPS.map(g => (
-                              <button key={g} aria-pressed={editSlotData.studentGroup === g} onClick={() => setEditSlotData({ ...editSlotData, studentGroup: g, grade: getDefaultLevel(g) })} className={clsx("px-3 py-2 rounded-xl font-bold text-xs border transition-all", editSlotData.studentGroup === g ? "bg-violet-100 border-violet-300 text-violet-800 dark:bg-violet-900/30 dark:border-violet-600 dark:text-violet-300" : "border-[var(--md-sys-color-outline-variant)] text-[var(--md-sys-color-secondary)] hover:bg-[var(--md-sys-color-surface-variant)]")}
-                              >
-                                {g}
-                              </button>
-                            ))}
+                        {getStudentGroups(preferences?.institutionType).length > 1 && (
+                          <div>
+                            <label className="block text-[11px] font-bold text-[var(--md-sys-color-secondary)] uppercase mb-1.5">Student Group</label>
+                            <div className="flex gap-2 flex-wrap">
+                              {getStudentGroups(preferences?.institutionType).map(g => (
+                                <button key={g} aria-pressed={editSlotData.studentGroup === g} onClick={() => setEditSlotData({ ...editSlotData, studentGroup: g, grade: getDefaultLevel(g, preferences?.institutionType) })} className={clsx("px-3 py-2 rounded-xl font-bold text-xs border transition-all", editSlotData.studentGroup === g ? "bg-violet-100 border-violet-300 text-violet-800 dark:bg-violet-900/30 dark:border-violet-600 dark:text-violet-300" : "border-[var(--md-sys-color-outline-variant)] text-[var(--md-sys-color-secondary)] hover:bg-[var(--md-sys-color-surface-variant)]")}
+                                >
+                                  {g}
+                                </button>
+                              ))}
+                            </div>
                           </div>
-                        </div>
+                        )}
 
                         <div>
-                          <label className="block text-[11px] font-bold text-[var(--md-sys-color-secondary)] uppercase mb-1.5">Level</label>
+                          <label className="block text-[11px] font-bold text-[var(--md-sys-color-secondary)] uppercase mb-1.5">
+                            {preferences?.terminology?.classLabel || 'Level'}
+                          </label>
                           <div className="flex gap-2 flex-wrap">
-                            {getLevelsForGroup(editSlotData.studentGroup || 'Academy').map(lvl => (
+                            {getLevelsForGroup(editSlotData.studentGroup || 'Academy', preferences?.institutionType).map(lvl => (
                               <button key={lvl.id} aria-pressed={editSlotData.grade === lvl.id} onClick={() => setEditSlotData({ ...editSlotData, grade: lvl.id })} className={clsx("px-3 py-2 rounded-xl font-bold text-sm border transition-all", editSlotData.grade === lvl.id ? "bg-violet-100 border-violet-300 text-violet-800 dark:bg-violet-900/30 dark:border-violet-600 dark:text-violet-300" : "border-[var(--md-sys-color-outline-variant)] text-[var(--md-sys-color-secondary)] hover:bg-[var(--md-sys-color-surface-variant)]")}
                               >
                                 {lvl.shortLabel}
@@ -1197,7 +1274,7 @@ const Schedule: React.FC<ScheduleProps> = ({ data, onUpdateSchedule, onUpdateStu
                       <div className="flex justify-between items-start mb-6">
                         <div>
                           <h2 className="text-2xl font-google font-bold text-[var(--md-sys-color-on-surface)] flex items-center gap-2">
-                            {selectedSlot.subject === 'Solar' ? <Zap size={24} className="text-orange-500" /> : <Monitor size={24} className="text-blue-500" />}
+                            {getSubjectIconLarge(selectedSlot.subject, 24)}
                             {selectedSlot.subject} Class
                           </h2>
                           <p className="text-sm font-medium text-[var(--md-sys-color-secondary)] mt-1">

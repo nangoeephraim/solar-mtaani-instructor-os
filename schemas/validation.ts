@@ -21,7 +21,7 @@ export const studentSchema = z.object({
     lot: z.string()
         .regex(/^\d{4}$/, 'Lot must be a 4-digit year (e.g., 2025)'),
 
-    subject: z.enum(['Solar', 'ICT']),
+    subject: z.string().min(1, 'Subject is required'),
 
     email: z.string()
         .email('Invalid email address')
@@ -60,6 +60,16 @@ export const studentSchema = z.object({
         .optional()
         .or(z.literal('')),
 
+    // Regulatory / System Fields (NEMIS, UPI, NITA, EPRA)
+    admissionNumber: z.string().optional().or(z.literal('')),
+    nemisNumber: z.string().max(50, 'NEMIS number is too long').optional().or(z.literal('')),
+    upi: z.string().max(50, 'UPI is too long').optional().or(z.literal('')),
+    kcpeMarks: z.preprocess((val) => val === '' || val === undefined ? undefined : Number(val), z.number().min(0, 'KCPE marks must be at least 0').max(500, 'KCPE marks cannot exceed 500').optional()),
+    nationalId: z.string().max(50, 'National ID is too long').optional().or(z.literal('')),
+    nitaNumber: z.string().optional().or(z.literal('')),
+    epraLicenseStatus: z.enum(['None', 'T1', 'T2', 'T3']).optional().default('None'),
+    kcseGrade: z.string().optional().or(z.literal('')),
+
     notes: z.array(z.string()).optional().default([]),
 });
 
@@ -86,7 +96,7 @@ export const scheduleSlotSchema = z.object({
         .min(1, 'Education level is required')
         .max(10),
 
-    subject: z.enum(['Solar', 'ICT']),
+    subject: z.string().min(1, 'Subject is required'),
 
     status: z.enum(['Pending', 'Completed', 'Skipped', 'Cancelled']),
 
