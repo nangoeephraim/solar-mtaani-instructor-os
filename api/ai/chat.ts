@@ -56,7 +56,7 @@ function createModelForProvider(config: ProviderConfig) {
       return createOpenAI({
         baseURL: 'https://api.cerebras.ai/v1',
         apiKey: config.apiKey,
-      }).chat('llama3.3-70b');
+      }).chat('gpt-oss-120b');
     case 'openrouter':
       return createOpenAI({
         baseURL: 'https://openrouter.ai/api/v1',
@@ -71,13 +71,29 @@ function createModelForProvider(config: ProviderConfig) {
 }
 
 // ── Fallback System Prompt ───────────────────────────────────────────
-const FALLBACK_SYSTEM_PROMPT = `You are Sally — a warm, witty solar technology coordinator who lives inside the PRISM Instructors Platform.
+function getFallbackSystemPrompt(institutionType?: string) {
+  let identity = 'solar technology coordinator';
+  let description = 'helps local instructors run professional solar vocational training centers. Think of yourself as the instructor\'s technical copilot.';
+  
+  if (institutionType === 'primary' || institutionType === 'jss') {
+    identity = 'CBC curriculum coordinator';
+    description = 'helps primary and junior secondary school instructors align with KICD CBC guidelines and track student competency levels.';
+  } else if (institutionType === 'highschool') {
+    identity = 'secondary curriculum coordinator';
+    description = 'helps high school instructors run KCSE-aligned classes, CAT tests, and track performance scores.';
+  } else if (institutionType === 'university') {
+    identity = 'university academic advisor';
+    description = 'helps university professors manage lecture schedules, course modules, GPA tracking, and student evaluations.';
+  }
+  
+  return `You are Sally — a warm, witty ${identity} who lives inside the PRISM Instructors Platform.
 
-You help local instructors run professional solar vocational training centers. Think of yourself as the instructor's technical copilot. 
+You help instructors succeed. Think of yourself as the instructor's ${institutionType === 'university' ? 'academic copilot' : 'technical copilot'}. ${description}
 
 Be concise, professional, and technical when needed. Use occasional technical humor. Respond in plain flowing text without markdown formatting.
 
 Current time: ${new Date().toISOString()}`;
+}
 
 export const config = { runtime: 'edge' };
 
@@ -95,7 +111,7 @@ export default async function handler(req: Request) {
   try {
     const body = await req.json();
     console.log('[Sally] Chat handler invoked');
-    const { messages } = body;
+    const { messages, institutionType } = body;
 
     // ── 1. Sanitize messages ─────────────────────────────────────────
     const sanitizeMessage = (msg: any): any => {
@@ -144,7 +160,7 @@ export default async function handler(req: Request) {
     const modelMessages = await convertToModelMessages(sanitizedMessages);
 
     // ── 2. Build live database context (with 5s fallback) ───────────
-    let systemPrompt = FALLBACK_SYSTEM_PROMPT;
+    let systemPrompt = getFallbackSystemPrompt(institutionType);
     try {
       const ctx = await Promise.race([
         buildPrismAIContext(),
@@ -152,7 +168,7 @@ export default async function handler(req: Request) {
           setTimeout(() => reject(new Error('Context build exceeded timeout')), 1500)
         ),
       ]);
-      systemPrompt = buildPrismSystemPrompt(ctx);
+      systemPrompt = buildPrismSystemPrompt(ctx, institutionType);
       console.log('[Sally] Live database context loaded');
     } catch (ctxErr: any) {
       console.warn('[Sally] Context build failed/timed out, using fallback:', ctxErr.message);

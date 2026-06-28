@@ -195,6 +195,9 @@ export function SallyChat({ currentView }: { currentView?: string }) {
     transport: new DefaultChatTransport({
       api: '/api/ai/chat',
     }),
+    body: {
+      institutionType: instType,
+    },
     onFinish: (response: any) => {
       // Extract assistant response safely from the event payload
       const msg = response?.responseMessage || response;
