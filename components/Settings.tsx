@@ -113,6 +113,7 @@ const Settings: React.FC<SettingsProps> = ({ onDataReset }) => {
 
     const INSTITUTION_CONFIGS: Record<string, {
         assessmentSystem: 'CBET' | 'KNEC';
+        selectedCurriculum: 'CBC' | 'KNEC' | 'TVET_CDACC' | 'NITA';
         customSubjects: string[];
         terminology: { cohortLabel: string; classLabel: string; periodLabel: string; };
         enabledFields: {
@@ -129,8 +130,9 @@ const Settings: React.FC<SettingsProps> = ({ onDataReset }) => {
     }> = {
         primary: {
             assessmentSystem: 'CBET',
-            customSubjects: ['Mathematics', 'Kiswahili', 'English', 'Science & Tech', 'Social Studies', 'Agriculture', 'Creative Arts', 'Religious Ed'],
-            terminology: { cohortLabel: 'Stream', classLabel: 'Class', periodLabel: 'Term' },
+            selectedCurriculum: 'CBC',
+            customSubjects: ['Mathematics', 'Science & Tech', 'Creative Arts', 'Agriculture & Nutrition'],
+            terminology: { cohortLabel: 'Stream', classLabel: 'Grade', periodLabel: 'Term' },
             enabledFields: {
                 nemisNumber: true,
                 upi: true,
@@ -145,8 +147,9 @@ const Settings: React.FC<SettingsProps> = ({ onDataReset }) => {
         },
         jss: {
             assessmentSystem: 'CBET',
-            customSubjects: ['Mathematics', 'Kiswahili', 'English', 'Integrated Science', 'Pre-Technical', 'Social Studies', 'Agriculture', 'Creative Arts'],
-            terminology: { cohortLabel: 'Stream', classLabel: 'Class', periodLabel: 'Term' },
+            selectedCurriculum: 'CBC',
+            customSubjects: ['Mathematics', 'Science & Tech', 'Creative Arts', 'Agriculture & Nutrition'],
+            terminology: { cohortLabel: 'Stream', classLabel: 'Grade', periodLabel: 'Term' },
             enabledFields: {
                 nemisNumber: true,
                 upi: true,
@@ -161,7 +164,8 @@ const Settings: React.FC<SettingsProps> = ({ onDataReset }) => {
         },
         highschool: {
             assessmentSystem: 'KNEC',
-            customSubjects: ['Mathematics', 'English', 'Kiswahili', 'Biology', 'Chemistry', 'Physics', 'History', 'Geography', 'CRE', 'Agriculture', 'Business', 'Computer'],
+            selectedCurriculum: 'KNEC',
+            customSubjects: ['Mathematics', 'English', 'Kiswahili', 'Chemistry', 'Physics', 'Biology', 'Business Studies'],
             terminology: { cohortLabel: 'Stream', classLabel: 'Form', periodLabel: 'Term' },
             enabledFields: {
                 nemisNumber: true,
@@ -177,7 +181,8 @@ const Settings: React.FC<SettingsProps> = ({ onDataReset }) => {
         },
         tvet: {
             assessmentSystem: 'CBET',
-            customSubjects: ['Solar', 'ICT', 'Electrical', 'Plumbing', 'Masonry'],
+            selectedCurriculum: 'TVET_CDACC',
+            customSubjects: ['Solar PV Installation', 'ICT Support Basics', 'Electrical Wiring'],
             terminology: { cohortLabel: 'Lot', classLabel: 'Course', periodLabel: 'Module' },
             enabledFields: {
                 nemisNumber: false,
@@ -191,25 +196,27 @@ const Settings: React.FC<SettingsProps> = ({ onDataReset }) => {
                 admissionNumber: true,
             }
         },
-        university: {
+        nita: {
             assessmentSystem: 'KNEC',
-            customSubjects: ['Computer Science', 'Business Admin', 'Engineering Maths', 'Communication Skills'],
-            terminology: { cohortLabel: 'Cohort', classLabel: 'Year', periodLabel: 'Semester' },
+            selectedCurriculum: 'NITA',
+            customSubjects: ['Solar PV Installer', 'Electrical Wireman'],
+            terminology: { cohortLabel: 'Cohort', classLabel: 'Trade', periodLabel: 'Grade' },
             enabledFields: {
                 nemisNumber: false,
                 upi: false,
-                nitaNumber: false,
-                epraLicenseStatus: false,
+                nitaNumber: true,
+                epraLicenseStatus: true,
                 kcseGrade: true,
                 kcpeMarks: false,
                 nationalId: true,
-                guardianDetails: false,
+                guardianDetails: true,
                 admissionNumber: true,
             }
         },
         custom: {
             assessmentSystem: 'CBET',
-            customSubjects: ['Solar', 'ICT'],
+            selectedCurriculum: 'TVET_CDACC',
+            customSubjects: ['Solar PV Installation', 'ICT Support Basics'],
             terminology: { cohortLabel: 'Cohort', classLabel: 'Class', periodLabel: 'Term' },
             enabledFields: {
                 nemisNumber: true,
@@ -231,6 +238,7 @@ const Settings: React.FC<SettingsProps> = ({ onDataReset }) => {
 
         setPreference('institutionType', type as any);
         setPreference('assessmentSystem', config.assessmentSystem);
+        setPreference('selectedCurriculum', config.selectedCurriculum);
         setPreference('customSubjects', config.customSubjects);
         setPreference('terminology', config.terminology);
         setPreference('enabledFields', config.enabledFields);
@@ -733,6 +741,46 @@ const Settings: React.FC<SettingsProps> = ({ onDataReset }) => {
                         Configure this workspace for your learning institution. Switching your niche adapts terminology, assessment models (CBET vs KNEC), subjects, and student profile fields.
                     </p>
 
+                    {/* Curriculum Standard Selector */}
+                    <div className="space-y-3 pb-4 border-b border-[var(--md-sys-color-outline-variant)]">
+                        <label className="text-[11px] font-black text-[var(--md-sys-color-primary)] uppercase tracking-widest block px-1">Curriculum Standard</label>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                            {[
+                                { id: 'CBC', label: 'CBC Standard', desc: 'Competency Based' },
+                                { id: 'KNEC', label: 'KNEC Standard', desc: 'Academic Exams' },
+                                { id: 'TVET_CDACC', label: 'TVET CDACC', desc: 'Modular CBET' },
+                                { id: 'NITA', label: 'NITA Standard', desc: 'Trade Testing' }
+                            ].map(curr => {
+                                const isSelected = preferences.selectedCurriculum === curr.id;
+                                return (
+                                    <button
+                                        key={curr.id}
+                                        type="button"
+                                        onClick={() => {
+                                            setPreference('selectedCurriculum', curr.id as any);
+                                            // Auto-adjust assessment system
+                                            if (curr.id === 'CBC' || curr.id === 'TVET_CDACC') {
+                                                setPreference('assessmentSystem', 'CBET');
+                                            } else {
+                                                setPreference('assessmentSystem', 'KNEC');
+                                            }
+                                            showToast(`Curriculum standard set to ${curr.label}`, 'success');
+                                        }}
+                                        className={clsx(
+                                            "flex flex-col items-center justify-center text-center p-3 rounded-xl border transition-all duration-200 cursor-pointer select-none",
+                                            isSelected
+                                                ? "border-[var(--accent-primary)] bg-[var(--md-sys-color-primary-container)] text-[var(--md-sys-color-primary)] font-bold ring-1 ring-[var(--accent-primary)]"
+                                                : "border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-variant)] text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-surface-1)]"
+                                        )}
+                                    >
+                                        <span className="text-xs font-bold font-google">{curr.label}</span>
+                                        <span className="text-[9px] mt-0.5 opacity-80">{curr.desc}</span>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
                     {/* Niche Selector Cards */}
                     <div className="space-y-3">
                         <label className="text-[11px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase tracking-widest block px-1">Choose Institution Niche</label>
@@ -742,7 +790,7 @@ const Settings: React.FC<SettingsProps> = ({ onDataReset }) => {
                                 { id: 'jss', label: 'Junior Secondary (JSS)', desc: 'Grade 7 to 9, CBC Competencies, KCPE Marks, Class/Stream terminology', icon: <BookOpen size={20} className="text-teal-500" /> },
                                 { id: 'highschool', label: 'High School', desc: 'Form 1 to 4, KNEC Exam Grades, KCPE/KCSE Fields, Form/Stream terminology', icon: <GraduationCap size={20} className="text-purple-500" /> },
                                 { id: 'tvet', label: 'TVET College', desc: 'KNQF Levels, CBET Competencies, NITA/EPRA/National ID, Course/Lot terminology', icon: <Briefcase size={20} className="text-orange-500" /> },
-                                { id: 'university', label: 'University / Tertiary', desc: 'Years 1 to 4, Semester system, GPA Grades, Course/Cohort terminology', icon: <Building2 size={20} className="text-indigo-500" /> },
+                                { id: 'nita', label: 'Industrial Training (NITA)', desc: 'Industrial Trades, Practical/Theory %, NITA/EPRA/National ID, Trade/Cohort terminology', icon: <Building2 size={20} className="text-indigo-500" /> },
                                 { id: 'custom', label: 'Custom / Generic', desc: 'Fully customizable trade school, custom subjects, and field toggles', icon: <Sliders size={20} className="text-pink-500" /> },
                             ].map(niche => {
                                 const isSelected = preferences.institutionType === niche.id;

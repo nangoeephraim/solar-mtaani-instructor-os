@@ -21,12 +21,14 @@ import {
   formatStudentFromDB,
   formatScheduleSlot,
   formatChannelFromDB,
-  performOfflineSync
+  performOfflineSync,
+  getSettings
 } from './services/storageService';
 import { INITIAL_DATA, DEFAULT_SCHEDULE_TEMPLATE } from './constants';
-import { AppData, Student, ScheduleSlot, Resource, LibraryResource, ChatMessage, FeePayment, FeeStructure } from './types';
+import { AppData, Student, ScheduleSlot, Resource, LibraryResource, ChatMessage, FeePayment, FeeStructure, DEFAULT_SETTINGS } from './types';
 import { ToastProvider, useToast } from './components/Toast';
-import { ThemeProvider } from './contexts/ThemeContext';
+import { ThemeProvider, useTheme } from './contexts/ThemeContext';
+import { KENYAN_CURRICULA } from './utils/curriculumData';
 import Sidebar from './components/Sidebar';
 import MobileNav from './components/MobileNav';
 import Dashboard from './components/Dashboard';
@@ -65,6 +67,7 @@ const Communications = lazy(() => import('./components/Communications'));
 const Fees = lazy(() => import('./components/Fees'));
 const InstructorManagement = lazy(() => import('./components/InstructorManagement'));
 const IconGallery = lazy(() => import('./components/IconGallery'));
+const Curriculum = lazy(() => import('./components/Curriculum'));
 
 // Loading Spinner Component
 const LoadingSpinner: React.FC = () => (
@@ -156,7 +159,27 @@ const INITIAL_MEET_CODE: string | null = (() => {
 })();
 
 const AppContent: React.FC = () => {
+  const { preferences } = useTheme();
+  const activeCurriculum = preferences?.selectedCurriculum || 'TVET_CDACC';
+
   const [data, setData] = useState<AppData | null>(null);
+
+  // Reactively populate/update curriculum state when preferences change
+  useEffect(() => {
+    if (data) {
+      const targetCurriculum = KENYAN_CURRICULA[activeCurriculum] || {};
+      if (JSON.stringify(data.curriculum) !== JSON.stringify(targetCurriculum)) {
+        setData((prev) => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            curriculum: targetCurriculum
+          };
+        });
+      }
+    }
+  }, [data, activeCurriculum]);
+
   // Use the globally-captured meeting code so it survives auth flow
   const [pendingMeetCode, setPendingMeetCode] = useState<string | null>(INITIAL_MEET_CODE);
   const [currentView, setCurrentView] = useState(() => {
@@ -388,6 +411,9 @@ const AppContent: React.FC = () => {
         ]);
 
         if (isMounted) {
+          const currentPrefs = getSettings()?.preferences || DEFAULT_SETTINGS.preferences;
+          const activeCurr = currentPrefs.selectedCurriculum || 'TVET_CDACC';
+          appData.curriculum = KENYAN_CURRICULA[activeCurr] || {};
           setData(appData);
           setIsLoading(false);
         }
@@ -1209,6 +1235,16 @@ const AppContent: React.FC = () => {
           data={data}
           onUpdateStudent={handleUpdateStudent}
         />
+      )}
+
+      {currentView === 'curriculum' && (
+        <Suspense fallback={<LoadingSpinner />}>
+          <Curriculum
+            key="curriculum"
+            data={data}
+            onNavigate={handleNavigate}
+          />
+        </Suspense>
       )}
 
       {currentView === 'attendance' && (

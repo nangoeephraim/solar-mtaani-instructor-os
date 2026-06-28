@@ -153,8 +153,28 @@ const getDynamicCompetencies = (subject: string, instType: string) => {
    if (instType === 'primary' || instType === 'jss') {
       return CBC_COMPETENCIES;
    }
-   if (subject === 'Solar') return SOLAR_COMPETENCIES;
-   if (subject === 'ICT') return ICT_COMPETENCIES;
+   const normalized = (subject || '').toLowerCase();
+   if (normalized.includes('solar')) return SOLAR_COMPETENCIES;
+   if (normalized.includes('ict')) return ICT_COMPETENCIES;
+   if (normalized.includes('electrical') || normalized.includes('wireman')) {
+      return {
+         safety: {
+            name: 'Wiring Safety & Code',
+            description: 'Statutory compliance, cable ratings, protective devices',
+            outcomes: ['Identify circuit hazards', 'Interpret wiring codes', 'Size domestic conduits', 'Deploy fuses and breakers']
+         },
+         wiring: {
+            name: 'Circuit Installation',
+            description: 'Switching circuits, socket rings, distribution boards',
+            outcomes: ['Wire 1-way and 2-way switches', 'Install ring mains power circuits', 'Assemble consumer control units']
+         },
+         testing: {
+            name: 'Test & Commissioning',
+            description: 'Insulation testing, loop impedance, Megger usage',
+            outcomes: ['Conduct polarity checks', 'Measure loop impedance', 'Verify insulation resistance']
+         }
+      };
+   }
 
    // Dynamic fallback for custom subject
    const baseKey = subject.toLowerCase().replace(/[^a-z0-9]/g, '_');
@@ -186,8 +206,18 @@ const getDynamicPractical = (subject: string, instType: string) => {
    if (instType === 'primary' || instType === 'jss') {
       return CBC_PRACTICAL;
    }
-   if (subject === 'Solar') return SOLAR_PRACTICAL;
-   if (subject === 'ICT') return ICT_PRACTICAL;
+   const normalized = (subject || '').toLowerCase();
+   if (normalized.includes('solar')) return SOLAR_PRACTICAL;
+   if (normalized.includes('ict')) return ICT_PRACTICAL;
+   if (normalized.includes('electrical') || normalized.includes('wireman')) {
+      return [
+         { id: 'conduit', label: 'Run cables through PVC conduits cleanly', category: 'Conduits' },
+         { id: 'switching', label: 'Wire a two-way lighting switch loop', category: 'Wiring' },
+         { id: 'consumer_unit', label: 'Terminate connections at consumer board', category: 'Wiring' },
+         { id: 'insulation', label: 'Perform Megger insulation tests safely', category: 'Testing' },
+         { id: 'earthing', label: 'Verify loop impedance of the ground rod', category: 'Testing' }
+      ];
+   }
 
    // Dynamic fallback
    const labelSubject = subject || 'Unit';

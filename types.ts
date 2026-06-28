@@ -305,6 +305,7 @@ export const COMPETENCY_COLORS: Record<number, string> = {
 // Settings types
 export type InstitutionType = 'tvet' | 'primary' | 'jss' | 'highschool' | 'university' | 'custom';
 export type AssessmentSystemType = 'CBET' | 'KNEC';
+export type CurriculumType = 'CBC' | 'KNEC' | 'TVET_CDACC' | 'NITA';
 
 export interface AppPreferences {
   theme: 'light' | 'dark' | 'system';
@@ -319,6 +320,7 @@ export interface AppPreferences {
   // Generalized Institution Configurations
   institutionType?: InstitutionType;
   assessmentSystem?: AssessmentSystemType;
+  selectedCurriculum?: CurriculumType;
   customSubjects?: string[];
   enabledFields?: {
     nemisNumber: boolean;
@@ -364,6 +366,7 @@ export const DEFAULT_SETTINGS: InstructorSettings = {
     enableSwahiliGreeting: true,
     institutionType: 'tvet',
     assessmentSystem: 'CBET',
+    selectedCurriculum: 'TVET_CDACC',
     customSubjects: ['Solar', 'ICT'],
     enabledFields: {
       nemisNumber: false,

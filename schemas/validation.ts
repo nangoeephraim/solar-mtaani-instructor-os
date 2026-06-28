@@ -155,7 +155,7 @@ export const settingsSchema = z.object({
         enableAI: z.boolean(),
         reducedMotion: z.boolean(),
         notificationsEnabled: z.boolean(),
-    }),
+    }).passthrough(),
 });
 
 export type SettingsFormData = z.infer<typeof settingsSchema>;

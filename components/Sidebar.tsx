@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect } from 'react';
-import { LayoutDashboard, Calendar, Users, ClipboardCheck, Settings, BarChart3, UserCheck, LineChart, Box, MessageSquare, Wallet, UsersRound } from 'lucide-react';
+import { LayoutDashboard, Calendar, Users, ClipboardCheck, Settings, BarChart3, UserCheck, LineChart, Box, MessageSquare, Wallet, UsersRound, BookOpen } from 'lucide-react';
 import clsx from 'clsx';
 import { motion } from 'framer-motion';
 import { AppData, UserRole } from '../types';
@@ -28,6 +28,7 @@ const VIEW_PRELOAD_MAP: Record<string, () => Promise<any>> = {
   fees: () => import('./Fees'),
   settings: () => import('./Settings'),
   instructors: () => import('./InstructorManagement'),
+  curriculum: () => import('./Curriculum'),
 };
 
 const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, data }) => {
@@ -62,7 +63,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, data }) => {
     { id: 'students-manage', label: 'Students', icon: Users, minRole: 'viewer' },
     { id: 'student-analytics', label: 'Student Insights', icon: LineChart, minRole: 'instructor' },
     { id: 'attendance', label: 'Attendance', icon: UserCheck, minRole: 'viewer' },
-    { id: 'assessment', label: 'NITA Assessment', icon: ClipboardCheck, minRole: 'instructor' },
+    { id: 'assessment', label: 'Assessment', icon: ClipboardCheck, minRole: 'instructor' },
+    { id: 'curriculum', label: 'Curriculum Hub', icon: BookOpen, minRole: 'viewer' },
     { id: 'resources', label: 'Resources', icon: Box, minRole: 'viewer' },
     { id: 'fees', label: 'Fee Management', icon: Wallet, minRole: 'admin' },
     { id: 'instructors', label: 'Instructors', icon: UsersRound, minRole: 'admin' },

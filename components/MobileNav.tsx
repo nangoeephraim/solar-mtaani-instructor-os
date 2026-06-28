@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, Calendar, Users, UserCheck, MoreHorizontal, BarChart3, LineChart, ClipboardCheck, Settings, Box, X, MessageSquare, Wallet, UsersRound, Grid, Compass } from 'lucide-react';
+import { LayoutDashboard, Calendar, Users, UserCheck, MoreHorizontal, BarChart3, LineChart, ClipboardCheck, Settings, Box, X, MessageSquare, Wallet, UsersRound, Grid, Compass, BookOpen } from 'lucide-react';
 import clsx from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
@@ -117,6 +117,7 @@ const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate }) => {
 
     const moreItems: { id: string; label: string; icon: any; minRole: UserRole }[] = [
         { id: 'icon-gallery', label: 'Command Center', icon: Grid, minRole: 'viewer' },
+        { id: 'curriculum', label: 'Curriculum', icon: BookOpen, minRole: 'viewer' },
         { id: 'analytics', label: 'Analytics', icon: BarChart3, minRole: 'admin' },
         { id: 'student-analytics', label: 'Student Insights', icon: LineChart, minRole: 'instructor' },
         { id: 'assessment', label: 'Assessment', icon: ClipboardCheck, minRole: 'instructor' },
