@@ -22,7 +22,7 @@ export default defineConfig({
     drop: ['debugger']
   },
   build: {
-    emptyOutDir: false,
+    emptyOutDir: true,
     minify: false,
     rollupOptions: {
       output: {

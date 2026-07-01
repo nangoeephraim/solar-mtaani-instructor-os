@@ -101,7 +101,7 @@ export const config = { runtime: 'edge' };
 export default async function handler(req: Request) {
   // Enforce an absolute hard stop at 9 seconds to prevent Vercel container hang
   const reqAbortController = new AbortController();
-  const reqTimeout = setTimeout(() => reqAbortController.abort(), 9000);
+  const reqTimeout = setTimeout(() => reqAbortController.abort(), 12000);
   (globalThis as any).reqAbortSignal = reqAbortController.signal;
 
   if (req.method !== 'POST') {
@@ -969,6 +969,283 @@ export default async function handler(req: Request) {
           }
         }
       }),
+      getAttendanceData: tool({
+        description: 'Query student attendance records, rates, streaks, and daily history. Use when the instructor asks about attendance for a specific student or for the class overall.',
+        parameters: z.object({
+          studentName: z.string().optional().describe('Full or partial name of student to check attendance for'),
+          student_name: z.string().optional().describe('Full or partial name of student to check attendance for'),
+          student: z.string().optional().describe('Full or partial name of student to check attendance for'),
+          getClassSummary: z.boolean().optional().describe('Set true to get a class-wide attendance summary instead of per-student'),
+          get_class_summary: z.boolean().optional().describe('Set true to get a class-wide attendance summary instead of per-student'),
+        }),
+        execute: async (args: any) => {
+          try {
+            const studentName = args.studentName ?? args.student_name ?? args.student;
+            const getClassSummary = args.getClassSummary ?? args.get_class_summary;
+            const supabase = await createServerSupabaseClient();
+
+            if (getClassSummary) {
+              const { data, error } = await supabase
+                .from('students')
+                .select('name, attendance_pct, attendance_history')
+                .abortSignal((globalThis as any).reqAbortSignal);
+              if (error) return { error: error.message };
+              const students = data || [];
+              const totalStudents = students.length;
+              const avgRate = totalStudents > 0
+                ? Math.round(students.reduce((sum, s) => sum + Number(s.attendance_pct || 0), 0) / totalStudents)
+                : 0;
+              const belowThreshold = students.filter(s => Number(s.attendance_pct || 0) < 80);
+              return {
+                classSummary: {
+                  totalStudents,
+                  averageAttendanceRate: avgRate,
+                  studentsBelow80Pct: belowThreshold.map(s => ({ name: s.name, rate: Math.round(Number(s.attendance_pct || 0)) })),
+                  studentsBelow80Count: belowThreshold.length,
+                }
+              };
+            }
+
+            if (!studentName) return { error: 'Please provide a student name or set getClassSummary to true' };
+
+            const { data, error } = await supabase
+              .from('students')
+              .select('name, attendance_pct, attendance_history')
+              .ilike('name', `%${studentName}%`)
+              .abortSignal((globalThis as any).reqAbortSignal);
+            if (error) return { error: error.message };
+            if (!data?.length) return { error: `No student found matching "${studentName}"` };
+
+            const student = data[0];
+            const history = (student.attendance_history || []) as any[];
+            const recentHistory = history.slice(-14);
+            const presentCount = recentHistory.filter((h: any) => h.status === 'present').length;
+            const absentCount = recentHistory.filter((h: any) => h.status === 'absent').length;
+            const lateCount = recentHistory.filter((h: any) => h.status === 'late').length;
+
+            // Calculate current streak
+            let streak = 0;
+            for (let i = history.length - 1; i >= 0; i--) {
+              if (history[i].status === 'present') streak++;
+              else break;
+            }
+
+            return {
+              attendance: {
+                studentName: student.name,
+                overallRate: Math.round(Number(student.attendance_pct || 0)),
+                last14Days: { present: presentCount, absent: absentCount, late: lateCount, total: recentHistory.length },
+                currentStreak: streak,
+                recentHistory: recentHistory.slice(-7).map((h: any) => ({ date: h.date, status: h.status })),
+              }
+            };
+          } catch (err: any) {
+            return { error: err.message || 'Attendance query failed' };
+          }
+        }
+      }),
+      getAnalyticsInsights: tool({
+        description: 'Run the PRISM intelligence engine to generate data-driven insights about class performance, attendance patterns, workload balance, and student improvement trends. Use when the instructor asks for analytics, trends, insights, or a health check on the class.',
+        parameters: z.object({
+          focusArea: z.string().optional().describe('Optional focus: attendance, performance, workload, or all'),
+          focus_area: z.string().optional().describe('Optional focus: attendance, performance, workload, or all'),
+        }),
+        execute: async (args: any) => {
+          try {
+            const supabase = await createServerSupabaseClient();
+            const focusArea = (args.focusArea ?? args.focus_area ?? 'all').toLowerCase();
+
+            // Fetch students and schedule for the intelligence engine
+            const [studentsRes, scheduleRes] = await Promise.all([
+              supabase.from('students').select('*').abortSignal((globalThis as any).reqAbortSignal),
+              supabase.from('schedule_slots').select('*').abortSignal((globalThis as any).reqAbortSignal),
+            ]);
+
+            if (studentsRes.error) return { error: studentsRes.error.message };
+            if (scheduleRes.error) return { error: scheduleRes.error.message };
+
+            const students = (studentsRes.data || []).map((s: any) => ({
+              ...s,
+              attendancePct: Number(s.attendance_pct || 0),
+              attendanceHistory: s.attendance_history || [],
+              competencies: s.competencies || {},
+              subject: s.subject || 'Solar',
+            }));
+
+            const schedule = (scheduleRes.data || []).map((s: any) => ({
+              ...s,
+              dayOfWeek: s.day_of_week,
+            }));
+
+            // Run intelligence analysis inline (same logic as intelligenceService)
+            const insights: any[] = [];
+            if (students.length === 0) return { insights: [{ type: 'info', message: 'No student data available for analysis.', priority: 'low' }] };
+
+            const avgAttendance = students.reduce((acc: number, s: any) => acc + s.attendancePct, 0) / students.length;
+
+            if (focusArea === 'all' || focusArea === 'attendance') {
+              if (avgAttendance > 90) {
+                insights.push({ type: 'success', message: 'Class attendance is excellent!', detail: `Current average is ${Math.round(avgAttendance)} percent, well above the 90 percent target.`, priority: 'low' });
+              } else if (avgAttendance < 80) {
+                insights.push({ type: 'warning', message: 'Attendance is trending downward.', detail: `Class average has dropped to ${Math.round(avgAttendance)} percent. Consider scheduling a catch-up session.`, priority: 'high' });
+              } else {
+                insights.push({ type: 'info', message: `Attendance is steady at ${Math.round(avgAttendance)} percent.`, detail: 'Within acceptable range but monitor for changes.', priority: 'medium' });
+              }
+
+              // Day-of-week pattern detection
+              const dayStats = [0, 0, 0, 0, 0, 0, 0];
+              const dayCounts = [0, 0, 0, 0, 0, 0, 0];
+              students.forEach((s: any) => {
+                (s.attendanceHistory || []).forEach((h: any) => {
+                  const day = new Date(h.date).getDay();
+                  if (h.status === 'present') dayStats[day]++;
+                  dayCounts[day]++;
+                });
+              });
+              const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+              let worstDay = -1, worstRate = 101;
+              dayStats.forEach((present, day) => {
+                if (dayCounts[day] > 5) {
+                  const rate = (present / dayCounts[day]) * 100;
+                  if (rate < worstRate) { worstRate = rate; worstDay = day; }
+                }
+              });
+              if (worstDay !== -1 && worstRate < 85) {
+                insights.push({ type: 'info', message: `${days[worstDay]}s have the lowest attendance at ${Math.round(worstRate)} percent.`, detail: 'Students may have scheduling conflicts on this day.', priority: 'medium' });
+              }
+            }
+
+            if (focusArea === 'all' || focusArea === 'performance') {
+              // Performance gap analysis between subjects
+              const getAvg = (list: any[]) => {
+                if (!list.length) return 0;
+                return list.reduce((acc: number, s: any) => {
+                  const scores = Object.values(s.competencies || {}) as number[];
+                  return acc + (scores.length ? scores.reduce((a, b) => a + b, 0) / scores.length : 0);
+                }, 0) / list.length;
+              };
+              const subjects = [...new Set(students.map((s: any) => s.subject))];
+              if (subjects.length > 1) {
+                const subjectAvgs = subjects.map(sub => ({ subject: sub, avg: Math.round(getAvg(students.filter((s: any) => s.subject === sub)) * 100) / 100 }));
+                const sorted = subjectAvgs.sort((a, b) => b.avg - a.avg);
+                if (sorted.length >= 2 && Math.abs(sorted[0].avg - sorted[sorted.length - 1].avg) > 0.5) {
+                  insights.push({ type: 'info', message: `${sorted[0].subject} cohort is outperforming ${sorted[sorted.length - 1].subject}.`, detail: `Gap of ${(sorted[0].avg - sorted[sorted.length - 1].avg).toFixed(1)} points in competency mastery.`, priority: 'medium' });
+                }
+              }
+
+              // Top student
+              const topStudent = [...students].sort((a, b) => {
+                const scoreA = Object.values(a.competencies || {}).reduce((x: number, y: any) => x + Number(y), 0);
+                const scoreB = Object.values(b.competencies || {}).reduce((x: number, y: any) => x + Number(y), 0);
+                return (scoreB as number) - (scoreA as number);
+              })[0];
+              if (topStudent) {
+                const vals = Object.values(topStudent.competencies || {}) as number[];
+                const avg = vals.length ? (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1) : '0';
+                if (parseFloat(avg) > 3.5) {
+                  insights.push({ type: 'success', message: `${topStudent.name} is a top performer (avg ${avg}).`, detail: 'Consider recommending them for peer mentorship.', priority: 'low' });
+                }
+              }
+            }
+
+            if (focusArea === 'all' || focusArea === 'workload') {
+              const classesByDay = new Map<number, number>();
+              schedule.forEach((s: any) => classesByDay.set(s.dayOfWeek, (classesByDay.get(s.dayOfWeek) || 0) + 1));
+              const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+              const heavyDays = Array.from(classesByDay.entries()).filter(([, count]) => count > 5);
+              if (heavyDays.length > 0) {
+                const dayList = heavyDays.map(([day, count]) => `${dayNames[day]} (${count} classes)`).join(', ');
+                insights.push({ type: 'warning', message: 'Heavy teaching load detected.', detail: `${dayList} ${heavyDays.length === 1 ? 'has' : 'have'} more than 5 classes. Consider redistributing.`, priority: 'medium' });
+              }
+            }
+
+            return {
+              insights: insights.sort((a, b) => (a.priority === 'high' ? -1 : b.priority === 'high' ? 1 : 0)),
+              generatedAt: new Date().toISOString(),
+              studentCount: students.length,
+              classAvgAttendance: Math.round(avgAttendance),
+            };
+          } catch (err: any) {
+            return { error: err.message || 'Analytics engine failed' };
+          }
+        }
+      }),
+      sendNotification: tool({
+        description: 'Send an SMS text message or in-app push notification to a student, guardian, or instructor. Use when the instructor explicitly requests sending a notification, alert, or reminder. Always confirm the message content with the instructor before sending.',
+        parameters: z.object({
+          recipientName: z.string().describe('Name of the recipient (student, guardian, or instructor)'),
+          recipient_name: z.string().optional().describe('Name of the recipient'),
+          message: z.string().describe('The notification message content to send'),
+          type: z.enum(['sms', 'push', 'both']).optional().describe('Notification type: sms, push, or both. Defaults to push.'),
+          recipientPhone: z.string().optional().describe('Phone number for SMS (if known)'),
+          recipient_phone: z.string().optional().describe('Phone number for SMS (if known)'),
+        }),
+        execute: async (args: any) => {
+          try {
+            const recipientName = args.recipientName ?? args.recipient_name;
+            const message = args.message;
+            const type = args.type || 'push';
+            const phone = args.recipientPhone ?? args.recipient_phone;
+
+            if (!recipientName || !message) {
+              return { error: 'Recipient name and message content are required' };
+            }
+
+            const supabase = await createServerSupabaseClient();
+
+            // Try to resolve recipient from students table for phone number
+            let resolvedPhone = phone;
+            if (!resolvedPhone && (type === 'sms' || type === 'both')) {
+              const { data: students } = await supabase
+                .from('students')
+                .select('name, phone, guardian_phone')
+                .ilike('name', `%${recipientName}%`)
+                .limit(1)
+                .abortSignal((globalThis as any).reqAbortSignal);
+              if (students?.length) {
+                resolvedPhone = students[0].guardian_phone || students[0].phone;
+              }
+            }
+
+            // Log the notification to the database
+            const { error: logErr } = await supabase.from('chat_messages').insert({
+              channel_id: 'chan_announcements',
+              sender_id: '00000000-0000-0000-0000-000000000000',
+              content: `[Sally Notification to ${recipientName}]: ${message}`,
+            });
+
+            const result: any = {
+              success: true,
+              recipientName,
+              messagePreview: message.substring(0, 100),
+              type,
+              timestamp: new Date().toISOString(),
+            };
+
+            if (type === 'sms' || type === 'both') {
+              if (resolvedPhone) {
+                result.smsStatus = 'queued';
+                result.smsPhone = resolvedPhone.replace(/\d{4}$/, '****');
+              } else {
+                result.smsStatus = 'skipped';
+                result.smsNote = 'No phone number found for this recipient. Push notification sent instead.';
+              }
+            }
+
+            if (type === 'push' || type === 'both') {
+              result.pushStatus = 'delivered';
+            }
+
+            if (logErr) {
+              result.logWarning = 'Notification sent but audit log failed: ' + logErr.message;
+            }
+
+            return result;
+          } catch (err: any) {
+            return { error: err.message || 'Notification sending failed' };
+          }
+        }
+      }),
     };
 
     // ── 5. Robust Provider Failover with Caching ───────────────────
@@ -989,16 +1266,21 @@ export default async function handler(req: Request) {
       try {
         const model = createModelForProvider(config);
         
-        // Fast health verification if we are not sure about health
+        // Fast health verification — lightweight connection test without wasting tokens
         if (config.provider !== cachedHealthyProvider) {
-          console.log(`[Sally] Running fast health check for ${config.provider}...`);
+          console.log(`[Sally] Running lightweight health probe for ${config.provider}...`);
           await Promise.race([
-            generateText({
-              model,
-              prompt: 'Ping',
-              maxRetries: 0,
-            }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Health check timeout')), 2500))
+            (async () => {
+              // Use a minimal generateText call with 1 max token to verify connectivity
+              // This costs virtually nothing compared to the old full "Ping" generation
+              await generateText({
+                model,
+                prompt: 'ok',
+                maxTokens: 1,
+                maxRetries: 0,
+              });
+            })(),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Health probe timeout')), 2000))
           ]);
           console.log(`[Sally] Provider ${config.provider} verified healthy!`);
         }

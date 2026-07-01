@@ -1,12 +1,34 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
-import { Sparkles, Send, Volume2, VolumeX, MessageSquare, X, Box, ClipboardCheck, ArrowUpRight, CheckCircle2, AlertTriangle, HelpCircle } from 'lucide-react';
+import { Sparkles, Send, Volume2, VolumeX, X, Box, ClipboardCheck, ArrowUpRight, CheckCircle2, AlertTriangle, HelpCircle, Trash2, RotateCcw, Users, CreditCard, Calendar, BarChart3, Bell, TrendingUp, TrendingDown, Clock, Zap } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
 import { useTheme } from '../contexts/ThemeContext';
+
+// ── Constants ────────────────────────────────────────────────────────
+const STORAGE_KEY = 'sally_chat_history_v2';
+const MAX_STORED_MESSAGES = 50;
+
+// ── Helpers ──────────────────────────────────────────────────────────
+function getTimeGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 17) return 'Good afternoon';
+  return 'Good evening';
+}
+
+function getInstitutionLabel(instType: string): string {
+  switch (instType) {
+    case 'primary': return 'CBC Primary';
+    case 'jss': return 'CBC Junior Secondary';
+    case 'highschool': return 'KCSE Secondary';
+    case 'university': return 'University';
+    case 'tvet': default: return 'TVET Solar';
+  }
+}
 
 export function SallyChat({ currentView }: { currentView?: string }) {
   const { preferences } = useTheme();
@@ -47,11 +69,18 @@ export function SallyChat({ currentView }: { currentView?: string }) {
             color: "indigo"
           },
           {
-            label: "Class Performance Summary",
-            subtext: "Summarize current grades",
-            prompt: "Which students are performing below average in their CBC competencies?",
-            icon: Box,
+            label: "Class Attendance Report",
+            subtext: "View overall attendance",
+            prompt: "Show me the class attendance summary",
+            icon: Users,
             color: "emerald"
+          },
+          {
+            label: "Run Analytics",
+            subtext: "Get data-driven insights",
+            prompt: "Run the analytics engine and show me insights about our class",
+            icon: BarChart3,
+            color: "violet"
           }
         ];
       case 'highschool':
@@ -76,6 +105,13 @@ export function SallyChat({ currentView }: { currentView?: string }) {
             prompt: "Check the physics lab equipment inventory stock",
             icon: Box,
             color: "emerald"
+          },
+          {
+            label: "Run Analytics",
+            subtext: "Performance trends and insights",
+            prompt: "Run the analytics engine and give me insights on class performance",
+            icon: BarChart3,
+            color: "violet"
           }
         ];
       case 'university':
@@ -100,6 +136,13 @@ export function SallyChat({ currentView }: { currentView?: string }) {
             prompt: "Check laptop stock in the computer science department",
             icon: Box,
             color: "emerald"
+          },
+          {
+            label: "Class Health Check",
+            subtext: "Analytics and insights",
+            prompt: "Give me a full analytics report on the class",
+            icon: BarChart3,
+            color: "violet"
           }
         ];
       case 'tvet':
@@ -125,6 +168,13 @@ export function SallyChat({ currentView }: { currentView?: string }) {
             prompt: "How do I calculate the solar PV array size for a 500W load in Nairobi?",
             icon: HelpCircle,
             color: "amber"
+          },
+          {
+            label: "Run Analytics Engine",
+            subtext: "Attendance, performance, workload",
+            prompt: "Run the PRISM analytics engine and show me all insights",
+            icon: BarChart3,
+            color: "violet"
           }
         ];
     }
@@ -134,6 +184,7 @@ export function SallyChat({ currentView }: { currentView?: string }) {
   const [speechEnabled, setSpeechEnabled] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [input, setInput] = useState('');
+  const [lastUserMessage, setLastUserMessage] = useState('');
   const messageEndRef = useRef<HTMLDivElement | null>(null);
   const activeUtterancesRef = useRef<SpeechSynthesisUtterance[]>([]);
 
@@ -191,7 +242,7 @@ export function SallyChat({ currentView }: { currentView?: string }) {
   };
 
   // Vercel AI SDK integration hook using modular transport
-  const { messages, sendMessage, status, error } = useChat({
+  const { messages, sendMessage, status, error, setMessages } = useChat({
     transport: new DefaultChatTransport({
       api: '/api/ai/chat',
     }),
@@ -208,6 +259,41 @@ export function SallyChat({ currentView }: { currentView?: string }) {
   });
 
   const isLoading = status === 'streaming' || status === 'submitted';
+
+  // ── Conversation Memory: Persist to localStorage ────────────────
+  useEffect(() => {
+    if (messages.length > 0) {
+      try {
+        const toStore = messages.slice(-MAX_STORED_MESSAGES).map(m => ({
+          id: m.id,
+          role: m.role,
+          content: (m as any).content || '',
+          parts: (m as any).parts,
+          createdAt: (m as any).createdAt,
+        }));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(toStore));
+      } catch { /* quota exceeded — silent fail */ }
+    }
+  }, [messages]);
+
+  // ── Conversation Memory: Restore from localStorage on mount ─────
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setMessages(parsed);
+        }
+      }
+    } catch { /* corrupt data — silent fail */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const clearChat = useCallback(() => {
+    setMessages([]);
+    localStorage.removeItem(STORAGE_KEY);
+  }, [setMessages]);
 
   // Auto-scroll logic
   useEffect(() => {
@@ -325,8 +411,447 @@ export function SallyChat({ currentView }: { currentView?: string }) {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
+    setLastUserMessage(input);
     sendMessage({ text: input });
     setInput('');
+  };
+
+  const handleRetry = () => {
+    if (lastUserMessage) {
+      sendMessage({ text: lastUserMessage });
+    }
+  };
+
+  // ── Tool Result Card Renderers ──────────────────────────────────
+
+  const renderStudentDataCard = (result: any, args: any) => {
+    if (result.error) return renderErrorCard(result.error);
+    const students = result.students || [];
+    if (students.length === 0) return <div className="text-xs text-slate-400 italic py-2">No students found.</div>;
+    return (
+      <div className="w-[85%] bg-slate-900 border border-white/5 backdrop-blur-md rounded-2xl p-4 shadow-xl">
+        <div className="flex items-center gap-2 mb-3">
+          <Users className="w-4 h-4 text-violet-400" />
+          <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-space">
+            Student Records {args.studentName ? `· "${args.studentName}"` : ''}
+          </h4>
+        </div>
+        <div className="space-y-2">
+          {students.slice(0, 5).map((s: any, i: number) => (
+            <div key={s.id || i} className="flex justify-between items-center py-2 border-b border-white/5 last:border-0 text-xs">
+              <div className="min-w-0 flex-1">
+                <p className="font-medium text-slate-200 truncate">{s.name || s.full_name}</p>
+                <p className="text-[10px] text-slate-500">{s.subject || s.cohort || 'No cohort'}</p>
+              </div>
+              <div className="flex items-center gap-3 flex-shrink-0">
+                {s.average_score !== undefined && (
+                  <div className="text-right">
+                    <p className="text-[9px] text-slate-500 uppercase">Score</p>
+                    <p className="font-mono font-bold text-indigo-400">{Math.round(Number(s.average_score))}%</p>
+                  </div>
+                )}
+                {s.attendance_rate !== undefined && (
+                  <div className="text-right">
+                    <p className="text-[9px] text-slate-500 uppercase">Attend</p>
+                    <p className={clsx("font-mono font-bold", Number(s.attendance_rate) >= 80 ? "text-emerald-400" : "text-amber-400")}>
+                      {Math.round(Number(s.attendance_rate))}%
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+          {students.length > 5 && (
+            <p className="text-[10px] text-slate-500 pt-1">+ {students.length - 5} more students</p>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderFeePaymentsCard = (result: any, args: any) => {
+    if (result.error) return renderErrorCard(result.error);
+    const payments = result.payments || [];
+    if (payments.length === 0) return <div className="text-xs text-slate-400 italic py-2">No payments found.</div>;
+    return (
+      <div className="w-[85%] bg-slate-900 border border-white/5 backdrop-blur-md rounded-2xl p-4 shadow-xl">
+        <div className="flex items-center gap-2 mb-3">
+          <CreditCard className="w-4 h-4 text-green-400" />
+          <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-space">Fee Payments</h4>
+        </div>
+        <div className="space-y-2">
+          {payments.slice(0, 5).map((p: any, i: number) => (
+            <div key={p.id || i} className="p-2.5 rounded-xl bg-slate-950/50 border border-white/5 text-xs">
+              <div className="flex justify-between items-start mb-1.5">
+                <p className="font-medium text-slate-200">{p.student_name || 'Unknown'}</p>
+                <span className={clsx(
+                  "px-2 py-0.5 rounded-full text-[9px] font-bold uppercase border",
+                  p.status === 'completed' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
+                  p.status === 'pending' ? "bg-amber-500/10 text-amber-400 border-amber-500/20" :
+                  "bg-red-500/10 text-red-400 border-red-500/20"
+                )}>{p.status}</span>
+              </div>
+              <div className="flex justify-between items-center text-[10px] text-slate-400">
+                <span>KES {Number(p.amount || 0).toLocaleString()}</span>
+                {p.mpesa_receipt_number && <span className="font-mono">M-Pesa: {p.mpesa_receipt_number}</span>}
+              </div>
+            </div>
+          ))}
+          {payments.length > 5 && (
+            <p className="text-[10px] text-slate-500 pt-1">+ {payments.length - 5} more payments</p>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderScheduleCard = (result: any) => {
+    if (result.error) return renderErrorCard(result.error);
+    const slots = result.schedule || [];
+    if (slots.length === 0) return <div className="text-xs text-slate-400 italic py-2">No schedule slots found.</div>;
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    return (
+      <div className="w-[85%] bg-slate-900 border border-white/5 backdrop-blur-md rounded-2xl p-4 shadow-xl">
+        <div className="flex items-center gap-2 mb-3">
+          <Calendar className="w-4 h-4 text-cyan-400" />
+          <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-space">Timetable</h4>
+        </div>
+        <div className="space-y-1.5">
+          {slots.slice(0, 8).map((s: any, i: number) => (
+            <div key={s.id || i} className="flex items-center gap-2 py-1.5 border-b border-white/5 last:border-0 text-xs">
+              <span className="w-8 text-[10px] font-bold text-cyan-400 font-mono">{dayNames[s.day_of_week] || '?'}</span>
+              <span className="text-[10px] text-slate-500 font-mono w-20">{s.start_time}–{s.end_time}</span>
+              <span className="font-medium text-slate-200 truncate flex-1">{s.title}</span>
+              {s.type && <span className="px-1.5 py-0.5 rounded text-[9px] bg-slate-800 text-slate-400 border border-white/5">{s.type}</span>}
+            </div>
+          ))}
+          {slots.length > 8 && <p className="text-[10px] text-slate-500 pt-1">+ {slots.length - 8} more slots</p>}
+        </div>
+      </div>
+    );
+  };
+
+  const renderAttendanceCard = (result: any) => {
+    if (result.error) return renderErrorCard(result.error);
+    
+    // Class summary variant
+    if (result.classSummary) {
+      const cs = result.classSummary;
+      const rateColor = cs.averageAttendanceRate >= 90 ? 'emerald' : cs.averageAttendanceRate >= 75 ? 'amber' : 'red';
+      return (
+        <div className="w-[85%] bg-slate-900 border border-white/5 backdrop-blur-md rounded-2xl p-4 shadow-xl">
+          <div className="flex items-center gap-2 mb-3">
+            <Users className="w-4 h-4 text-teal-400" />
+            <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-space">Class Attendance</h4>
+          </div>
+          <div className="flex items-center gap-4 mb-3">
+            {/* Attendance percentage ring */}
+            <div className="relative w-16 h-16 flex-shrink-0">
+              <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
+                <circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" strokeWidth="4" className="text-slate-800" />
+                <circle cx="32" cy="32" r="28" fill="none" strokeWidth="4"
+                  strokeDasharray={`${(cs.averageAttendanceRate / 100) * 175.93} 175.93`}
+                  strokeLinecap="round"
+                  className={clsx(rateColor === 'emerald' ? 'text-emerald-400' : rateColor === 'amber' ? 'text-amber-400' : 'text-red-400')}
+                  stroke="currentColor"
+                />
+              </svg>
+              <span className={clsx("absolute inset-0 flex items-center justify-center text-sm font-bold font-mono", rateColor === 'emerald' ? 'text-emerald-400' : rateColor === 'amber' ? 'text-amber-400' : 'text-red-400')}>
+                {cs.averageAttendanceRate}%
+              </span>
+            </div>
+            <div className="text-xs space-y-1">
+              <p className="text-slate-300"><span className="font-bold text-white">{cs.totalStudents}</span> students enrolled</p>
+              {cs.studentsBelow80Count > 0 && (
+                <p className="text-amber-400 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3" />
+                  {cs.studentsBelow80Count} below 80%
+                </p>
+              )}
+            </div>
+          </div>
+          {cs.studentsBelow80Pct?.length > 0 && (
+            <div className="space-y-1 border-t border-white/5 pt-2">
+              <p className="text-[10px] text-slate-500 uppercase tracking-wider">At-Risk Students</p>
+              {cs.studentsBelow80Pct.slice(0, 4).map((s: any, i: number) => (
+                <div key={i} className="flex justify-between text-xs py-1">
+                  <span className="text-slate-300">{s.name}</span>
+                  <span className="font-mono text-amber-400">{s.rate}%</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Individual student variant
+    if (result.attendance) {
+      const a = result.attendance;
+      const rateColor = a.overallRate >= 90 ? 'emerald' : a.overallRate >= 75 ? 'amber' : 'red';
+      return (
+        <div className="w-[85%] bg-slate-900 border border-white/5 backdrop-blur-md rounded-2xl p-4 shadow-xl">
+          <div className="flex items-center gap-2 mb-3">
+            <Users className="w-4 h-4 text-teal-400" />
+            <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-space">Attendance · {a.studentName}</h4>
+          </div>
+          <div className="flex items-center gap-4 mb-3">
+            <div className="relative w-14 h-14 flex-shrink-0">
+              <svg className="w-14 h-14 -rotate-90" viewBox="0 0 56 56">
+                <circle cx="28" cy="28" r="24" fill="none" stroke="currentColor" strokeWidth="3.5" className="text-slate-800" />
+                <circle cx="28" cy="28" r="24" fill="none" strokeWidth="3.5"
+                  strokeDasharray={`${(a.overallRate / 100) * 150.8} 150.8`}
+                  strokeLinecap="round"
+                  className={clsx(rateColor === 'emerald' ? 'text-emerald-400' : rateColor === 'amber' ? 'text-amber-400' : 'text-red-400')}
+                  stroke="currentColor"
+                />
+              </svg>
+              <span className={clsx("absolute inset-0 flex items-center justify-center text-xs font-bold font-mono", rateColor === 'emerald' ? 'text-emerald-400' : rateColor === 'amber' ? 'text-amber-400' : 'text-red-400')}>
+                {a.overallRate}%
+              </span>
+            </div>
+            <div className="text-xs space-y-1 flex-1">
+              <div className="flex items-center gap-1.5">
+                <Zap className="w-3 h-3 text-amber-400" />
+                <span className="text-slate-300">{a.currentStreak} day streak</span>
+              </div>
+              <div className="flex gap-3 text-[10px]">
+                <span className="text-emerald-400">✓ {a.last14Days?.present || 0} present</span>
+                <span className="text-red-400">✗ {a.last14Days?.absent || 0} absent</span>
+                <span className="text-amber-400">◷ {a.last14Days?.late || 0} late</span>
+              </div>
+            </div>
+          </div>
+          {/* Last 7 days mini timeline */}
+          {a.recentHistory?.length > 0 && (
+            <div className="flex gap-1 items-center">
+              <span className="text-[9px] text-slate-500 mr-1">Last 7d:</span>
+              {a.recentHistory.map((h: any, i: number) => (
+                <div key={i} className={clsx(
+                  "w-5 h-5 rounded-md flex items-center justify-center text-[8px] font-bold border",
+                  h.status === 'present' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
+                  h.status === 'late' ? "bg-amber-500/10 text-amber-400 border-amber-500/20" :
+                  "bg-red-500/10 text-red-400 border-red-500/20"
+                )}>
+                  {h.status === 'present' ? '✓' : h.status === 'late' ? '◷' : '✗'}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    return renderGenericToolCard('getAttendanceData', result);
+  };
+
+  const renderAnalyticsCard = (result: any) => {
+    if (result.error) return renderErrorCard(result.error);
+    const insights = result.insights || [];
+    if (insights.length === 0) return <div className="text-xs text-slate-400 italic py-2">No insights generated.</div>;
+
+    const typeConfig: Record<string, { icon: any; bg: string; border: string; text: string }> = {
+      success: { icon: TrendingUp, bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', text: 'text-emerald-400' },
+      warning: { icon: AlertTriangle, bg: 'bg-amber-500/10', border: 'border-amber-500/20', text: 'text-amber-400' },
+      info: { icon: BarChart3, bg: 'bg-blue-500/10', border: 'border-blue-500/20', text: 'text-blue-400' },
+      prediction: { icon: TrendingDown, bg: 'bg-violet-500/10', border: 'border-violet-500/20', text: 'text-violet-400' },
+    };
+
+    return (
+      <div className="w-[85%] bg-slate-900 border border-white/5 backdrop-blur-md rounded-2xl p-4 shadow-xl">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-violet-400" />
+            <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-space">Analytics Insights</h4>
+          </div>
+          {result.studentCount && (
+            <span className="text-[9px] text-slate-500 font-mono">{result.studentCount} students · {result.classAvgAttendance}% avg</span>
+          )}
+        </div>
+        <div className="space-y-2">
+          {insights.map((insight: any, i: number) => {
+            const config = typeConfig[insight.type] || typeConfig.info;
+            const IconComponent = config.icon;
+            return (
+              <div key={i} className={clsx("p-2.5 rounded-xl border", config.bg, config.border)}>
+                <div className="flex items-start gap-2">
+                  <IconComponent className={clsx("w-3.5 h-3.5 mt-0.5 flex-shrink-0", config.text)} />
+                  <div className="min-w-0">
+                    <p className={clsx("text-xs font-medium", config.text)}>{insight.message}</p>
+                    {insight.detail && <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed">{insight.detail}</p>}
+                  </div>
+                  {insight.priority === 'high' && (
+                    <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-red-500/10 text-red-400 border border-red-500/20 flex-shrink-0">URGENT</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const renderNotificationCard = (result: any) => {
+    if (result.error) return renderErrorCard(result.error);
+    return (
+      <div className="w-[85%] bg-gradient-to-br from-violet-950/20 via-slate-900 to-slate-900 border border-violet-500/20 backdrop-blur-md rounded-2xl p-4 shadow-xl">
+        <div className="flex items-center gap-2 mb-3">
+          <Bell className="w-4 h-4 text-violet-400" />
+          <h4 className="text-xs font-bold text-violet-300 uppercase tracking-wider font-space">Notification Sent</h4>
+        </div>
+        <div className="space-y-2 text-xs">
+          <div className="flex justify-between items-center">
+            <span className="text-slate-400">Recipient</span>
+            <span className="font-medium text-slate-200">{result.recipientName}</span>
+          </div>
+          <div className="p-2 rounded-lg bg-slate-950/50 border border-white/5">
+            <p className="text-[10px] text-slate-500 uppercase mb-1">Message</p>
+            <p className="text-slate-300 text-xs leading-relaxed">"{result.messagePreview}"</p>
+          </div>
+          <div className="flex items-center gap-3 pt-1">
+            {result.pushStatus === 'delivered' && (
+              <span className="flex items-center gap-1 text-[10px] text-emerald-400">
+                <CheckCircle2 className="w-3 h-3" /> Push delivered
+              </span>
+            )}
+            {result.smsStatus === 'queued' && (
+              <span className="flex items-center gap-1 text-[10px] text-cyan-400">
+                <Clock className="w-3 h-3" /> SMS queued {result.smsPhone && `(${result.smsPhone})`}
+              </span>
+            )}
+            {result.smsStatus === 'skipped' && (
+              <span className="flex items-center gap-1 text-[10px] text-amber-400">
+                <AlertTriangle className="w-3 h-3" /> No phone found
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderErrorCard = (errorMsg: string) => (
+    <div className="w-[85%] text-xs text-red-400 bg-red-950/20 border border-red-500/20 p-2.5 rounded-xl flex items-center gap-2">
+      <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+      <span>{errorMsg}</span>
+    </div>
+  );
+
+  const renderGenericToolCard = (toolName: string, result: any) => {
+    if (result.error) return renderErrorCard(result.error);
+    // Format tool name for display
+    const displayName = toolName.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()).trim();
+    const entries = Object.entries(result).filter(([k]) => k !== 'error');
+    return (
+      <div className="w-[85%] bg-slate-900/80 border border-white/5 backdrop-blur-md rounded-2xl p-4 shadow-xl">
+        <div className="flex items-center gap-2 mb-3">
+          <Zap className="w-4 h-4 text-slate-400" />
+          <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider font-space">{displayName}</h4>
+        </div>
+        <div className="space-y-1 text-xs max-h-48 overflow-y-auto custom-scrollbar">
+          {entries.map(([key, val], i) => (
+            <div key={i} className="flex justify-between items-start py-1 border-b border-white/5 last:border-0">
+              <span className="text-slate-500 text-[10px] font-mono">{key}</span>
+              <span className="text-slate-300 text-right max-w-[60%] truncate font-mono text-[10px]">
+                {typeof val === 'object' ? JSON.stringify(val).substring(0, 80) + '…' : String(val)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // ── Tool Card Router ────────────────────────────────────────────
+  const renderToolResult = (toolName: string, result: any, args: any) => {
+    switch (toolName) {
+      case 'getInventoryStock':
+        return (
+          <div className="w-[85%] bg-slate-900 border border-white/5 backdrop-blur-md rounded-2xl p-4 shadow-xl">
+            <div className="flex items-center gap-2 mb-3">
+              <Box className="w-4 h-4 text-emerald-400" />
+              <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-space">
+                Inventory: {args.locationName || args.location_name || args.location || ''}
+              </h4>
+            </div>
+            {result.error ? renderErrorCard(result.error) : !result.inventory || result.inventory.length === 0 ? (
+              <div className="text-xs text-slate-400 italic py-2">No equipment logged at this location.</div>
+            ) : (
+              <div className="space-y-2">
+                {result.inventory.map((item: any) => {
+                  const isLowStock = (item.available_qty ?? item.quantity ?? 0) <= (item.low_stock_threshold ?? 5);
+                  return (
+                    <div key={item.id} className="flex justify-between items-center py-2 border-b border-white/5 last:border-0 text-xs">
+                      <span className="font-medium text-slate-300">{item.item_name}</span>
+                      <div className="flex items-center gap-2.5">
+                        <span className="font-mono text-slate-400 font-bold">{item.available_qty ?? item.quantity} units</span>
+                        <span className={clsx(
+                          "px-2 py-0.5 rounded-full text-[9px] font-bold uppercase border",
+                          isLowStock ? "bg-red-500/10 text-red-400 border-red-500/20" : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
+                        )}>{isLowStock ? "Low Stock" : "OK"}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      case 'logStudentAssessment':
+        return (
+          <div className="w-[85%] bg-gradient-to-br from-indigo-950/20 via-slate-900 to-slate-900 border border-indigo-500/20 backdrop-blur-md rounded-2xl p-4 shadow-xl">
+            <div className="flex justify-between items-start mb-3">
+              <div className="flex items-center gap-2">
+                <ClipboardCheck className="w-4 h-4 text-indigo-400" />
+                <h4 className="text-xs font-bold text-indigo-300 uppercase tracking-wider font-space">Competency Logged</h4>
+              </div>
+              <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20">NITA</span>
+            </div>
+            {result.error ? renderErrorCard(result.error) : (
+              <div className="space-y-3">
+                <div className="flex justify-between items-center text-xs">
+                  <div>
+                    <p className="text-[10px] text-slate-400 uppercase">Student</p>
+                    <p className="font-bold text-slate-200">{args.studentName || args.student_name || args.student}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] text-slate-400 uppercase">Module</p>
+                    <p className="font-bold text-slate-200">{args.moduleName || args.module_name || args.module}</p>
+                  </div>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-950/50 border border-white/5 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[9px] text-slate-500 uppercase tracking-wide">Instructor Notes</p>
+                    <p className="text-xs text-slate-300 italic truncate">"{args.comments || args.comment || args.notes || args.feedback || 'Graded successfully.'}"</p>
+                  </div>
+                  <div className="bg-indigo-500/10 border border-indigo-500/20 px-3 py-1.5 rounded-lg flex-shrink-0">
+                    <span className="text-lg font-mono font-bold text-indigo-400">{args.score || args.grade || args.mark}%</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 text-[10px] text-emerald-400 font-medium">
+                  <CheckCircle2 className="w-3.5 h-3.5 animate-pulse" />
+                  <span>Database state updated</span>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      case 'getStudentData':
+        return renderStudentDataCard(result, args);
+      case 'getFeePayments':
+        return renderFeePaymentsCard(result, args);
+      case 'getSchedule':
+        return renderScheduleCard(result);
+      case 'getAttendanceData':
+        return renderAttendanceCard(result);
+      case 'getAnalyticsInsights':
+        return renderAnalyticsCard(result);
+      case 'sendNotification':
+        return renderNotificationCard(result);
+      default:
+        return renderGenericToolCard(toolName, result);
+    }
   };
 
   return (
@@ -379,12 +904,12 @@ export function SallyChat({ currentView }: { currentView?: string }) {
                 </div>
                 <div>
                   <h3 className="font-bold text-sm font-space tracking-wide">Sally</h3>
-                  <span className="text-[10px] text-emerald-400 font-medium font-mono uppercase tracking-wider">PRISM Copilot</span>
+                  <span className="text-[10px] text-emerald-400 font-medium font-mono uppercase tracking-wider">PRISM · {getInstitutionLabel(instType)}</span>
                 </div>
               </div>
 
               {/* Header Action Controls */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
                 {/* Real-time Vocal Speech Wave Visualizer */}
                 <AnimatePresence>
                   {isSpeaking && (
@@ -419,6 +944,17 @@ export function SallyChat({ currentView }: { currentView?: string }) {
                 >
                   {speechEnabled ? <Volume2 className="w-4 h-4 text-emerald-400" /> : <VolumeX className="w-4 h-4" />}
                 </button>
+
+                {/* Clear Chat Button */}
+                {messages.length > 0 && (
+                  <button 
+                    onClick={clearChat}
+                    className="text-slate-400 hover:text-red-400 transition p-1.5 rounded-xl hover:bg-slate-800 flex items-center justify-center"
+                    title="Clear Chat History"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
                 
                 {/* Close Button */}
                 <button 
@@ -439,7 +975,8 @@ export function SallyChat({ currentView }: { currentView?: string }) {
                   <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-500/10 to-teal-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-4 animate-float">
                     <Sparkles className="w-6 h-6" />
                   </div>
-                  <h4 className="font-bold text-slate-200 text-sm mb-1 font-space">Meet Sally, PRISM Companion</h4>
+                  <h4 className="font-bold text-slate-200 text-sm mb-0.5 font-space">{getTimeGreeting()}!</h4>
+                  <p className="text-[10px] text-emerald-400/80 font-mono uppercase tracking-wider mb-1">Sally · {getInstitutionLabel(instType)}</p>
                   <p className="text-xs text-slate-400 max-w-[260px] leading-relaxed mb-6">
                     {copilotDescription}
                   </p>
@@ -451,14 +988,15 @@ export function SallyChat({ currentView }: { currentView?: string }) {
                         key={idx}
                         whileHover={{ scale: 1.02, x: 2 }}
                         whileTap={{ scale: 0.98 }}
-                        onClick={() => sendMessage({ text: item.prompt })}
+                        onClick={() => { setLastUserMessage(item.prompt); sendMessage({ text: item.prompt }); }}
                         className="flex items-start text-left p-3 rounded-2xl bg-slate-900/35 border border-white/5 hover:border-slate-800 hover:bg-slate-900/60 transition-all group"
                       >
                         <div className={clsx(
                           "p-2 rounded-xl border mr-3 flex-shrink-0",
                           item.color === "emerald" && "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
                           item.color === "indigo" && "bg-indigo-500/10 border-indigo-500/20 text-indigo-400",
-                          item.color === "amber" && "bg-amber-500/10 border-amber-500/20 text-amber-400"
+                          item.color === "amber" && "bg-amber-500/10 border-amber-500/20 text-amber-400",
+                          item.color === "violet" && "bg-violet-500/10 border-violet-500/20 text-violet-400"
                         )}>
                           <item.icon className="w-4 h-4" />
                         </div>
@@ -515,102 +1053,30 @@ export function SallyChat({ currentView }: { currentView?: string }) {
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             className="flex justify-start w-full"
                           >
-                            {/* Inventory Stock Result Card */}
-                            {toolName === 'getInventoryStock' && (
-                              <div className="w-[85%] bg-slate-900 border border-white/5 backdrop-blur-md rounded-2xl p-4 shadow-xl">
-                                <div className="flex items-center gap-2 mb-3">
-                                  <Box className="w-4 h-4 text-emerald-400" />
-                                  <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-space">
-                                    Inventory: {args.locationName}
-                                  </h4>
-                                </div>
-                                {result.error ? (
-                                  <div className="text-xs text-red-400 bg-red-950/20 border border-red-500/20 p-2.5 rounded-xl flex items-center gap-2">
-                                    <AlertTriangle className="w-3.5 h-3.5" />
-                                    <span>{result.error}</span>
-                                  </div>
-                                ) : !result.inventory || result.inventory.length === 0 ? (
-                                  <div className="text-xs text-slate-400 italic py-2">
-                                    No equipment logged at this location.
-                                  </div>
-                                ) : (
-                                  <div className="space-y-2">
-                                    {result.inventory.map((item: any) => {
-                                      const isLowStock = item.quantity <= item.low_stock_threshold;
-                                      return (
-                                        <div key={item.id} className="flex justify-between items-center py-2 border-b border-white/5 last:border-0 text-xs">
-                                          <span className="font-medium text-slate-300">{item.item_name}</span>
-                                          <div className="flex items-center gap-2.5">
-                                            <span className="font-mono text-slate-400 font-bold">{item.quantity} units</span>
-                                            <span className={clsx(
-                                              "px-2 py-0.5 rounded-full text-[9px] font-bold uppercase border",
-                                              isLowStock
-                                                ? "bg-red-500/10 text-red-400 border-red-500/20"
-                                                : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20"
-                                            )}>
-                                              {isLowStock ? "Low Stock" : "OK"}
-                                            </span>
-                                          </div>
-                                        </div>
-                                      );
-                                    })}
-                                  </div>
-                                )}
-                              </div>
-                            )}
-
-                            {/* Assessment Grading Result Card */}
-                            {toolName === 'logStudentAssessment' && (
-                              <div className="w-[85%] bg-gradient-to-br from-indigo-950/20 via-slate-900 to-slate-900 border border-indigo-500/20 backdrop-blur-md rounded-2xl p-4 shadow-xl">
-                                <div className="flex justify-between items-start mb-3">
-                                  <div className="flex items-center gap-2">
-                                    <ClipboardCheck className="w-4 h-4 text-indigo-400" />
-                                    <h4 className="text-xs font-bold text-indigo-300 uppercase tracking-wider font-space">
-                                      Competency Logged
-                                    </h4>
-                                  </div>
-                                  <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                                    NITA
-                                  </span>
-                                </div>
-                                {result.error ? (
-                                  <div className="text-xs text-red-400 bg-red-950/20 border border-red-500/20 p-2.5 rounded-xl flex items-center gap-2">
-                                    <AlertTriangle className="w-3.5 h-3.5" />
-                                    <span>{result.error}</span>
-                                  </div>
-                                ) : (
-                                  <div className="space-y-3">
-                                    <div className="flex justify-between items-center text-xs">
-                                      <div>
-                                        <p className="text-[10px] text-slate-400 uppercase">Student</p>
-                                        <p className="font-bold text-slate-200">{args.studentName}</p>
-                                      </div>
-                                      <div className="text-right">
-                                        <p className="text-[10px] text-slate-400 uppercase">Module</p>
-                                        <p className="font-bold text-slate-200">{args.moduleName}</p>
-                                      </div>
-                                    </div>
-                                    <div className="p-3 rounded-xl bg-slate-950/50 border border-white/5 flex items-center justify-between gap-3">
-                                      <div className="min-w-0">
-                                        <p className="text-[9px] text-slate-500 uppercase tracking-wide">Instructor Notes</p>
-                                        <p className="text-xs text-slate-300 italic truncate">"{args.comments || 'Graded successfully.'}"</p>
-                                      </div>
-                                      <div className="bg-indigo-500/10 border border-indigo-500/20 px-3 py-1.5 rounded-lg flex-shrink-0">
-                                        <span className="text-lg font-mono font-bold text-indigo-400">{args.score}%</span>
-                                      </div>
-                                    </div>
-                                    <div className="flex items-center gap-1.5 text-[10px] text-emerald-400 font-medium">
-                                      <CheckCircle2 className="w-3.5 h-3.5 animate-pulse" />
-                                      <span>Database state updated</span>
-                                    </div>
-                                  </div>
-                                )}
-                              </div>
-                            )}
+                            {renderToolResult(toolName, result, args)}
                           </motion.div>
                         );
                       }
                       
+                      // Show loading state for in-progress tool calls
+                      if (state === 'call' || state === 'partial-call') {
+                        return (
+                          <motion.div 
+                            key={toolCallId}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="flex justify-start w-full"
+                          >
+                            <div className="w-[85%] bg-slate-900/40 border border-white/5 rounded-2xl p-3 text-xs">
+                              <div className="flex items-center gap-2 text-slate-400">
+                                <Zap className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                                <span>Querying {toolName.replace(/([A-Z])/g, ' $1').toLowerCase()}...</span>
+                              </div>
+                            </div>
+                          </motion.div>
+                        );
+                      }
+
                       return null;
                     })}
                   </div>
@@ -636,11 +1102,25 @@ export function SallyChat({ currentView }: { currentView?: string }) {
                   </div>
                 </div>
               )}
+
+              {/* Error Banner with Retry */}
               {error && (
                 <div className="flex justify-start">
-                  <div className="bg-red-950/30 border border-red-800/40 rounded-2xl rounded-tl-none p-3.5 text-red-300 text-xs flex items-center gap-2">
-                    <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
-                    <span>Error: {error.message || "Failed to retrieve response"}</span>
+                  <div className="bg-red-950/30 border border-red-800/40 rounded-2xl rounded-tl-none p-3.5 text-red-300 text-xs space-y-2">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                      <span>Error: {error.message || "Failed to retrieve response"}</span>
+                    </div>
+                    {lastUserMessage && (
+                      <button
+                        onClick={handleRetry}
+                        disabled={isLoading}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 hover:bg-red-500/20 hover:text-red-200 transition-all text-[11px] font-medium disabled:opacity-50"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        Retry last message
+                      </button>
+                    )}
                   </div>
                 </div>
               )}

@@ -1,0 +1,5 @@
+# Skip native Android assets — not needed for Vercel web deployment
+android/
+
+# Skip pre-built dist — Vercel runs its own build
+dist/

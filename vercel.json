@@ -1,4 +1,6 @@
 {
+    "buildCommand": "node --max-old-space-size=3072 node_modules/vite/bin/vite.js build",
+    "outputDirectory": "dist",
     "functions": {
         "api/**/*.ts": {
             "maxDuration": 60
