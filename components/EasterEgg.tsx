@@ -301,7 +301,7 @@ export const EasterEgg: React.FC<EasterEggProps> = ({ isOpen, onClose }) => {
               <div className="flex items-center gap-3">
                 <span className="text-[9px] text-slate-400 font-bold uppercase tracking-widest font-mono">Launch Team:</span>
                 <span className="text-[10px] bg-slate-950 border border-slate-800 text-slate-300 font-mono font-bold px-2.5 py-1 rounded-lg">PRISM Bream</span>
-                <span className="text-[10px] bg-slate-950 border border-slate-800 text-slate-300 font-mono font-bold px-2.5 py-1 rounded-lg">Solar Mtaani</span>
+                <span className="text-[10px] bg-slate-950 border border-slate-800 text-slate-300 font-mono font-bold px-2.5 py-1 rounded-lg">Vocational Hub</span>
               </div>
             </div>
 

@@ -64,8 +64,8 @@ const FeatureCarousel: React.FC = () => (
 export default function LoginPage() {
     const { login, setupAdmin, registerInstructor, checkAdminExists, isLoading, loginError, clearLoginError } = useAuth();
     const { preferences } = useTheme();
-    const brandingName = preferences?.mtaaniCenter 
-        ? `Mfumo wa ${preferences.mtaaniCenter}` 
+    const brandingName = preferences?.institutionBranch 
+        ? `Mfumo wa ${preferences.institutionBranch}` 
         : 'Mfumo wa PRISM OS';
 
     const [view, setView] = useState<'login' | 'setup' | 'register'>('login');

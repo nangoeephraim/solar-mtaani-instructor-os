@@ -112,8 +112,8 @@ export const Curriculum: React.FC<CurriculumProps> = ({ data, onNavigate }) => {
     }
   }, [activeCurriculum]);
 
-  // Determine if this is a Solar Mtaani vocational context
-  const isSolarMtaaniContext = activeCurriculum === 'TVET_CDACC' || activeCurriculum === 'NITA';
+  // Determine if this is a vocational context
+  const isVocationalContext = activeCurriculum === 'TVET_CDACC' || activeCurriculum === 'NITA';
 
   return (
     <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-6 custom-scrollbar space-y-6">
@@ -134,9 +134,9 @@ export const Curriculum: React.FC<CurriculumProps> = ({ data, onNavigate }) => {
               <span className={clsx("px-3 py-1 text-[10px] font-black uppercase tracking-wider rounded-full border", curriculumDetails.badgeBg)}>
                 {curriculumDetails.title}
               </span>
-              {isSolarMtaaniContext && (
+              {isVocationalContext && (
                 <span className="flex items-center gap-1 px-3 py-1 text-[10px] font-black uppercase tracking-wider rounded-full bg-orange-500/10 text-orange-700 dark:text-orange-400 border border-orange-500/20 animate-pulse">
-                  <Zap size={10} className="fill-current" /> Solar Mtaani Preset
+                  <Zap size={10} className="fill-current" /> Vocational Preset
                 </span>
               )}
             </div>
@@ -157,16 +157,16 @@ export const Curriculum: React.FC<CurriculumProps> = ({ data, onNavigate }) => {
         </div>
       </div>
 
-      {/* Solar Mtaani Highlight Box */}
-      {isSolarMtaaniContext && (
+      {/* Vocational Highlight Box */}
+      {isVocationalContext && (
         <div className="p-5 rounded-2xl border border-orange-200 dark:border-orange-950/40 bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-950/10 dark:to-amber-950/10 flex gap-4 items-start shadow-sm">
           <div className="p-3 rounded-xl bg-orange-500/10 text-orange-600 dark:text-orange-400 flex-shrink-0">
             <Sparkles size={20} />
           </div>
           <div>
-            <h4 className="text-sm font-bold text-orange-850 dark:text-orange-300 font-google">Solar Mtaani Vocational Standard (Kibera/Mtaani Project)</h4>
+            <h4 className="text-sm font-bold text-orange-850 dark:text-orange-300 font-google">Vocational Technical Standards</h4>
             <p className="text-xs text-orange-750 dark:text-orange-400 mt-1 leading-relaxed">
-              This preset loads the standardized TVET CDACC / NITA syllabus for Solar PV Technology and Basic ICT. It is specifically designed to bridge the learning gap for local youth by providing practical assessment modules for workplace safety, battery bank configuration, and system commissioning under EPRA standards.
+              This preset loads the standardized TVET CDACC / NITA syllabus for vocational and technical courses. It is designed to bridge the learning gap by providing practical assessment modules for workplace safety, equipment operation, and technical system commissioning.
             </p>
           </div>
         </div>

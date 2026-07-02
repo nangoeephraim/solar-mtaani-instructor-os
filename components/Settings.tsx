@@ -1038,18 +1038,18 @@ const Settings: React.FC<SettingsProps> = ({ onDataReset }) => {
                             <div>
                                 <label className="text-[11px] font-bold text-[var(--md-sys-color-on-surface-variant)] uppercase block mb-2 px-1">Training Center / Branch</label>
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                    {['Kibera', 'Mathare', 'Mukuru', 'Kawangware', 'Mombasa', 'Kisumu', 'Other'].map(center => {
-                                        const isSelected = (preferences.mtaaniCenter === center) || 
-                                                           (center === 'Other' && !['Kibera', 'Mathare', 'Mukuru', 'Kawangware', 'Mombasa', 'Kisumu'].includes(preferences.mtaaniCenter || ''));
+                                    {['Main Campus', 'West Campus', 'East Campus', 'Other'].map(center => {
+                                        const isSelected = (preferences.institutionBranch === center) || 
+                                                           (center === 'Other' && !['Main Campus', 'West Campus', 'East Campus'].includes(preferences.institutionBranch || ''));
                                         return (
                                             <button
                                                 key={center}
                                                 type="button"
                                                 onClick={() => {
                                                     if (center !== 'Other') {
-                                                        setPreference('mtaaniCenter', center);
+                                                        setPreference('institutionBranch', center);
                                                     } else {
-                                                        setPreference('mtaaniCenter', ''); // Clear to prompt custom input
+                                                        setPreference('institutionBranch', ''); // Clear to prompt custom input
                                                     }
                                                 }}
                                                 className={clsx(
@@ -1066,13 +1066,13 @@ const Settings: React.FC<SettingsProps> = ({ onDataReset }) => {
                                 </div>
 
                                 {/* Custom Center Input */}
-                                {!['Kibera', 'Mathare', 'Mukuru', 'Kawangware', 'Mombasa', 'Kisumu'].includes(preferences.mtaaniCenter || '') && (
+                                {!['Main Campus', 'West Campus', 'East Campus'].includes(preferences.institutionBranch || '') && (
                                     <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className="mt-3">
                                         <input
                                             type="text"
-                                            value={preferences.mtaaniCenter || ''}
-                                            onChange={e => setPreference('mtaaniCenter', e.target.value)}
-                                            placeholder="Enter custom center name (e.g. Kangemi, Nakuru)"
+                                            value={preferences.institutionBranch || ''}
+                                            onChange={e => setPreference('institutionBranch', e.target.value)}
+                                            placeholder="Enter custom center name (e.g. Campus Location, Branch City)"
                                             className="w-full px-4 py-2.5 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl text-xs font-medium text-[var(--md-sys-color-on-surface)] focus:outline-none input-glow transition-all font-google animate-fade-in"
                                         />
                                     </motion.div>

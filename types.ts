@@ -313,7 +313,7 @@ export interface AppPreferences {
   enableAI: boolean;
   reducedMotion: boolean;
   notificationsEnabled: boolean;
-  mtaaniCenter?: string;
+  institutionBranch?: string;
   defaultSubject?: string;
   enableSwahiliGreeting?: boolean;
 
@@ -361,7 +361,7 @@ export const DEFAULT_SETTINGS: InstructorSettings = {
     enableAI: true,
     reducedMotion: false,
     notificationsEnabled: true,
-    mtaaniCenter: 'Kibera',
+    institutionBranch: 'Main Campus',
     defaultSubject: 'All',
     enableSwahiliGreeting: true,
     institutionType: 'tvet',

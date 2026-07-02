@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
-import { Sparkles, Send, Volume2, VolumeX, X, Box, ClipboardCheck, ArrowUpRight, CheckCircle2, AlertTriangle, HelpCircle, Trash2, RotateCcw, Users, CreditCard, Calendar, BarChart3, Bell, TrendingUp, TrendingDown, Clock, Zap } from 'lucide-react';
+import { Sparkles, Send, Volume2, VolumeX, X, Box, ClipboardCheck, ArrowUpRight, CheckCircle2, AlertTriangle, HelpCircle, Trash2, RotateCcw, Users, CreditCard, Calendar, BarChart3, Bell, TrendingUp, TrendingDown, Clock, Zap, Mic, MicOff } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
 import { useTheme } from '../contexts/ThemeContext';
@@ -181,9 +181,9 @@ export function SallyChat({ currentView }: { currentView?: string }) {
       default:
         return [
           {
-            label: "Check Multimeters in Kibera",
+            label: "Check Multimeter Inventory",
             subtext: "Query real-time stock levels",
-            prompt: "Check the multimeter stock in Kibera",
+            prompt: "Check the multimeter stock at Main Campus",
             icon: Box,
             color: "emerald"
           },
@@ -224,6 +224,8 @@ export function SallyChat({ currentView }: { currentView?: string }) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const messageEndRef = useRef<HTMLDivElement | null>(null);
   const activeUtterancesRef = useRef<SpeechSynthesisUtterance[]>([]);
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
 
   // Listen to Capacitor native back gesture to close AI drawer
   useEffect(() => {
@@ -393,7 +395,7 @@ export function SallyChat({ currentView }: { currentView?: string }) {
     const baseChips = [
       { label: "Class Attendance", prompt: "Show me the class attendance summary" },
       { label: "Run Analytics Insights", prompt: "Run the analytics engine and show me insights about our class" },
-      { label: "Check Inventory Stock", prompt: "Check inventory stock at Kibera" },
+      { label: "Check Inventory Stock", prompt: "Check inventory stock at Main Campus" },
       { label: "Today's Timetable", prompt: "Show me the schedule details for today" }
     ];
     return baseChips;
@@ -510,6 +512,57 @@ export function SallyChat({ currentView }: { currentView?: string }) {
     }
     setSpeechEnabled(!speechEnabled);
   };
+
+  const startListening = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) {
+      alert("Speech recognition is not supported in this browser.");
+      return;
+    }
+
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+
+    // Stop speaking when user wants to talk
+    if (window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+    }
+
+    const recognition = new SR();
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.lang = 'en-KE';
+
+    recognition.onstart = () => {
+      setIsListening(true);
+    };
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      if (transcript) {
+        setLastUserMessage(transcript);
+        sendMessage({ text: transcript });
+        triggerParticleBurst();
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error("Speech recognition error:", event.error);
+      setIsListening(false);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognitionRef.current = recognition;
+    recognition.start();
+  }, [isListening, sendMessage, triggerParticleBurst]);
 
   // Pre-load voices for Chrome/Safari compatibility
   useEffect(() => {
@@ -1571,6 +1624,22 @@ export function SallyChat({ currentView }: { currentView?: string }) {
                   placeholder="Ask Sally..."
                   className="flex-1 bg-transparent text-white rounded-xl px-3 py-2 text-xs md:text-sm outline-none placeholder:text-slate-500 font-sans"
                 />
+                
+                {/* Voice Input Button */}
+                <button
+                  type="button"
+                  onClick={startListening}
+                  className={clsx(
+                    "p-2 mr-1 rounded-xl transition-all flex items-center justify-center border",
+                    isListening 
+                      ? "bg-red-500/20 border-red-500/40 text-red-400 animate-pulse" 
+                      : "text-slate-400 hover:text-white border-transparent hover:bg-slate-800"
+                  )}
+                  title={isListening ? "Listening... Click to stop" : "Voice input (Hands-free)"}
+                >
+                  {isListening ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+                </button>
+
                 <button
                   type="submit"
                   disabled={isLoading || !input.trim()}

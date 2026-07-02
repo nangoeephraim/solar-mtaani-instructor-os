@@ -472,14 +472,14 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onNavigate }) => {
                     <p className="text-xs sm:text-sm font-semibold text-[var(--md-sys-color-secondary)] mt-2 flex items-center gap-1.5 select-none animate-fade-in">
                       <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                       <span>{preferences.enableSwahiliGreeting ?? true ? 'Karibu' : 'Welcome to'}</span>
-                      <span className="font-extrabold text-[var(--md-sys-color-on-surface)] border-b-2 border-dashed border-[var(--md-sys-color-primary)]/30 pb-0.5">{preferences.mtaaniCenter || 'Kibera'}</span>
-                      <span>Mtaani Center</span>
+                      <span className="font-extrabold text-[var(--md-sys-color-on-surface)] border-b-2 border-dashed border-[var(--md-sys-color-primary)]/30 pb-0.5">{preferences.institutionBranch || 'Main Campus'}</span>
+                      <span>Branch</span>
                     </p>
                     <div className="text-[11px] font-bold tracking-widest text-[var(--md-sys-color-primary)] uppercase mt-2.5 min-h-[16px] flex items-center">
                       <WordRotator 
                         words={
                           preferences.enableSwahiliGreeting ?? true 
-                            ? ["Kazi iendelee Mtaani", "Elimu ni Mwanga wetu", "Kukuza Vijana wa Leo", "Pamoja Tunaweza", "Nguvu ya Elimu"]
+                            ? ["Kazi iendelee Masomoni", "Elimu ni Mwanga wetu", "Kukuza Vijana wa Leo", "Pamoja Tunaweza", "Nguvu ya Elimu"]
                             : ["Empowering Every Learner", "Advancing Education Access", "Shaping Community Leaders", "Optimizing Workloads", "Illuminating Futures"]
                         } 
                         intervalMs={4000} 

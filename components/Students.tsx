@@ -421,7 +421,7 @@ const Students: React.FC<StudentsProps> = ({
                                     {/* Organization Header */}
                                     <div className="text-center mb-6 w-full border-b border-dashed border-gray-300 dark:border-gray-700 pb-4">
                                         <h2 className="text-sm font-bold tracking-widest text-[var(--md-sys-color-secondary)] uppercase">
-                                            {preferences.mtaaniCenter ? `${preferences.mtaaniCenter} Center` : 'PRISM Institute'}
+                                            {preferences.institutionBranch ? `${preferences.institutionBranch} Branch` : 'PRISM Institute'}
                                         </h2>
                                         <p className="text-[10px] text-[var(--md-sys-color-outline)] tracking-wider">OFFICIAL STUDENT IDENTIFICATION</p>
                                     </div>
