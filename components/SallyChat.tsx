@@ -219,6 +219,9 @@ export function SallyChat({ currentView }: { currentView?: string }) {
   const [lastUserMessage, setLastUserMessage] = useState('');
   const [hasAttemptedRestore, setHasAttemptedRestore] = useState(false);
   const [shouldAnimateScroll, setShouldAnimateScroll] = useState(false);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
+  const [particles, setParticles] = useState<any[]>([]);
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const messageEndRef = useRef<HTMLDivElement | null>(null);
   const activeUtterancesRef = useRef<SpeechSynthesisUtterance[]>([]);
 
@@ -352,6 +355,28 @@ export function SallyChat({ currentView }: { currentView?: string }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!panelRef.current) return;
+    const rect = panelRef.current.getBoundingClientRect();
+    setMousePos({
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    });
+  };
+
+  const triggerParticleBurst = useCallback(() => {
+    const newParticles = Array.from({ length: 12 }).map((_, i) => ({
+      id: Math.random(),
+      x: (Math.random() - 0.5) * 80,
+      y: -Math.random() * 60 - 20,
+      scale: Math.random() * 0.4 + 0.6,
+      rotation: Math.random() * 360,
+      color: ['#818cf8', '#6ee7b7', '#fcd34d', '#fca5a5', '#c084fc'][Math.floor(Math.random() * 5)],
+    }));
+    setParticles(newParticles);
+    setTimeout(() => setParticles([]), 900);
+  }, []);
+
   const clearChat = useCallback(() => {
     setMessages([]);
     localStorage.removeItem(STORAGE_KEY);
@@ -360,7 +385,8 @@ export function SallyChat({ currentView }: { currentView?: string }) {
   const handleChipClick = useCallback((promptText: string) => {
     setLastUserMessage(promptText);
     sendMessage({ text: promptText });
-  }, [sendMessage]);
+    triggerParticleBurst();
+  }, [sendMessage, triggerParticleBurst]);
 
   const getProactiveChips = useCallback(() => {
     // Dynamic context-sensitive suggestions
@@ -503,6 +529,8 @@ export function SallyChat({ currentView }: { currentView?: string }) {
     };
   }, []);
 
+
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInput(e.target.value);
   };
@@ -512,6 +540,7 @@ export function SallyChat({ currentView }: { currentView?: string }) {
     if (!input.trim()) return;
     setLastUserMessage(input);
     sendMessage({ text: input });
+    triggerParticleBurst();
     setInput('');
   };
 
@@ -534,30 +563,30 @@ export function SallyChat({ currentView }: { currentView?: string }) {
     const students = result.students || [];
     if (students.length === 0) return <div className="text-xs text-slate-400 italic py-2">No students found.</div>;
     return (
-      <div className="w-[85%] bg-slate-900 border border-white/5 backdrop-blur-md rounded-2xl p-4 shadow-xl">
-        <div className="flex items-center gap-2 mb-3">
-          <Users className="w-4 h-4 text-violet-400" />
-          <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-space">
+      <div className="w-[88%] sally-glass-bubble border-l-2 border-l-violet-500 rounded-2xl p-3.5 shadow-xl space-y-3">
+        <div className="flex items-center gap-2 border-b border-white/5 pb-2">
+          <Users className="w-3.5 h-3.5 text-violet-400" />
+          <h4 className="text-[10px] font-bold text-slate-200 uppercase tracking-wider font-space">
             Student Records {args.studentName ? `· "${args.studentName}"` : ''}
           </h4>
         </div>
         <div className="space-y-2">
           {students.slice(0, 5).map((s: any, i: number) => (
-            <div key={s.id || i} className="flex justify-between items-center py-2 border-b border-white/5 last:border-0 text-xs">
+            <div key={s.id || i} className="flex justify-between items-center py-1.5 border-b border-white/5 last:border-0 text-xs">
               <div className="min-w-0 flex-1">
-                <p className="font-medium text-slate-200 truncate">{s.name || s.full_name}</p>
-                <p className="text-[10px] text-slate-500">{s.subject || s.cohort || 'No cohort'}</p>
+                <p className="font-semibold text-slate-200 truncate">{s.name || s.full_name}</p>
+                <p className="text-[9px] text-slate-500">{s.subject || s.cohort || 'No cohort'}</p>
               </div>
               <div className="flex items-center gap-3 flex-shrink-0">
                 {s.average_score !== undefined && (
                   <div className="text-right">
-                    <p className="text-[9px] text-slate-500 uppercase">Score</p>
+                    <p className="text-[8px] text-slate-500 uppercase">Score</p>
                     <p className="font-mono font-bold text-indigo-400">{Math.round(Number(s.average_score))}%</p>
                   </div>
                 )}
                 {s.attendance_rate !== undefined && (
                   <div className="text-right">
-                    <p className="text-[9px] text-slate-500 uppercase">Attend</p>
+                    <p className="text-[8px] text-slate-500 uppercase">Attend</p>
                     <p className={clsx("font-mono font-bold", Number(s.attendance_rate) >= 80 ? "text-emerald-400" : "text-amber-400")}>
                       {Math.round(Number(s.attendance_rate))}%
                     </p>
@@ -567,7 +596,7 @@ export function SallyChat({ currentView }: { currentView?: string }) {
             </div>
           ))}
           {students.length > 5 && (
-            <p className="text-[10px] text-slate-500 pt-1">+ {students.length - 5} more students</p>
+            <p className="text-[9px] text-slate-500 pt-0.5">+ {students.length - 5} more students</p>
           )}
         </div>
       </div>
@@ -579,31 +608,31 @@ export function SallyChat({ currentView }: { currentView?: string }) {
     const payments = result.payments || [];
     if (payments.length === 0) return <div className="text-xs text-slate-400 italic py-2">No payments found.</div>;
     return (
-      <div className="w-[85%] bg-slate-900 border border-white/5 backdrop-blur-md rounded-2xl p-4 shadow-xl">
-        <div className="flex items-center gap-2 mb-3">
-          <CreditCard className="w-4 h-4 text-green-400" />
-          <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-space">Fee Payments</h4>
+      <div className="w-[88%] sally-glass-bubble border-l-2 border-l-emerald-500 rounded-2xl p-3.5 shadow-xl space-y-3">
+        <div className="flex items-center gap-2 border-b border-white/5 pb-2">
+          <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
+          <h4 className="text-[10px] font-bold text-slate-200 uppercase tracking-wider font-space">Fee Payments</h4>
         </div>
         <div className="space-y-2">
           {payments.slice(0, 5).map((p: any, i: number) => (
-            <div key={p.id || i} className="p-2.5 rounded-xl bg-slate-950/50 border border-white/5 text-xs">
-              <div className="flex justify-between items-start mb-1.5">
-                <p className="font-medium text-slate-200">{p.student_name || 'Unknown'}</p>
+            <div key={p.id || i} className="p-2.5 rounded-xl bg-slate-950/40 border border-white/5 text-xs space-y-1.5">
+              <div className="flex justify-between items-start">
+                <p className="font-semibold text-slate-200">{p.student_name || 'Unknown'}</p>
                 <span className={clsx(
-                  "px-2 py-0.5 rounded-full text-[9px] font-bold uppercase border",
+                  "px-1.5 py-0.5 rounded-full text-[8px] font-bold uppercase border",
                   p.status === 'completed' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" :
                   p.status === 'pending' ? "bg-amber-500/10 text-amber-400 border-amber-500/20" :
                   "bg-red-500/10 text-red-400 border-red-500/20"
                 )}>{p.status}</span>
               </div>
-              <div className="flex justify-between items-center text-[10px] text-slate-400">
-                <span>KES {Number(p.amount || 0).toLocaleString()}</span>
-                {p.mpesa_receipt_number && <span className="font-mono">M-Pesa: {p.mpesa_receipt_number}</span>}
+              <div className="flex justify-between items-center text-[9px] text-slate-400">
+                <span className="font-bold text-slate-300">KES {Number(p.amount || 0).toLocaleString()}</span>
+                {p.mpesa_receipt_number && <span className="font-mono bg-white/5 px-1.5 py-0.5 rounded border border-white/5">M-Pesa: {p.mpesa_receipt_number}</span>}
               </div>
             </div>
           ))}
           {payments.length > 5 && (
-            <p className="text-[10px] text-slate-500 pt-1">+ {payments.length - 5} more payments</p>
+            <p className="text-[9px] text-slate-500 pt-0.5">+ {payments.length - 5} more payments</p>
           )}
         </div>
       </div>
@@ -616,18 +645,18 @@ export function SallyChat({ currentView }: { currentView?: string }) {
     if (slots.length === 0) return <div className="text-xs text-slate-400 italic py-2">No schedule slots found.</div>;
     const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     return (
-      <div className="w-[85%] bg-slate-900 border border-white/5 backdrop-blur-md rounded-2xl p-4 shadow-xl">
-        <div className="flex items-center gap-2 mb-3">
-          <Calendar className="w-4 h-4 text-cyan-400" />
-          <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-space">Timetable</h4>
+      <div className="w-[88%] sally-glass-bubble border-l-2 border-l-cyan-500 rounded-2xl p-3.5 shadow-xl space-y-3">
+        <div className="flex items-center gap-2 border-b border-white/5 pb-2">
+          <Calendar className="w-3.5 h-3.5 text-cyan-400" />
+          <h4 className="text-[10px] font-bold text-slate-200 uppercase tracking-wider font-space">Timetable</h4>
         </div>
         <div className="space-y-1.5">
           {slots.slice(0, 8).map((s: any, i: number) => (
             <div key={s.id || i} className="flex items-center gap-2 py-1.5 border-b border-white/5 last:border-0 text-xs">
-              <span className="w-8 text-[10px] font-bold text-cyan-400 font-mono">{dayNames[s.day_of_week] || '?'}</span>
-              <span className="text-[10px] text-slate-500 font-mono w-20">{s.start_time}–{s.end_time}</span>
+              <span className="w-8 text-[9px] font-bold text-cyan-400 font-mono">{dayNames[s.day_of_week] || '?'}</span>
+              <span className="text-[9px] text-slate-500 font-mono w-20">{s.start_time}–{s.end_time}</span>
               <span className="font-medium text-slate-200 truncate flex-1">{s.title}</span>
-              {s.type && <span className="px-1.5 py-0.5 rounded text-[9px] bg-slate-800 text-slate-400 border border-white/5">{s.type}</span>}
+              {s.type && <span className="px-1.5 py-0.5 rounded text-[8px] bg-white/5 text-slate-400 border border-white/5">{s.type}</span>}
             </div>
           ))}
           {slots.length > 8 && <p className="text-[10px] text-slate-500 pt-1">+ {slots.length - 8} more slots</p>}
@@ -644,16 +673,16 @@ export function SallyChat({ currentView }: { currentView?: string }) {
       const cs = result.classSummary;
       const rateColor = cs.averageAttendanceRate >= 90 ? 'emerald' : cs.averageAttendanceRate >= 75 ? 'amber' : 'red';
       return (
-        <div className="w-[85%] bg-slate-900 border border-white/5 backdrop-blur-md rounded-2xl p-4 shadow-xl">
-          <div className="flex items-center gap-2 mb-3">
-            <Users className="w-4 h-4 text-teal-400" />
-            <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-space">Class Attendance</h4>
+        <div className="w-[88%] sally-glass-bubble border-l-2 border-l-teal-500 rounded-2xl p-3.5 shadow-xl space-y-3">
+          <div className="flex items-center gap-2 border-b border-white/5 pb-2">
+            <Users className="w-3.5 h-3.5 text-teal-400" />
+            <h4 className="text-[10px] font-bold text-slate-200 uppercase tracking-wider font-space">Class Attendance</h4>
           </div>
-          <div className="flex items-center gap-4 mb-3">
+          <div className="flex items-center gap-4 mb-1">
             {/* Attendance percentage ring */}
             <div className="relative w-16 h-16 flex-shrink-0">
               <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
-                <circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" strokeWidth="4" className="text-slate-800" />
+                <circle cx="32" cy="32" r="28" fill="none" stroke="currentColor" strokeWidth="4" className="text-slate-800/40" />
                 <circle cx="32" cy="32" r="28" fill="none" strokeWidth="4"
                   strokeDasharray={`${(cs.averageAttendanceRate / 100) * 175.93} 175.93`}
                   strokeLinecap="round"
@@ -677,7 +706,7 @@ export function SallyChat({ currentView }: { currentView?: string }) {
           </div>
           {cs.studentsBelow80Pct?.length > 0 && (
             <div className="space-y-1 border-t border-white/5 pt-2">
-              <p className="text-[10px] text-slate-500 uppercase tracking-wider">At-Risk Students</p>
+              <p className="text-[9px] text-slate-500 uppercase tracking-wider">At-Risk Students</p>
               {cs.studentsBelow80Pct.slice(0, 4).map((s: any, i: number) => (
                 <div key={i} className="flex justify-between text-xs py-1">
                   <span className="text-slate-300">{s.name}</span>
@@ -695,15 +724,15 @@ export function SallyChat({ currentView }: { currentView?: string }) {
       const a = result.attendance;
       const rateColor = a.overallRate >= 90 ? 'emerald' : a.overallRate >= 75 ? 'amber' : 'red';
       return (
-        <div className="w-[85%] bg-slate-900 border border-white/5 backdrop-blur-md rounded-2xl p-4 shadow-xl">
-          <div className="flex items-center gap-2 mb-3">
-            <Users className="w-4 h-4 text-teal-400" />
-            <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-space">Attendance · {a.studentName}</h4>
+        <div className="w-[88%] sally-glass-bubble border-l-2 border-l-teal-500 rounded-2xl p-3.5 shadow-xl space-y-3">
+          <div className="flex items-center gap-2 border-b border-white/5 pb-2">
+            <Users className="w-3.5 h-3.5 text-teal-400" />
+            <h4 className="text-[10px] font-bold text-slate-200 uppercase tracking-wider font-space">Attendance · {a.studentName}</h4>
           </div>
-          <div className="flex items-center gap-4 mb-3">
+          <div className="flex items-center gap-4 mb-1">
             <div className="relative w-14 h-14 flex-shrink-0">
               <svg className="w-14 h-14 -rotate-90" viewBox="0 0 56 56">
-                <circle cx="28" cy="28" r="24" fill="none" stroke="currentColor" strokeWidth="3.5" className="text-slate-800" />
+                <circle cx="28" cy="28" r="24" fill="none" stroke="currentColor" strokeWidth="3.5" className="text-slate-800/40" />
                 <circle cx="28" cy="28" r="24" fill="none" strokeWidth="3.5"
                   strokeDasharray={`${(a.overallRate / 100) * 150.8} 150.8`}
                   strokeLinecap="round"
@@ -720,7 +749,7 @@ export function SallyChat({ currentView }: { currentView?: string }) {
                 <Zap className="w-3 h-3 text-amber-400" />
                 <span className="text-slate-300">{a.currentStreak} day streak</span>
               </div>
-              <div className="flex gap-3 text-[10px]">
+              <div className="flex gap-3 text-[9px]">
                 <span className="text-emerald-400">✓ {a.last14Days?.present || 0} present</span>
                 <span className="text-red-400">✗ {a.last14Days?.absent || 0} absent</span>
                 <span className="text-amber-400">◷ {a.last14Days?.late || 0} late</span>
@@ -729,8 +758,8 @@ export function SallyChat({ currentView }: { currentView?: string }) {
           </div>
           {/* Last 7 days mini timeline */}
           {a.recentHistory?.length > 0 && (
-            <div className="flex gap-1 items-center">
-              <span className="text-[9px] text-slate-500 mr-1">Last 7d:</span>
+            <div className="flex gap-1.5 items-center border-t border-white/5 pt-2">
+              <span className="text-[9px] text-slate-500 mr-1 uppercase">Last 7d:</span>
               {a.recentHistory.map((h: any, i: number) => (
                 <div key={i} className={clsx(
                   "w-5 h-5 rounded-md flex items-center justify-center text-[8px] font-bold border",
@@ -756,21 +785,21 @@ export function SallyChat({ currentView }: { currentView?: string }) {
     if (insights.length === 0) return <div className="text-xs text-slate-400 italic py-2">No insights generated.</div>;
 
     const typeConfig: Record<string, { icon: any; bg: string; border: string; text: string }> = {
-      success: { icon: TrendingUp, bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', text: 'text-emerald-400' },
-      warning: { icon: AlertTriangle, bg: 'bg-amber-500/10', border: 'border-amber-500/20', text: 'text-amber-400' },
-      info: { icon: BarChart3, bg: 'bg-blue-500/10', border: 'border-blue-500/20', text: 'text-blue-400' },
-      prediction: { icon: TrendingDown, bg: 'bg-violet-500/10', border: 'border-violet-500/20', text: 'text-violet-400' },
+      success: { icon: TrendingUp, bg: 'bg-emerald-500/5', border: 'border-emerald-500/10', text: 'text-emerald-400' },
+      warning: { icon: AlertTriangle, bg: 'bg-amber-500/5', border: 'border-amber-500/10', text: 'text-amber-400' },
+      info: { icon: BarChart3, bg: 'bg-blue-500/5', border: 'border-blue-500/10', text: 'text-blue-400' },
+      prediction: { icon: TrendingDown, bg: 'bg-violet-500/5', border: 'border-violet-500/10', text: 'text-violet-400' },
     };
 
     return (
-      <div className="w-[85%] bg-slate-900 border border-white/5 backdrop-blur-md rounded-2xl p-4 shadow-xl">
-        <div className="flex items-center justify-between mb-3">
+      <div className="w-[88%] sally-glass-bubble border-l-2 border-l-violet-500 rounded-2xl p-3.5 shadow-xl space-y-3">
+        <div className="flex items-center justify-between border-b border-white/5 pb-2">
           <div className="flex items-center gap-2">
-            <BarChart3 className="w-4 h-4 text-violet-400" />
-            <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-space">Analytics Insights</h4>
+            <BarChart3 className="w-3.5 h-3.5 text-violet-400" />
+            <h4 className="text-[10px] font-bold text-slate-200 uppercase tracking-wider font-space">Analytics Insights</h4>
           </div>
           {result.studentCount && (
-            <span className="text-[9px] text-slate-500 font-mono">{result.studentCount} students · {result.classAvgAttendance}% avg</span>
+            <span className="text-[8px] text-slate-500 font-mono">{result.studentCount} students · {result.classAvgAttendance}% avg</span>
           )}
         </div>
         <div className="space-y-2">
@@ -778,12 +807,12 @@ export function SallyChat({ currentView }: { currentView?: string }) {
             const config = typeConfig[insight.type] || typeConfig.info;
             const IconComponent = config.icon;
             return (
-              <div key={i} className={clsx("p-2.5 rounded-xl border", config.bg, config.border)}>
+              <div key={i} className={clsx("p-2 rounded-xl border", config.bg, config.border)}>
                 <div className="flex items-start gap-2">
                   <IconComponent className={clsx("w-3.5 h-3.5 mt-0.5 flex-shrink-0", config.text)} />
-                  <div className="min-w-0">
-                    <p className={clsx("text-xs font-medium", config.text)}>{insight.message}</p>
-                    {insight.detail && <p className="text-[10px] text-slate-400 mt-0.5 leading-relaxed">{insight.detail}</p>}
+                  <div className="min-w-0 flex-1">
+                    <p className={clsx("text-xs font-semibold leading-relaxed", config.text)}>{insight.message}</p>
+                    {insight.detail && <p className="text-[9px] text-slate-400 mt-0.5 leading-relaxed">{insight.detail}</p>}
                   </div>
                   {insight.priority === 'high' && (
                     <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-red-500/10 text-red-400 border border-red-500/20 flex-shrink-0">URGENT</span>
@@ -1188,14 +1217,24 @@ export function SallyChat({ currentView }: { currentView?: string }) {
       <AnimatePresence>
         {isOpen && (
           <motion.div
+            ref={panelRef}
+            onMouseMove={handleMouseMove}
             initial={{ opacity: 0, y: 60, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 60, scale: 0.95 }}
             transition={{ type: 'spring', stiffness: 380, damping: 28 }}
-            className="fixed bottom-0 right-0 sm:bottom-6 sm:right-6 w-full sm:w-[380px] h-full sm:h-[calc(100vh-120px)] sm:max-h-[680px] text-white flex flex-col z-50 overflow-hidden sm:rounded-3xl sally-glass-card shadow-2xl border border-white/10"
+            className="fixed bottom-0 right-0 sm:bottom-6 sm:right-6 w-full sm:w-[380px] h-full sm:h-[calc(100vh-120px)] sm:max-h-[680px] text-white flex flex-col z-50 overflow-hidden sm:rounded-3xl sally-glass-card shadow-2xl border border-white/10 relative"
           >
+            {/* Interactive Cursor Spotlight Glow */}
+            <div 
+              className="absolute inset-0 pointer-events-none transition-opacity duration-300 opacity-80 z-0"
+              style={{
+                background: `radial-gradient(360px circle at ${mousePos.x}px ${mousePos.y}px, rgba(99, 102, 241, 0.08), transparent 75%)`
+              }}
+            />
+
             {/* Header Panel */}
-            <div className="p-4 bg-slate-950/40 backdrop-blur-md flex items-center justify-between border-b border-white/5 flex-shrink-0">
+            <div className="p-4 bg-slate-950/40 backdrop-blur-md flex items-center justify-between border-b border-white/5 flex-shrink-0 z-10">
               <div className="flex items-center gap-3">
                 <div className="relative">
                   {/* Glowing Ring Around Avatar */}
@@ -1220,21 +1259,28 @@ export function SallyChat({ currentView }: { currentView?: string }) {
                       initial={{ opacity: 0, scale: 0.8 }}
                       animate={{ opacity: 1, scale: 1 }}
                       exit={{ opacity: 0, scale: 0.8 }}
-                      className="flex items-end gap-[3px] h-3.5 mr-1"
+                      className="flex items-center justify-center h-6 mr-1.5"
                     >
-                      {[1, 2, 3, 4, 5].map((i) => (
-                        <motion.div
-                          key={i}
-                          animate={{ height: [4, 14, 4] }}
-                          transition={{
-                            duration: 0.8,
-                            repeat: Infinity,
-                            delay: i * 0.12,
-                            ease: "easeInOut"
-                          }}
-                          className="w-[2px] bg-emerald-400 rounded-full"
-                        />
-                      ))}
+                      <svg className="w-14 h-5 overflow-visible" viewBox="0 0 100 20" fill="none">
+                        {/* Overlapping moving sine-wave paths with gradients */}
+                        <path d="M0,10 Q25,0 50,10 T100,10" stroke="url(#siri-blue)" strokeWidth="1.5" strokeLinecap="round" className="voice-wave-path" />
+                        <path d="M0,10 Q25,20 50,10 T100,10" stroke="url(#siri-pink)" strokeWidth="1.2" strokeLinecap="round" className="voice-wave-path" style={{ animationDelay: '-0.7s', animationDuration: '1.5s' }} />
+                        <path d="M0,10 Q25,5 50,10 T100,10" stroke="url(#siri-green)" strokeWidth="1.0" strokeLinecap="round" className="voice-wave-path" style={{ animationDelay: '-1.3s', animationDuration: '2.5s' }} />
+                        <defs>
+                          <linearGradient id="siri-blue" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%" stopColor="#4f46e5" />
+                            <stop offset="100%" stopColor="#06b6d4" />
+                          </linearGradient>
+                          <linearGradient id="siri-pink" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%" stopColor="#ec4899" stopOpacity="0.8" />
+                            <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.8" />
+                          </linearGradient>
+                          <linearGradient id="siri-green" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%" stopColor="#10b981" stopOpacity="0.6" />
+                            <stop offset="100%" stopColor="#3b82f6" stopOpacity="0.6" />
+                          </linearGradient>
+                        </defs>
+                      </svg>
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -1487,7 +1533,24 @@ export function SallyChat({ currentView }: { currentView?: string }) {
             </div>
 
             {/* Floating Pill Input Box */}
-            <div className="p-4 bg-transparent flex-shrink-0 space-y-3">
+            <div className="p-4 bg-transparent flex-shrink-0 space-y-3 relative z-10">
+              {/* Particle Explosion Layer */}
+              <div className="absolute inset-x-0 bottom-16 flex items-center justify-center pointer-events-none overflow-visible">
+                <AnimatePresence>
+                  {particles.map((p) => (
+                    <motion.div
+                      key={p.id}
+                      initial={{ opacity: 1, scale: p.scale, x: 0, y: 0, rotate: 0 }}
+                      animate={{ opacity: 0, scale: 0, x: p.x, y: p.y, rotate: p.rotation }}
+                      exit={{ opacity: 0 }}
+                      transition={{ duration: 0.8, ease: "easeOut" }}
+                      className="absolute w-1.5 h-1.5 rounded-full"
+                      style={{ backgroundColor: p.color, boxShadow: `0 0 8px ${p.color}` }}
+                    />
+                  ))}
+                </AnimatePresence>
+              </div>
+
               {/* Proactive suggestion chips */}
               <div className="flex gap-1.5 overflow-x-auto pb-1 px-0.5 scrollbar-hide no-scrollbar -mx-2 max-w-[calc(100%+16px)]">
                 {getProactiveChips().map((chip, idx) => (

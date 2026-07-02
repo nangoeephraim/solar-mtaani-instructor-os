@@ -1199,3 +1199,14 @@ body.keyboard-visible .app-view-container {
   -webkit-backdrop-filter: blur(12px);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
 }
+
+@keyframes voiceWave {
+  0% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 160; }
+}
+
+.voice-wave-path {
+  stroke-dasharray: 40 120;
+  animation: voiceWave 2s linear infinite;
+  transform-origin: center;
+}
