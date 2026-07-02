@@ -218,6 +218,7 @@ export function SallyChat({ currentView }: { currentView?: string }) {
   const [input, setInput] = useState('');
   const [lastUserMessage, setLastUserMessage] = useState('');
   const [hasAttemptedRestore, setHasAttemptedRestore] = useState(false);
+  const [shouldAnimateScroll, setShouldAnimateScroll] = useState(false);
   const messageEndRef = useRef<HTMLDivElement | null>(null);
   const activeUtterancesRef = useRef<SpeechSynthesisUtterance[]>([]);
 
@@ -343,7 +344,8 @@ export function SallyChat({ currentView }: { currentView?: string }) {
       if (stored) {
         const parsed = JSON.parse(stored);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          setMessages(parsed);
+          const historical = parsed.map((m: any) => ({ ...m, isHistorical: true }));
+          setMessages(historical);
         }
       }
     } catch { /* corrupt data — silent fail */ }
@@ -382,10 +384,22 @@ export function SallyChat({ currentView }: { currentView?: string }) {
     }
   }, [isOpen, hasAttemptedRestore, messages.length, isLoading, append]);
 
-  // Auto-scroll logic
+  // Dynamic scroll-to-bottom logic
   useEffect(() => {
-    messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isLoading]);
+    if (isOpen) {
+      if (shouldAnimateScroll) {
+        messageEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      } else {
+        // Instant snap to bottom on initial open to avoid scrolling animation fatigue
+        messageEndRef.current?.scrollIntoView({ behavior: 'auto' });
+        // Enable smooth scrolling for subsequent live messages
+        const timer = setTimeout(() => setShouldAnimateScroll(true), 100);
+        return () => clearTimeout(timer);
+      }
+    } else {
+      setShouldAnimateScroll(false);
+    }
+  }, [messages, isLoading, isOpen, shouldAnimateScroll]);
 
   // Speech synthesis implementation (Using Web Speech API with sequential queuing)
   const speak = (text: string) => {
@@ -1315,19 +1329,30 @@ export function SallyChat({ currentView }: { currentView?: string }) {
                     {/* Render Text message content */}
                     {messageText && (
                       <div className={clsx("flex", isUser ? 'justify-end' : 'justify-start')}>
-                        <motion.div 
-                          initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                          className={clsx(
+                        {(m as any).isHistorical ? (
+                          <div className={clsx(
                             "max-w-[85%] rounded-2xl p-4 text-sm shadow-md",
                             isUser 
                               ? "bg-gradient-to-tr from-indigo-600 to-violet-600 text-white rounded-tr-none shadow-indigo-500/10" 
                               : "bg-slate-900/50 text-slate-100 rounded-tl-none border border-white/5 backdrop-blur-md"
-                          )}
-                        >
-                          <p className="leading-relaxed whitespace-pre-wrap">{messageText}</p>
-                        </motion.div>
+                          )}>
+                            <p className="leading-relaxed whitespace-pre-wrap">{messageText}</p>
+                          </div>
+                        ) : (
+                          <motion.div 
+                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                            className={clsx(
+                              "max-w-[85%] rounded-2xl p-4 text-sm shadow-md",
+                              isUser 
+                                ? "bg-gradient-to-tr from-indigo-600 to-violet-600 text-white rounded-tr-none shadow-indigo-500/10" 
+                                : "bg-slate-900/50 text-slate-100 rounded-tl-none border border-white/5 backdrop-blur-md"
+                            )}
+                          >
+                            <p className="leading-relaxed whitespace-pre-wrap">{messageText}</p>
+                          </motion.div>
+                        )}
                       </div>
                     )}
                     
@@ -1339,7 +1364,16 @@ export function SallyChat({ currentView }: { currentView?: string }) {
                       const isLoadingState = state === 'call' || state === 'partial-call' || state === 'input-streaming' || state === 'input-available' || state === 'approval-requested';
                       
                       if (isResultState && result !== undefined) {
-                        return (
+                        return (m as any).isHistorical ? (
+                          <div key={toolCallId} className="flex flex-col items-start w-full gap-1">
+                            {isWriteTool(toolName) && (
+                              <div className="flex items-center gap-1.5 ml-1">
+                                <WriteActionBadge />
+                              </div>
+                            )}
+                            {renderToolResult(toolName, result, args)}
+                          </div>
+                        ) : (
                           <motion.div
                             key={toolCallId}
                             initial={{ opacity: 0, y: 10, scale: 0.95 }}
@@ -1357,7 +1391,11 @@ export function SallyChat({ currentView }: { currentView?: string }) {
                       }
 
                       if (isErrorState) {
-                        return (
+                        return (m as any).isHistorical ? (
+                          <div key={toolCallId} className="flex justify-start w-full">
+                            {renderToolResult(toolName, { error: errorText || 'Tool request failed' }, args)}
+                          </div>
+                        ) : (
                           <motion.div
                             key={toolCallId}
                             initial={{ opacity: 0, y: 10, scale: 0.95 }}

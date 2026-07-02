@@ -1110,7 +1110,10 @@ export default async function handler(req: Request) {
         execute: async (args: any) => {
           try {
             const studentName = args.studentName ?? args.student_name ?? args.student;
-            const getClassSummary = args.getClassSummary ?? args.get_class_summary;
+            let getClassSummary = args.getClassSummary ?? args.get_class_summary;
+            if (!studentName && getClassSummary === undefined) {
+              getClassSummary = true;
+            }
             const supabase = apiContext.supabase;
 
             if (getClassSummary) {
