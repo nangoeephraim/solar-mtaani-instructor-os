@@ -82,6 +82,82 @@ export function SallyChat({ currentView }: { currentView?: string }) {
   }, [instType]);
 
   const suggestedPrompts = React.useMemo(() => {
+    if (currentView === 'timetable') {
+      return [
+        {
+          label: "Today's Timetable",
+          subtext: "Show current classes",
+          prompt: "Show me the schedule details for today",
+          icon: Calendar,
+          color: "cyan"
+        },
+        {
+          label: "Check Conflicts",
+          subtext: "Find timetable issues",
+          prompt: "Are there any scheduling conflicts this week?",
+          icon: AlertTriangle,
+          color: "amber"
+        },
+        {
+          label: "Find Open Slots",
+          subtext: "Locate unassigned hours",
+          prompt: "What are the empty timetable slots for tomorrow?",
+          icon: Clock,
+          color: "indigo"
+        }
+      ];
+    }
+    if (currentView === 'attendance') {
+      return [
+        {
+          label: "Class Attendance Summary",
+          subtext: "Review overall rates",
+          prompt: "Show me the class attendance summary",
+          icon: Users,
+          color: "emerald"
+        },
+        {
+          label: "At-Risk Students",
+          subtext: "Attendance below 80%",
+          prompt: "Which students have attendance below 80%?",
+          icon: AlertTriangle,
+          color: "amber"
+        },
+        {
+          label: "Attendance Streak",
+          subtext: "Highest active attendance",
+          prompt: "Show me students with the highest attendance streak",
+          icon: Zap,
+          color: "indigo"
+        }
+      ];
+    }
+    if (currentView === 'overview-analytics') {
+      return [
+        {
+          label: "Run Analytics Insights",
+          subtext: "Deep analytical overview",
+          prompt: "Run the analytics engine and show me insights about our class",
+          icon: BarChart3,
+          color: "violet"
+        },
+        {
+          label: "Assessment Performance",
+          subtext: "Class scores summary",
+          prompt: "Show me the average assessment scores",
+          icon: ClipboardCheck,
+          color: "indigo"
+        },
+        {
+          label: "Compare Cohorts",
+          subtext: "Performance comparison",
+          prompt: "Compare our class performance to other cohorts",
+          icon: TrendingUp,
+          color: "emerald"
+        }
+      ];
+    }
+
     switch (instType) {
       case 'primary':
       case 'jss':
@@ -108,9 +184,9 @@ export function SallyChat({ currentView }: { currentView?: string }) {
             color: "emerald"
           },
           {
-            label: "Run Analytics",
-            subtext: "Get data-driven insights",
-            prompt: "Run the analytics engine and show me insights about our class",
+            label: "Competency Analytics",
+            subtext: "Check CBC performance trends",
+            prompt: "Run the PRISM analytics engine and show me CBC insights",
             icon: BarChart3,
             color: "violet"
           }
@@ -118,18 +194,25 @@ export function SallyChat({ currentView }: { currentView?: string }) {
       case 'highschool':
         return [
           {
-            label: "Calculate Grade Averages",
-            subtext: "Formula for KCSE mean grade",
-            prompt: "How is the KCSE mean grade calculated for high school students?",
+            label: "Log Chemistry Grade",
+            subtext: "Submit CAT marks for John Doe",
+            prompt: "Log a score of 78 in Chemistry for student John Doe with comment 'Improved lab work'",
+            icon: ClipboardCheck,
+            color: "indigo"
+          },
+          {
+            label: "KCSE Grading Scale",
+            subtext: "View KNEC highschool brackets",
+            prompt: "What is the standard KCSE highschool grading scale in PRISM?",
             icon: HelpCircle,
             color: "amber"
           },
           {
-            label: "Log Biology exam score",
-            subtext: "Submit a grade for Form 2 CAT",
-            prompt: "Log a score of 78 in Biology CAT 1 for student John Doe with comment 'Great improvement'",
-            icon: ClipboardCheck,
-            color: "indigo"
+            label: "Average Class Performance",
+            subtext: "Analytics and trends",
+            prompt: "Give me an analytics briefing on the class performance",
+            icon: BarChart3,
+            color: "violet"
           },
           {
             label: "Lab Equipment Stock Check",
@@ -137,30 +220,23 @@ export function SallyChat({ currentView }: { currentView?: string }) {
             prompt: "Check the physics lab equipment inventory stock",
             icon: Box,
             color: "emerald"
-          },
-          {
-            label: "Run Analytics",
-            subtext: "Performance trends and insights",
-            prompt: "Run the analytics engine and give me insights on class performance",
-            icon: BarChart3,
-            color: "violet"
           }
         ];
       case 'university':
         return [
+          {
+            label: "Log Exam Grade",
+            subtext: "Submit grade for Computer Science",
+            prompt: "Log a score of 82 in Computer Science for student John Doe with comment 'Excellent code submission'",
+            icon: ClipboardCheck,
+            color: "indigo"
+          },
           {
             label: "Check Semester GPA",
             subtext: "How to calculate student GPAs",
             prompt: "What is the formula for calculating GPA in tertiary systems?",
             icon: HelpCircle,
             color: "amber"
-          },
-          {
-            label: "Log Year 2 exam marks",
-            subtext: "Submit grade for Computer Science",
-            prompt: "Log a score of 82 in Computer Science for student John Doe with comment 'Excellent code submission'",
-            icon: ClipboardCheck,
-            color: "indigo"
           },
           {
             label: "Department Stock",
@@ -210,7 +286,7 @@ export function SallyChat({ currentView }: { currentView?: string }) {
           }
         ];
     }
-  }, [instType]);
+  }, [instType, currentView]);
 
   const [isOpen, setIsOpen] = useState(false);
   const [speechEnabled, setSpeechEnabled] = useState(false);
@@ -391,15 +467,55 @@ export function SallyChat({ currentView }: { currentView?: string }) {
   }, [sendMessage, triggerParticleBurst]);
 
   const getProactiveChips = useCallback(() => {
-    // Dynamic context-sensitive suggestions
-    const baseChips = [
-      { label: "Class Attendance", prompt: "Show me the class attendance summary" },
-      { label: "Run Analytics Insights", prompt: "Run the analytics engine and show me insights about our class" },
-      { label: "Check Inventory Stock", prompt: "Check inventory stock at Main Campus" },
-      { label: "Today's Timetable", prompt: "Show me the schedule details for today" }
-    ];
-    return baseChips;
-  }, []);
+    switch (currentView) {
+      case 'timetable':
+        return [
+          { label: "Today's Timetable", prompt: "Show me the schedule details for today" },
+          { label: "Check Conflicts", prompt: "Are there any scheduling conflicts this week?" },
+          { label: "Find Open Slots", prompt: "What are the empty timetable slots for tomorrow?" }
+        ];
+      case 'attendance':
+        return [
+          { label: "Class Attendance Summary", prompt: "Show me the class attendance summary" },
+          { label: "At-Risk Students", prompt: "Which students have attendance below 80%?" },
+          { label: "Attendance Streak", prompt: "Show me students with the highest attendance streak" }
+        ];
+      case 'overview-analytics':
+      case 'analytics':
+        return [
+          { label: "Run Analytics Insights", prompt: "Run the analytics engine and show me insights about our class" },
+          { label: "Assessment Performance", prompt: "Show me the average assessment scores" },
+          { label: "Compare Cohorts", prompt: "Compare our class performance to other cohorts" }
+        ];
+      case 'fee-management':
+      case 'fees':
+        return [
+          { label: "Fee Payments", prompt: "Show me the recent fee payments" },
+          { label: "Pending Balances", prompt: "List students with pending fee balances" },
+          { label: "Total Collections", prompt: "What is the total fee collection for this month?" }
+        ];
+      case 'students':
+        return [
+          { label: "Class Enrollment", prompt: "How many students are enrolled in my class?" },
+          { label: "Find Student Data", prompt: "Show me student records" },
+          { label: "Grade Assessments", prompt: "List all assessments in CBC" }
+        ];
+      case 'resources':
+      case 'inventory':
+        return [
+          { label: "Check Inventory Stock", prompt: "Check inventory stock at Main Campus" },
+          { label: "Low Stock Alert", prompt: "Are there any inventory items with low stock?" },
+          { label: "Multimeters Stock", prompt: "Check the multimeter stock at Main Campus" }
+        ];
+      default:
+        return [
+          { label: "Class Attendance", prompt: "Show me the class attendance summary" },
+          { label: "Run Analytics Insights", prompt: "Run the analytics engine and show me insights about our class" },
+          { label: "Check Inventory Stock", prompt: "Check inventory stock at Main Campus" },
+          { label: "Today's Timetable", prompt: "Show me the schedule details for today" }
+        ];
+    }
+  }, [currentView]);
 
   // Trigger proactive welcome briefing if chat is opened with empty history
   useEffect(() => {
@@ -1269,8 +1385,17 @@ export function SallyChat({ currentView }: { currentView?: string }) {
       {/* 2. Side Panel Chat UI */}
       <AnimatePresence>
         {isOpen && (
-          <motion.div
-            ref={panelRef}
+          <>
+            {/* Backdrop Blur Scrim to liquefy background text and preserve transparent vibe */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.3 }}
+              className="fixed inset-0 backdrop-blur-[6px] bg-slate-950/15 z-40 pointer-events-none"
+            />
+            <motion.div
+              ref={panelRef}
             onMouseMove={handleMouseMove}
             initial={{ opacity: 0, y: 60, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -1650,7 +1775,8 @@ export function SallyChat({ currentView }: { currentView?: string }) {
               </form>
             </div>
           </motion.div>
-        )}
+        </>
+      )}
       </AnimatePresence>
     </>
   );
