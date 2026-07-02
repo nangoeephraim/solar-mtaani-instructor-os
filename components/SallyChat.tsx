@@ -998,7 +998,8 @@ export function SallyChat({ currentView }: { currentView?: string }) {
   };
 
   // ── Tool Card Router ────────────────────────────────────────────
-  const renderToolResult = (toolName: string, result: any, args: any = {}) => {
+  const renderToolResult = (toolName: string, result: any, rawArgs: any = {}) => {
+    const args = rawArgs || {};
     switch (toolName) {
       case 'getInventoryStock':
         return (
