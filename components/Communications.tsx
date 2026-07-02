@@ -308,29 +308,29 @@ const MessageGroupRenderer = React.memo(({
                             let inlineStyle: React.CSSProperties = {};
 
                             if (!isMyMsg) {
-                                baseClass = `rounded-r-2xl text-[var(--md-sys-color-on-surface)] ${isFirst ? 'rounded-tl-2xl' : 'rounded-tl-md'} ${isLast ? 'rounded-bl-2xl' : 'rounded-bl-md'}`;
-                                inlineStyle = { background: 'var(--md-sys-color-surface)' };
+                                baseClass = `rounded-r-2xl text-[var(--md-sys-color-on-surface)] ${isFirst ? 'rounded-tl-2xl' : 'rounded-tl-md'} ${isLast ? 'rounded-bl-2xl' : 'rounded-bl-md'} border border-white/[0.04] backdrop-blur-md shadow-sm`;
+                                inlineStyle = { background: 'rgba(255, 255, 255, 0.03)' };
                             } else {
-                                const cornerClasses = `${isFirst ? 'rounded-tr-2xl' : 'rounded-tr-md'} ${isLast ? 'rounded-br-2xl' : 'rounded-br-md'} rounded-l-2xl`;
+                                const cornerClasses = `${isFirst ? 'rounded-tr-2xl' : 'rounded-tr-md'} ${isLast ? 'rounded-br-2xl' : 'rounded-br-md'} rounded-l-2xl border border-white/10`;
                                 switch (chatBubbleTheme) {
                                     case 'lavender':
-                                        baseClass = `bg-indigo-600 dark:bg-indigo-500 text-white ${cornerClasses}`;
+                                        baseClass = `bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 text-white shadow-[0_3px_12px_rgba(99,102,241,0.25)] ${cornerClasses}`;
                                         break;
                                     case 'rose':
-                                        baseClass = `bg-rose-600 dark:bg-rose-500 text-white ${cornerClasses}`;
+                                        baseClass = `bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 text-white shadow-[0_3px_12px_rgba(244,63,94,0.25)] ${cornerClasses}`;
                                         break;
                                     case 'ocean':
-                                        baseClass = `bg-sky-600 dark:bg-sky-500 text-white ${cornerClasses}`;
+                                        baseClass = `bg-gradient-to-tr from-sky-600 via-sky-500 to-cyan-500 text-white shadow-[0_3px_12px_rgba(14,165,233,0.25)] ${cornerClasses}`;
                                         break;
                                     case 'emerald':
-                                        baseClass = `bg-emerald-600 dark:bg-emerald-500 text-white ${cornerClasses}`;
+                                        baseClass = `bg-gradient-to-tr from-emerald-600 via-emerald-500 to-teal-500 text-white shadow-[0_3px_12px_rgba(16,185,129,0.25)] ${cornerClasses}`;
                                         break;
                                     case 'amethyst':
-                                        baseClass = `bg-purple-600 dark:bg-purple-500 text-white ${cornerClasses}`;
+                                        baseClass = `bg-gradient-to-tr from-purple-600 via-purple-500 to-fuchsia-500 text-white shadow-[0_3px_12px_rgba(168,85,247,0.25)] ${cornerClasses}`;
                                         break;
                                     case 'default':
                                     default:
-                                        baseClass = `bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] ${cornerClasses}`;
+                                        baseClass = `bg-gradient-to-tr from-[var(--md-sys-color-primary)] to-indigo-600/90 text-white shadow-[0_3px_12px_rgba(99,102,241,0.2)] ${cornerClasses}`;
                                         break;
                                 }
                             }
@@ -1531,35 +1531,35 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                             )}
                         </AnimatePresence>
                         {/* Header */}
-                        <div className="h-14 px-4 flex items-center justify-between flex-shrink-0 z-10 sidebar-glass" style={{ borderBottom: '1px solid var(--md-sys-color-outline-variant)' }}>
+                        <div className="h-14 px-4 flex items-center justify-between flex-shrink-0 z-10 sidebar-glass backdrop-blur-xl bg-slate-950/20 border-b border-white/[0.05]">
                             <div className="flex items-center gap-2">
                                 {/* Mobile back button (returns to channel list view) */}
                                 <button
                                     onClick={() => setMobileView('list')}
-                                    className="lg:hidden p-2 rounded-xl hover:bg-[var(--md-sys-color-surface-variant)] transition-colors -ml-2"
+                                    className="lg:hidden p-2 rounded-xl hover:bg-white/5 transition-colors -ml-2 text-slate-300 hover:text-white"
                                     title="Back to channel list"
                                 >
-                                    <ChevronLeft size={20} style={{ color: 'var(--md-sys-color-on-surface)' }} />
+                                    <ChevronLeft size={20} />
                                 </button>
-                                <div className="p-1.5 rounded-xl" style={{ background: 'var(--md-sys-color-primary-container)' }}>
-                                    {activeChannel.type === 'announcement' ? <Megaphone size={16} style={{ color: 'var(--md-sys-color-primary)' }} /> : activeChannel.type === 'dm' ? <User size={16} style={{ color: 'var(--md-sys-color-primary)' }} /> : <Hash size={16} style={{ color: 'var(--md-sys-color-primary)' }} />}
+                                <div className="p-1.5 rounded-xl bg-gradient-to-tr from-indigo-500/20 to-purple-500/20 border border-indigo-500/10 text-indigo-400">
+                                    {activeChannel.type === 'announcement' ? <Megaphone size={16} /> : activeChannel.type === 'dm' ? <User size={16} /> : <Hash size={16} />}
                                 </div>
                                 <div>
-                                    <h1 className="font-google font-bold text-sm" style={{ color: 'var(--md-sys-color-on-surface)' }}>
+                                    <h1 className="font-google font-bold text-sm text-slate-100">
                                         {activeChannel.type === 'dm' ? getDMPartnerName(activeChannel) : activeChannel.name}
                                     </h1>
-                                    {activeChannel.description && <p className="text-[10px] font-medium hidden md:block" style={{ color: 'var(--md-sys-color-secondary)' }}>{activeChannel.description}</p>}
+                                    {activeChannel.description && <p className="text-[10px] font-medium hidden md:block text-slate-400">{activeChannel.description}</p>}
                                 </div>
                             </div>
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1.5">
                                 {pinnedMessages.length > 0 && (
-                                    <button onClick={() => setShowPinnedPanel(!showPinnedPanel)} className={clsx("glass-button px-2.5 py-1.5 text-xs flex items-center gap-1", showPinnedPanel && "btn-primary")} style={showPinnedPanel ? {} : {}}>
-                                        <Pin size={13} /><span className="font-bold">{pinnedMessages.length}</span>
+                                    <button onClick={() => setShowPinnedPanel(!showPinnedPanel)} className={clsx("glass-button px-2.5 py-1.5 text-xs flex items-center gap-1.5 border hover:scale-105 active:scale-95 transition-all rounded-xl", showPinnedPanel ? "bg-gradient-to-tr from-indigo-600 to-violet-600 text-white border-white/20" : "bg-white/5 text-slate-300 border-white/[0.05]")}>
+                                        <Pin size={13} className={clsx(showPinnedPanel ? "text-white" : "text-yellow-400")} /><span className="font-bold">{pinnedMessages.length}</span>
                                     </button>
                                 )}
-                                <button onClick={() => setShowSearch(!showSearch)} title="Search (Ctrl+K)" className={clsx("glass-button p-2", showSearch && "btn-primary")}><Search size={15} /></button>
-                                <button onClick={() => setShowInfoDrawer(!showInfoDrawer)} title="Channel info" className={clsx("glass-button p-2", showInfoDrawer && "btn-primary")}><Users size={15} /></button>
-                                <button onClick={() => { triggerHaptics('light'); setShowCustomSettings(true); }} title="Chat Customization" className="glass-button p-2 hover:text-[var(--md-sys-color-primary)] transition-colors"><Settings size={15} /></button>
+                                <button onClick={() => setShowSearch(!showSearch)} title="Search (Ctrl+K)" className={clsx("glass-button p-2 rounded-xl border hover:scale-105 active:scale-95 transition-all", showSearch ? "bg-gradient-to-tr from-indigo-600 to-violet-600 text-white border-white/20" : "bg-white/5 text-slate-300 border-white/[0.05]")}><Search size={15} /></button>
+                                <button onClick={() => setShowInfoDrawer(!showInfoDrawer)} title="Channel info" className={clsx("glass-button p-2 rounded-xl border hover:scale-105 active:scale-95 transition-all", showInfoDrawer ? "bg-gradient-to-tr from-indigo-600 to-violet-600 text-white border-white/20" : "bg-white/5 text-slate-300 border-white/[0.05]")}><Users size={15} /></button>
+                                <button onClick={() => { triggerHaptics('light'); setShowCustomSettings(true); }} title="Chat Customization" className="glass-button p-2 rounded-xl border border-white/[0.05] bg-white/5 hover:bg-white/10 hover:text-indigo-400 hover:scale-105 active:scale-95 transition-all text-slate-300"><Settings size={15} /></button>
                             </div>
                         </div>
 
@@ -1927,16 +1927,16 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                         )}
                                     </AnimatePresence>
 
-                                    <div className={clsx("flex items-end rounded-[28px] transition-all duration-300 backdrop-blur-md p-1.5 gap-1.5", isInputFocused || isRecording ? "shadow-lg bg-[var(--md-sys-color-surface-variant)] scale-[1.01]" : "bg-[var(--md-sys-color-surface)] hover:bg-[var(--md-sys-color-surface-variant)] shadow-sm")} style={{ border: '1px solid', borderColor: isInputFocused || isRecording ? 'var(--md-sys-color-primary)' : 'var(--md-sys-color-outline-variant)' }}>
-                                         <div className="flex items-center gap-0.5">
+                                     <div className={clsx("flex items-end rounded-[24px] transition-all duration-300 p-2 gap-2 backdrop-blur-xl bg-slate-900/35 border shadow-[0_4px_30px_rgba(0,0,0,0.15)]", isInputFocused || isRecording ? "shadow-[0_4px_32px_rgba(99,102,241,0.15)] bg-slate-900/70 scale-[1.005] border-indigo-500/30" : "bg-slate-900/25 border-white/[0.06] hover:bg-slate-900/40 hover:border-white/10")}>
+                                         <div className="flex items-center gap-1">
                                              {/* Mobile: '+' opens the attach sheet */}
-                                             <button type="button" onClick={() => setShowMobileAttachSheet(p => !p)} className="md:hidden p-2 rounded-full hover:bg-[var(--md-sys-color-surface-2)] transition-all active:scale-90" style={{ color: 'var(--md-sys-color-secondary)' }} title="Attach">
+                                             <button type="button" onClick={() => setShowMobileAttachSheet(p => !p)} className="md:hidden p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition-all active:scale-90" title="Attach">
                                                  <motion.div animate={{ rotate: showMobileAttachSheet ? 45 : 0 }} transition={{ type: 'spring', stiffness: 400, damping: 20 }}>
                                                      <Plus size={20} />
                                                  </motion.div>
                                              </button>
                                              {/* Desktop: paperclip opens full picker */}
-                                             <button type="button" onClick={() => fileInputRef.current?.click()} className="hidden md:flex p-2 rounded-full hover:bg-[var(--md-sys-color-surface-2)] transition-colors hover:text-[var(--md-sys-color-primary)]" style={{ color: 'var(--md-sys-color-secondary)' }} title="Attach file (or drag & drop / paste image)"><Paperclip size={18} /></button>
+                                             <button type="button" onClick={() => fileInputRef.current?.click()} className="hidden md:flex p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-indigo-400 transition-colors" title="Attach file (or drag & drop / paste image)"><Paperclip size={18} /></button>
                                              {/* Dedicated Sally AI Copilot Button (resolves keyboard Send/Enter overlap layout clash) */}
                                              <button 
                                                  type="button" 
@@ -1944,7 +1944,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                                      triggerHaptics('light');
                                                      window.dispatchEvent(new Event('open-sally-chat'));
                                                  }} 
-                                                 className="p-2 rounded-full hover:bg-[var(--md-sys-color-surface-2)] transition-colors hover:text-emerald-500 text-emerald-600 flex items-center justify-center animate-pulse" 
+                                                 className="p-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 transition-colors flex items-center justify-center animate-pulse" 
                                                  title="Ask Sally AI Assistant"
                                              >
                                                  <Sparkles size={18} />
@@ -1956,7 +1956,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                                      triggerHaptics('light');
                                                      setShowEmojiPicker(showEmojiPicker === 'input' ? null : 'input');
                                                  }} 
-                                                 className={clsx("p-2 rounded-full hover:bg-[var(--md-sys-color-surface-2)] transition-colors", showEmojiPicker === 'input' ? "text-[var(--md-sys-color-primary)]" : "text-[var(--md-sys-color-secondary)]")}
+                                                 className={clsx("p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-all", showEmojiPicker === 'input' ? "text-indigo-400 bg-indigo-500/10 border border-indigo-500/20" : "text-slate-300")}
                                                  title="Insert emoji"
                                              >
                                                  <Smile size={18} />
@@ -1967,25 +1967,25 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                              <div className="flex-1 flex items-center gap-3 py-2 px-3 min-h-[36px]">
                                                  <div className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse" />
                                                  <span className="font-google font-bold text-red-500 text-sm">{Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}</span>
-                                                 <span className="text-xs ml-auto opacity-70 animate-pulse hidden sm:inline">Recording voice message...</span>
+                                                 <span className="text-xs ml-auto opacity-70 animate-pulse hidden sm:inline text-red-400">Recording voice message...</span>
                                              </div>
                                          ) : (
-                                             <textarea ref={textareaRef} value={messageInput} onChange={handleInputChange} onKeyDown={handleKeyDown} onFocus={() => setIsInputFocused(true)} onBlur={() => setTimeout(() => { setIsInputFocused(false); setShowMentions(false); }, 200)} placeholder={activeChannel.type === 'announcement' ? 'Compose broadcast message...' : `Message #${activeChannel.name}`} className="flex-1 bg-transparent py-2 px-2 border-none outline-none focus:outline-none focus:ring-0 resize-none overflow-y-auto max-h-32 min-h-[36px] text-[15px] font-google font-medium text-[var(--md-sys-color-on-surface)] scrollbar-none" style={{ outline: 'none', border: 'none', boxShadow: 'none' }} rows={1} />
+                                             <textarea ref={textareaRef} value={messageInput} onChange={handleInputChange} onKeyDown={handleKeyDown} onFocus={() => setIsInputFocused(true)} onBlur={() => setTimeout(() => { setIsInputFocused(false); setShowMentions(false); }, 200)} placeholder={activeChannel.type === 'announcement' ? 'Compose broadcast message...' : `Message #${activeChannel.name}`} className="flex-1 bg-transparent py-2 px-2 border-none outline-none focus:outline-none focus:ring-0 resize-none overflow-y-auto max-h-32 min-h-[36px] text-[15px] font-google font-medium text-slate-100 placeholder-slate-400 scrollbar-none" style={{ outline: 'none', border: 'none', boxShadow: 'none' }} rows={1} />
                                          )}
 
-                                         <div className="flex items-center gap-1">
+                                         <div className="flex items-center gap-1.5">
                                              {isRecording ? (
                                                  <>
-                                                     <button type="button" onClick={() => stopRecording(true)} className="p-2 text-red-500 hover:bg-red-500/10 rounded-full transition-colors"><Trash2 size={18} /></button>
-                                                     <button type="button" onClick={() => stopRecording(false)} className="bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] w-9 h-9 flex items-center justify-center rounded-full hover:scale-105 transition-all shadow-md active:scale-95"><Send size={15} className="ml-0.5" /></button>
+                                                     <button type="button" onClick={() => stopRecording(true)} className="p-2 text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"><Trash2 size={18} /></button>
+                                                     <button type="button" onClick={() => stopRecording(false)} className="bg-gradient-to-tr from-indigo-500 to-purple-600 text-white w-9 h-9 flex items-center justify-center rounded-xl hover:scale-105 active:scale-95 transition-all shadow-[0_4px_12px_rgba(99,102,241,0.3)]"><Send size={15} className="ml-0.5" /></button>
                                                  </>
                                              ) : (
                                                  <button type="button" onClick={e => {
                                                      if (!messageInput.trim() && pendingAttachments.length === 0) { startRecording(); }
                                                      else { handleSendMessage(e as any); }
-                                                 }} disabled={isUploadingAttachment} className="bg-[var(--md-sys-color-primary)] text-[var(--md-sys-color-on-primary)] w-9 h-9 flex items-center justify-center rounded-full disabled:opacity-40 hover:scale-105 transition-all shadow-md active:scale-95 disabled:hover:scale-100">
+                                                 }} disabled={isUploadingAttachment} className="bg-gradient-to-tr from-indigo-500 to-purple-600 text-white w-9 h-9 flex items-center justify-center rounded-xl disabled:opacity-40 hover:scale-108 active:scale-95 transition-all shadow-[0_4px_12px_rgba(99,102,241,0.3)] disabled:hover:scale-100">
                                                      {isUploadingAttachment
-                                                         ? <div className="w-4 h-4 rounded-full border-2 border-[var(--md-sys-color-on-primary)] border-t-transparent animate-spin" />
+                                                         ? <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
                                                          : (!messageInput.trim() && pendingAttachments.length === 0) ? <Mic size={18} /> : <Send size={15} className="ml-0.5" />}
                                                  </button>
                                              )}
@@ -2300,24 +2300,24 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                             initial={{ opacity: 0 }} 
                             animate={{ opacity: 1 }} 
                             exit={{ opacity: 0 }} 
-                            className="fixed inset-0 bg-black/50 z-50 backdrop-blur-sm" 
+                            className="fixed inset-0 bg-black/60 z-50 backdrop-blur-md" 
                             onClick={() => setShowCustomSettings(false)} 
                         />
                         <motion.div 
                             initial={{ y: '100%', opacity: 0 }} 
                             animate={{ y: 0, opacity: 1 }} 
                             exit={{ y: '100%', opacity: 0 }} 
-                            transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                            className="fixed bottom-0 left-0 right-0 sm:bottom-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:max-w-md w-full glass-panel z-50 p-6 rounded-t-3xl sm:rounded-[28px] overflow-hidden" 
+                            transition={{ type: 'spring', stiffness: 350, damping: 28 }}
+                            className="fixed bottom-0 left-0 right-0 sm:bottom-auto sm:top-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:max-w-md w-full glassmorphic-card-premium z-50 p-6 rounded-t-3xl sm:rounded-[24px] overflow-hidden border border-white/10" 
                             style={{ 
-                                boxShadow: 'var(--shadow-elevation-3)', 
-                                background: 'var(--md-sys-color-surface)',
+                                boxShadow: '0 20px 40px rgba(0,0,0,0.3)', 
+                                background: 'rgba(15, 23, 42, 0.75)',
                                 paddingBottom: 'calc(2rem + env(safe-area-inset-bottom))'
                             }}
                         >
-                            <div className="flex items-center justify-between pb-4 border-b border-[var(--md-sys-color-outline-variant)]">
-                                <h3 className="text-base font-google font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>Chat Customization</h3>
-                                <button onClick={() => { triggerHaptics(); setShowCustomSettings(false); }} className="p-1 rounded-full hover:bg-[var(--md-sys-color-surface-variant)]" style={{ color: 'var(--md-sys-color-secondary)' }}>
+                            <div className="flex items-center justify-between pb-4 border-b border-white/[0.08]">
+                                <h3 className="text-base font-google font-bold text-slate-100">Chat Customization</h3>
+                                <button onClick={() => { triggerHaptics(); setShowCustomSettings(false); }} className="p-1 rounded-full hover:bg-white/5 text-slate-400 hover:text-white transition-colors">
                                     <X size={18} />
                                 </button>
                             </div>
@@ -2325,7 +2325,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                             <div className="mt-5 space-y-6 max-h-[60vh] overflow-y-auto pr-1 custom-scrollbar">
                                 {/* Wallpaper Selection */}
                                 <div>
-                                    <label className="text-xs font-bold uppercase tracking-wider block mb-2" style={{ color: 'var(--md-sys-color-secondary)' }}>Chat Wallpaper</label>
+                                    <label className="text-xs font-black uppercase tracking-wider block mb-2 text-indigo-400">Chat Wallpaper</label>
                                     <div className="grid grid-cols-5 gap-2">
                                         {[
                                             { id: 'default', label: 'Default', bg: 'var(--md-sys-color-background)' },
@@ -2339,8 +2339,8 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                                 type="button"
                                                 onClick={() => { triggerHaptics('light'); setChatWallpaper(wp.id as any); }}
                                                 className={clsx(
-                                                    "h-12 rounded-xl border-2 transition-all flex flex-col items-center justify-center p-1 relative overflow-hidden",
-                                                    chatWallpaper === wp.id ? "border-[var(--md-sys-color-primary)] scale-105" : "border-[var(--md-sys-color-outline)] opacity-70 hover:opacity-100"
+                                                    "h-12 rounded-xl border transition-all flex flex-col items-center justify-center p-1 relative overflow-hidden active:scale-95",
+                                                    chatWallpaper === wp.id ? "border-indigo-500 scale-105 shadow-[0_0_10px_rgba(99,102,241,0.4)] opacity-100" : "border-white/10 opacity-70 hover:opacity-100"
                                                 )}
                                                 title={wp.label}
                                             >
@@ -2353,7 +2353,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
 
                                 {/* Bubble Color Theme Selection */}
                                 <div>
-                                    <label className="text-xs font-bold uppercase tracking-wider block mb-2" style={{ color: 'var(--md-sys-color-secondary)' }}>Message Bubble Theme</label>
+                                    <label className="text-xs font-black uppercase tracking-wider block mb-2 text-indigo-400">Message Bubble Theme</label>
                                     <div className="grid grid-cols-6 gap-2">
                                         {[
                                             { id: 'default', label: 'Default', bg: 'var(--md-sys-color-primary)' },
@@ -2368,8 +2368,8 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                                 type="button"
                                                 onClick={() => { triggerHaptics('light'); setChatBubbleTheme(theme.id as any); }}
                                                 className={clsx(
-                                                    "h-12 rounded-xl border-2 transition-all flex flex-col items-center justify-center p-1 relative overflow-hidden",
-                                                    chatBubbleTheme === theme.id ? "border-[var(--md-sys-color-primary)] scale-105" : "border-[var(--md-sys-color-outline)] opacity-70 hover:opacity-100"
+                                                    "h-12 rounded-xl border transition-all flex flex-col items-center justify-center p-1 relative overflow-hidden active:scale-95",
+                                                    chatBubbleTheme === theme.id ? "border-indigo-500 scale-105 shadow-[0_0_10px_rgba(99,102,241,0.4)] opacity-100" : "border-white/10 opacity-70 hover:opacity-100"
                                                 )}
                                                 title={theme.label}
                                             >
@@ -2381,36 +2381,36 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                 </div>
 
                                 {/* Enter Is Send Toggle */}
-                                <div className="flex items-center justify-between py-2 border-b border-[var(--md-sys-color-outline-variant)]">
+                                <div className="flex items-center justify-between py-3 border-b border-white/[0.08]">
                                     <div>
-                                        <h4 className="text-sm font-semibold" style={{ color: 'var(--md-sys-color-on-surface)' }}>Enter is Send</h4>
-                                        <p className="text-xs opacity-75" style={{ color: 'var(--md-sys-color-secondary)' }}>Pressing Enter key on keyboard will send message</p>
+                                        <h4 className="text-sm font-semibold text-slate-100">Enter is Send</h4>
+                                        <p className="text-xs text-slate-400">Pressing Enter key on keyboard will send message</p>
                                     </div>
                                     <button 
                                         type="button"
                                         onClick={() => { triggerHaptics('light'); setEnterIsSend(!enterIsSend); }}
                                         className={clsx(
-                                            "w-12 h-6 rounded-full p-1 transition-colors duration-300 relative",
-                                            enterIsSend ? "bg-[var(--md-sys-color-primary)]" : "bg-[var(--md-sys-color-outline)]"
+                                            "w-12 h-6 rounded-full p-1 transition-all duration-300 relative border border-white/10",
+                                            enterIsSend ? "bg-indigo-600 shadow-[0_0_8px_rgba(99,102,241,0.3)]" : "bg-white/10"
                                         )}
                                     >
                                         <div 
                                             className={clsx(
                                                 "w-4 h-4 rounded-full bg-white transition-transform duration-300 shadow-md absolute top-1 left-1",
-                                                enterIsSend && "translate-x-6"
+                                                enterIsSend ? "translate-x-6" : "translate-x-0"
                                             )} 
                                         />
                                     </button>
                                 </div>
 
                                 {/* Text Font Size Slider */}
-                                <div className="space-y-2 py-2 border-b border-[var(--md-sys-color-outline-variant)]">
+                                <div className="space-y-2 py-3 border-b border-white/[0.08]">
                                     <div className="flex justify-between items-center">
-                                        <h4 className="text-sm font-semibold" style={{ color: 'var(--md-sys-color-on-surface)' }}>Font Size</h4>
-                                        <span className="text-xs font-bold text-[var(--md-sys-color-primary)] uppercase font-mono">{chatFontSize}</span>
+                                        <h4 className="text-sm font-semibold text-slate-100">Font Size</h4>
+                                        <span className="text-xs font-bold text-indigo-400 uppercase font-mono">{chatFontSize}</span>
                                     </div>
                                     <div className="flex items-center gap-3">
-                                        <span className="text-xs opacity-60">A</span>
+                                        <span className="text-xs opacity-60 text-slate-300">A</span>
                                         <input 
                                             type="range" 
                                             min="0" 
@@ -2421,17 +2421,17 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                                 const sizes: ('small' | 'medium' | 'large' | 'xlarge')[] = ['small', 'medium', 'large', 'xlarge'];
                                                 setChatFontSize(sizes[Number(e.target.value)]);
                                             }}
-                                            className="flex-1 accent-[var(--md-sys-color-primary)] h-1.5 bg-[var(--md-sys-color-outline-variant)] rounded-lg appearance-none cursor-pointer"
+                                            className="flex-1 accent-indigo-500 h-1 bg-white/10 rounded-lg appearance-none cursor-pointer"
                                         />
-                                        <span className="text-lg font-bold opacity-80">A</span>
+                                        <span className="text-lg font-bold opacity-80 text-slate-100">A</span>
                                     </div>
                                 </div>
 
                                 {/* Enable Haptics Toggle */}
-                                <div className="flex items-center justify-between py-2">
+                                <div className="flex items-center justify-between py-3">
                                     <div>
-                                        <h4 className="text-sm font-semibold" style={{ color: 'var(--md-sys-color-on-surface)' }}>Tactile Haptic Feedback</h4>
-                                        <p className="text-xs opacity-75" style={{ color: 'var(--md-sys-color-secondary)' }}>Vibrate on sending message, long-press, and reactions</p>
+                                        <h4 className="text-sm font-semibold text-slate-100">Tactile Haptic Feedback</h4>
+                                        <p className="text-xs text-slate-400">Vibrate on sending message, long-press, and reactions</p>
                                     </div>
                                     <button 
                                         type="button"
@@ -2443,8 +2443,8 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                             }
                                         }}
                                         className={clsx(
-                                            "w-12 h-6 rounded-full p-1 transition-colors duration-300 relative",
-                                            enableHaptics ? "bg-[var(--md-sys-color-primary)]" : "bg-[var(--md-sys-color-outline)]"
+                                            "w-12 h-6 rounded-full p-1 transition-all duration-300 relative border border-white/10",
+                                            enableHaptics ? "bg-indigo-600 shadow-[0_0_8px_rgba(99,102,241,0.3)]" : "bg-white/10"
                                         )}
                                     >
                                         <div 
