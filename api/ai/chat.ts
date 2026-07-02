@@ -17,6 +17,13 @@ const tool: any = (options: any) => {
     const originalExecute = options.execute;
     options.execute = async (...executeArgs: any[]) => {
       try {
+        // Ensure the first argument (args) is never null/undefined
+        if (executeArgs.length > 0) {
+          executeArgs[0] = executeArgs[0] || {};
+        } else {
+          executeArgs.push({});
+        }
+
         return await Promise.race([
           originalExecute(...executeArgs),
           new Promise<never>((_, reject) =>
