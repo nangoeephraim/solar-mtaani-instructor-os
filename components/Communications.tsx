@@ -1531,35 +1531,35 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                             )}
                         </AnimatePresence>
                         {/* Header */}
-                        <div className="h-14 px-4 flex items-center justify-between flex-shrink-0 z-10 sidebar-glass backdrop-blur-xl bg-slate-950/20 border-b border-white/[0.05]">
+                        <div className="h-14 px-4 flex items-center justify-between flex-shrink-0 z-10 sidebar-glass backdrop-blur-xl bg-white/80 dark:bg-slate-950/20 border-b border-slate-200 dark:border-white/[0.05]">
                             <div className="flex items-center gap-2">
                                 {/* Mobile back button (returns to channel list view) */}
                                 <button
                                     onClick={() => setMobileView('list')}
-                                    className="lg:hidden p-2 rounded-xl hover:bg-white/5 transition-colors -ml-2 text-slate-300 hover:text-white"
+                                    className="lg:hidden p-2 rounded-xl hover:bg-slate-200/50 dark:hover:bg-white/5 transition-colors -ml-2 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white"
                                     title="Back to channel list"
                                 >
                                     <ChevronLeft size={20} />
                                 </button>
-                                <div className="p-1.5 rounded-xl bg-gradient-to-tr from-indigo-500/20 to-purple-500/20 border border-indigo-500/10 text-indigo-400">
+                                <div className="p-1.5 rounded-xl bg-gradient-to-tr from-indigo-500/20 to-purple-500/20 border border-indigo-500/10 text-indigo-600 dark:text-indigo-400">
                                     {activeChannel.type === 'announcement' ? <Megaphone size={16} /> : activeChannel.type === 'dm' ? <User size={16} /> : <Hash size={16} />}
                                 </div>
                                 <div>
-                                    <h1 className="font-google font-bold text-sm text-slate-100">
+                                    <h1 className="font-google font-bold text-sm text-slate-800 dark:text-slate-100">
                                         {activeChannel.type === 'dm' ? getDMPartnerName(activeChannel) : activeChannel.name}
                                     </h1>
-                                    {activeChannel.description && <p className="text-[10px] font-medium hidden md:block text-slate-400">{activeChannel.description}</p>}
+                                    {activeChannel.description && <p className="text-[10px] font-medium hidden md:block text-slate-500 dark:text-slate-400">{activeChannel.description}</p>}
                                 </div>
                             </div>
                             <div className="flex items-center gap-1.5">
                                 {pinnedMessages.length > 0 && (
-                                    <button onClick={() => setShowPinnedPanel(!showPinnedPanel)} className={clsx("glass-button px-2.5 py-1.5 text-xs flex items-center gap-1.5 border hover:scale-105 active:scale-95 transition-all rounded-xl", showPinnedPanel ? "bg-gradient-to-tr from-indigo-600 to-violet-600 text-white border-white/20" : "bg-white/5 text-slate-300 border-white/[0.05]")}>
-                                        <Pin size={13} className={clsx(showPinnedPanel ? "text-white" : "text-yellow-400")} /><span className="font-bold">{pinnedMessages.length}</span>
+                                    <button onClick={() => setShowPinnedPanel(!showPinnedPanel)} className={clsx("glass-button px-2.5 py-1.5 text-xs flex items-center gap-1.5 border hover:scale-105 active:scale-95 transition-all rounded-xl", showPinnedPanel ? "bg-gradient-to-tr from-indigo-600 to-violet-600 text-white border-white/20" : "bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/[0.05]")}>
+                                        <Pin size={13} className={clsx(showPinnedPanel ? "text-white" : "text-yellow-500 dark:text-yellow-400")} /><span className="font-bold">{pinnedMessages.length}</span>
                                     </button>
                                 )}
-                                <button onClick={() => setShowSearch(!showSearch)} title="Search (Ctrl+K)" className={clsx("glass-button p-2 rounded-xl border hover:scale-105 active:scale-95 transition-all", showSearch ? "bg-gradient-to-tr from-indigo-600 to-violet-600 text-white border-white/20" : "bg-white/5 text-slate-300 border-white/[0.05]")}><Search size={15} /></button>
-                                <button onClick={() => setShowInfoDrawer(!showInfoDrawer)} title="Channel info" className={clsx("glass-button p-2 rounded-xl border hover:scale-105 active:scale-95 transition-all", showInfoDrawer ? "bg-gradient-to-tr from-indigo-600 to-violet-600 text-white border-white/20" : "bg-white/5 text-slate-300 border-white/[0.05]")}><Users size={15} /></button>
-                                <button onClick={() => { triggerHaptics('light'); setShowCustomSettings(true); }} title="Chat Customization" className="glass-button p-2 rounded-xl border border-white/[0.05] bg-white/5 hover:bg-white/10 hover:text-indigo-400 hover:scale-105 active:scale-95 transition-all text-slate-300"><Settings size={15} /></button>
+                                <button onClick={() => setShowSearch(!showSearch)} title="Search (Ctrl+K)" className={clsx("glass-button p-2 rounded-xl border hover:scale-105 active:scale-95 transition-all", showSearch ? "bg-gradient-to-tr from-indigo-600 to-violet-600 text-white border-white/20" : "bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/[0.05]")}><Search size={15} /></button>
+                                <button onClick={() => setShowInfoDrawer(!showInfoDrawer)} title="Channel info" className={clsx("glass-button p-2 rounded-xl border hover:scale-105 active:scale-95 transition-all", showInfoDrawer ? "bg-gradient-to-tr from-indigo-600 to-violet-600 text-white border-white/20" : "bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/[0.05]")}><Users size={15} /></button>
+                                <button onClick={() => { triggerHaptics('light'); setShowCustomSettings(true); }} title="Chat Customization" className="glass-button p-2 rounded-xl border border-slate-200 dark:border-white/[0.05] bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 hover:text-indigo-600 dark:hover:text-indigo-400 hover:scale-105 active:scale-95 transition-all text-slate-700 dark:text-slate-300"><Settings size={15} /></button>
                             </div>
                         </div>
 
@@ -1927,16 +1927,16 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                         )}
                                     </AnimatePresence>
 
-                                     <div className={clsx("flex items-end rounded-[24px] transition-all duration-300 p-2 gap-2 backdrop-blur-xl bg-slate-900/35 border shadow-[0_4px_30px_rgba(0,0,0,0.15)]", isInputFocused || isRecording ? "shadow-[0_4px_32px_rgba(99,102,241,0.15)] bg-slate-900/70 scale-[1.005] border-indigo-500/30" : "bg-slate-900/25 border-white/[0.06] hover:bg-slate-900/40 hover:border-white/10")}>
+                                     <div className={clsx("flex items-end rounded-[24px] transition-all duration-300 p-2 gap-2 backdrop-blur-xl bg-slate-100/60 dark:bg-slate-900/35 border shadow-[0_4px_30px_rgba(0,0,0,0.08)]", isInputFocused || isRecording ? "shadow-[0_4px_32px_rgba(99,102,241,0.12)] bg-white dark:bg-slate-900/70 scale-[1.005] border-indigo-500/30" : "bg-slate-100/40 dark:bg-slate-900/25 border-slate-200 dark:border-white/[0.06] hover:bg-slate-200/50 dark:hover:bg-slate-900/40")}>
                                          <div className="flex items-center gap-1">
                                              {/* Mobile: '+' opens the attach sheet */}
-                                             <button type="button" onClick={() => setShowMobileAttachSheet(p => !p)} className="md:hidden p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white transition-all active:scale-90" title="Attach">
+                                             <button type="button" onClick={() => setShowMobileAttachSheet(p => !p)} className="md:hidden p-2 rounded-xl bg-slate-200/50 dark:bg-white/5 hover:bg-slate-200/80 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all active:scale-90" title="Attach">
                                                  <motion.div animate={{ rotate: showMobileAttachSheet ? 45 : 0 }} transition={{ type: 'spring', stiffness: 400, damping: 20 }}>
                                                      <Plus size={20} />
                                                  </motion.div>
                                              </button>
                                              {/* Desktop: paperclip opens full picker */}
-                                             <button type="button" onClick={() => fileInputRef.current?.click()} className="hidden md:flex p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-indigo-400 transition-colors" title="Attach file (or drag & drop / paste image)"><Paperclip size={18} /></button>
+                                             <button type="button" onClick={() => fileInputRef.current?.click()} className="hidden md:flex p-2 rounded-xl bg-slate-200/50 dark:bg-white/5 hover:bg-slate-200/80 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors" title="Attach file (or drag & drop / paste image)"><Paperclip size={18} /></button>
                                              {/* Dedicated Sally AI Copilot Button (resolves keyboard Send/Enter overlap layout clash) */}
                                              <button 
                                                  type="button" 
@@ -1944,7 +1944,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                                      triggerHaptics('light');
                                                      window.dispatchEvent(new Event('open-sally-chat'));
                                                  }} 
-                                                 className="p-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 transition-colors flex items-center justify-center animate-pulse" 
+                                                 className="p-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 transition-colors flex items-center justify-center animate-pulse" 
                                                  title="Ask Sally AI Assistant"
                                              >
                                                  <Sparkles size={18} />
@@ -1956,7 +1956,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                                      triggerHaptics('light');
                                                      setShowEmojiPicker(showEmojiPicker === 'input' ? null : 'input');
                                                  }} 
-                                                 className={clsx("p-2 rounded-xl bg-white/5 hover:bg-white/10 transition-all", showEmojiPicker === 'input' ? "text-indigo-400 bg-indigo-500/10 border border-indigo-500/20" : "text-slate-300")}
+                                                 className={clsx("p-2 rounded-xl transition-all", showEmojiPicker === 'input' ? "text-indigo-600 dark:text-indigo-400 bg-indigo-500/10 border border-indigo-500/20" : "bg-slate-200/50 dark:bg-white/5 hover:bg-slate-200/80 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300")}
                                                  title="Insert emoji"
                                              >
                                                  <Smile size={18} />
@@ -1967,10 +1967,10 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                              <div className="flex-1 flex items-center gap-3 py-2 px-3 min-h-[36px]">
                                                  <div className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse" />
                                                  <span className="font-google font-bold text-red-500 text-sm">{Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}</span>
-                                                 <span className="text-xs ml-auto opacity-70 animate-pulse hidden sm:inline text-red-400">Recording voice message...</span>
+                                                 <span className="text-xs ml-auto opacity-70 animate-pulse hidden sm:inline text-red-500 dark:text-red-400">Recording voice message...</span>
                                              </div>
                                          ) : (
-                                             <textarea ref={textareaRef} value={messageInput} onChange={handleInputChange} onKeyDown={handleKeyDown} onFocus={() => setIsInputFocused(true)} onBlur={() => setTimeout(() => { setIsInputFocused(false); setShowMentions(false); }, 200)} placeholder={activeChannel.type === 'announcement' ? 'Compose broadcast message...' : `Message #${activeChannel.name}`} className="flex-1 bg-transparent py-2 px-2 border-none outline-none focus:outline-none focus:ring-0 resize-none overflow-y-auto max-h-32 min-h-[36px] text-[15px] font-google font-medium text-slate-100 placeholder-slate-400 scrollbar-none" style={{ outline: 'none', border: 'none', boxShadow: 'none' }} rows={1} />
+                                             <textarea ref={textareaRef} value={messageInput} onChange={handleInputChange} onKeyDown={handleKeyDown} onFocus={() => setIsInputFocused(true)} onBlur={() => setTimeout(() => { setIsInputFocused(false); setShowMentions(false); }, 200)} placeholder={activeChannel.type === 'announcement' ? 'Compose broadcast message...' : `Message #${activeChannel.name}`} className="flex-1 bg-transparent py-2 px-2 border-none outline-none focus:outline-none focus:ring-0 resize-none overflow-y-auto max-h-32 min-h-[36px] text-[15px] font-google font-medium text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 scrollbar-none" style={{ outline: 'none', border: 'none', boxShadow: 'none' }} rows={1} />
                                          )}
 
                                          <div className="flex items-center gap-1.5">
