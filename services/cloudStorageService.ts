@@ -13,7 +13,6 @@
 
 import { supabase } from './supabase';
 import { logSecurityEvent } from './security';
-import { getAuthHeaders } from './authHeaders';
 
 // ==========================================
 // TYPES
@@ -146,7 +145,7 @@ const generateFilePath = (fileName: string, prefix?: string): string => {
 // ==========================================
 
 /**
- * Upload a file to a Vercel Blob storage.
+ * Upload a file to a Supabase Storage bucket.
  * Validates file size and type before uploading.
  */
 export const uploadFile = async (
@@ -161,27 +160,24 @@ export const uploadFile = async (
     }
 
     const fileName = options?.fileName || (file instanceof File ? file.name : 'file');
-    const pathPrefix = options?.pathPrefix || '';
+    const filePath = generateFilePath(fileName, options?.pathPrefix);
 
-    const headers = await getAuthHeaders({
-        'x-filename': fileName,
-        'x-bucket': bucket,
-        'x-path-prefix': pathPrefix,
-        'Content-Type': file.type || 'application/octet-stream'
-    });
+    const { data, error } = await supabase.storage
+        .from(bucket)
+        .upload(filePath, file, {
+            cacheControl: options?.cacheControl || '3600',
+            upsert: options?.upsert || false,
+            contentType: options?.contentType,
+        });
 
-    const response = await fetch('/api/upload', {
-        method: 'POST',
-        headers,
-        body: file
-    });
-
-    if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`Upload failed: ${errText || response.statusText}`);
+    if (error) {
+        throw new Error(`Upload failed: ${error.message}`);
     }
 
-    const data = await response.json();
+    // Get the public URL
+    const { data: urlData } = supabase.storage
+        .from(bucket)
+        .getPublicUrl(data.path);
 
     // Log the upload event
     await logSecurityEvent({
@@ -193,69 +189,68 @@ export const uploadFile = async (
 
     return {
         path: data.path,
-        publicUrl: data.publicUrl,
-        fullPath: data.fullPath || data.path
+        publicUrl: urlData.publicUrl,
+        fullPath: data.fullPath || `${bucket}/${data.path}`,
     };
 };
 
 /**
- * Download a file from Vercel Blob. Returns a Blob.
+ * Download a file from a bucket. Returns a Blob.
  */
 export const downloadFile = async (
     bucket: StorageBucket,
     path: string
 ): Promise<Blob> => {
-    const url = path.startsWith('http') ? path : getPublicUrl(bucket, path);
-    const response = await fetch(url);
-    if (!response.ok) {
-        throw new Error(`Download failed: ${response.statusText}`);
+    const { data, error } = await supabase.storage
+        .from(bucket)
+        .download(path);
+
+    if (error) {
+        throw new Error(`Download failed: ${error.message}`);
     }
-    return response.blob();
+    return data;
 };
 
 /**
- * Generate a signed URL. Since Vercel Blobs are public, returns the public URL directly.
+ * Generate a signed URL for time-limited access to a private file.
+ * @param expiresIn - Seconds until the URL expires (default: 3600 = 1 hour)
  */
 export const getSignedUrl = async (
     bucket: StorageBucket,
     path: string,
     expiresIn: number = 3600
 ): Promise<string> => {
-    return path.startsWith('http') ? path : getPublicUrl(bucket, path);
+    const { data, error } = await supabase.storage
+        .from(bucket)
+        .createSignedUrl(path, expiresIn);
+
+    if (error) {
+        throw new Error(`Signed URL generation failed: ${error.message}`);
+    }
+    return data.signedUrl;
 };
 
 /**
- * Get the public URL for a file.
+ * Get the public URL for a file (only works for public buckets).
  */
 export const getPublicUrl = (bucket: StorageBucket, path: string): string => {
-    if (path.startsWith('http')) return path;
     const { data } = supabase.storage.from(bucket).getPublicUrl(path);
     return data.publicUrl;
 };
 
 /**
- * Delete a file from Vercel Blob.
+ * Delete a file from a bucket.
  */
 export const deleteFile = async (
     bucket: StorageBucket,
     path: string
 ): Promise<void> => {
-    if (!path.startsWith('http')) {
-        // Fallback for old Supabase path deletions
-        await supabase.storage.from(bucket).remove([path]);
-        return;
-    }
+    const { error } = await supabase.storage
+        .from(bucket)
+        .remove([path]);
 
-    const headers = await getAuthHeaders({ 'Content-Type': 'application/json' });
-    const response = await fetch('/api/delete', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ urls: [path] })
-    });
-
-    if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`Delete failed: ${errText || response.statusText}`);
+    if (error) {
+        throw new Error(`Delete failed: ${error.message}`);
     }
 
     await logSecurityEvent({
@@ -267,7 +262,7 @@ export const deleteFile = async (
 };
 
 /**
- * Delete multiple files from Vercel Blob.
+ * Delete multiple files from a bucket.
  */
 export const deleteFiles = async (
     bucket: StorageBucket,
@@ -275,62 +270,43 @@ export const deleteFiles = async (
 ): Promise<void> => {
     if (paths.length === 0) return;
 
-    // Filter out Supabase vs Vercel paths
-    const vercelUrls = paths.filter(p => p.startsWith('http'));
-    const supabasePaths = paths.filter(p => !p.startsWith('http'));
+    const { error } = await supabase.storage
+        .from(bucket)
+        .remove(paths);
 
-    if (supabasePaths.length > 0) {
-        await supabase.storage.from(bucket).remove(supabasePaths);
-    }
-
-    if (vercelUrls.length > 0) {
-        const headers = await getAuthHeaders({ 'Content-Type': 'application/json' });
-        const response = await fetch('/api/delete', {
-            method: 'POST',
-            headers,
-            body: JSON.stringify({ urls: vercelUrls })
-        });
-
-        if (!response.ok) {
-            const errText = await response.text();
-            throw new Error(`Bulk delete failed: ${errText || response.statusText}`);
-        }
+    if (error) {
+        throw new Error(`Bulk delete failed: ${error.message}`);
     }
 };
 
 /**
- * List files in Vercel Blob storage.
+ * List files in a bucket directory.
  */
 export const listFiles = async (
     bucket: StorageBucket,
     prefix?: string,
     options?: { limit?: number; offset?: number; sortBy?: { column: string; order: 'asc' | 'desc' } }
 ): Promise<StorageFileInfo[]> => {
-    const headers = await getAuthHeaders();
-    const queryPrefix = `${bucket}/${prefix || ''}`;
-    
-    const response = await fetch(`/api/list?prefix=${encodeURIComponent(queryPrefix)}`, {
-        method: 'GET',
-        headers,
-    });
+    const { data, error } = await supabase.storage
+        .from(bucket)
+        .list(prefix || '', {
+            limit: options?.limit || 100,
+            offset: options?.offset || 0,
+            sortBy: options?.sortBy || { column: 'created_at', order: 'desc' },
+        });
 
-    if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`List failed: ${errText || response.statusText}`);
+    if (error) {
+        throw new Error(`List failed: ${error.message}`);
     }
 
-    const { blobs } = await response.json();
-    return (blobs || []).map((blob: any) => {
-        const name = blob.pathname.substring(blob.pathname.lastIndexOf('/') + 1);
-        return {
-            name,
-            id: blob.url,
-            createdAt: blob.uploadedAt,
-            updatedAt: blob.uploadedAt,
-            size: blob.size,
-            metadata: {},
-        };
-    });
+    return (data || []).map(item => ({
+        name: item.name,
+        id: item.id,
+        createdAt: item.created_at,
+        updatedAt: item.updated_at,
+        size: item.metadata?.size,
+        metadata: item.metadata,
+    }));
 };
 
 
