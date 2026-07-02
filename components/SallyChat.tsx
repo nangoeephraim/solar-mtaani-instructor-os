@@ -297,8 +297,7 @@ export function SallyChat({ currentView }: { currentView?: string }) {
     return [];
   };
 
-  const { messages, sendMessage, status, error, setMessages, append } = useChat({
-    maxSteps: 5, // Enable multi-step tool calls
+  const { messages, sendMessage, status, error, setMessages } = useChat({
     transport: new DefaultChatTransport({
       api: '/api/ai/chat',
       headers: () => getAuthHeaders(),
@@ -377,12 +376,11 @@ export function SallyChat({ currentView }: { currentView?: string }) {
   // Trigger proactive welcome briefing if chat is opened with empty history
   useEffect(() => {
     if (isOpen && hasAttemptedRestore && messages.length === 0 && !isLoading) {
-      append({
-        role: 'user',
-        content: '[SYSTEM_INIT_WELCOME_BRIEFING] Please greet me warmly by name, check the database context (attendance averages, low stock items, recent CAT grades), and summarize our training center status in 2 natural sentences.',
+      sendMessage({
+        text: '[SYSTEM_INIT_WELCOME_BRIEFING] Please greet me warmly by name, check the database context (attendance averages, low stock items, recent CAT grades), and summarize our training center status in 2 natural sentences.',
       });
     }
-  }, [isOpen, hasAttemptedRestore, messages.length, isLoading, append]);
+  }, [isOpen, hasAttemptedRestore, messages.length, isLoading, sendMessage]);
 
   // Dynamic scroll-to-bottom logic
   useEffect(() => {

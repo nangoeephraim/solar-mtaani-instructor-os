@@ -1416,6 +1416,7 @@ export default async function handler(req: Request) {
           tools,
           toolChoice: routeMode === 'simple-chat' ? 'none' : 'auto',
           maxRetries: 0,
+          // @ts-ignore - maxSteps is supported at runtime in version 6.x of the ai package
           maxSteps: 5,
           abortSignal: (globalThis as any).reqAbortSignal
         });
