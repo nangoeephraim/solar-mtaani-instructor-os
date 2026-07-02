@@ -1223,7 +1223,7 @@ export function SallyChat({ currentView }: { currentView?: string }) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 60, scale: 0.95 }}
             transition={{ type: 'spring', stiffness: 380, damping: 28 }}
-            className="fixed bottom-0 right-0 sm:bottom-6 sm:right-6 w-full sm:w-[380px] h-full sm:h-[calc(100vh-120px)] sm:max-h-[680px] text-white flex flex-col z-50 overflow-hidden sm:rounded-3xl sally-glass-card shadow-2xl border border-white/10 relative"
+            className="fixed bottom-0 right-0 sm:bottom-6 sm:right-6 w-full sm:w-[380px] h-full sm:h-[640px] max-h-[calc(100vh-48px)] text-white flex flex-col z-50 overflow-hidden sm:rounded-3xl sally-glass-card shadow-2xl border border-white/10"
           >
             {/* Interactive Cursor Spotlight Glow */}
             <div 
