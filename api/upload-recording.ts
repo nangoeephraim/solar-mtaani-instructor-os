@@ -1,6 +1,8 @@
 import { put } from '@vercel/blob';
 import { requireApiUser } from '../lib/supabase-server.js';
 
+export const config = { runtime: 'edge' };
+
 const MAX_RECORDING_BYTES = 250 * 1024 * 1024;
 
 export default async function handler(req: Request) {

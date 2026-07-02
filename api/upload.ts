@@ -1,6 +1,8 @@
 import { put } from '@vercel/blob';
 import { requireApiUser } from '../lib/supabase-server.js';
 
+export const config = { runtime: 'edge' };
+
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // 50MB limit
 
 export default async function handler(req: Request) {
