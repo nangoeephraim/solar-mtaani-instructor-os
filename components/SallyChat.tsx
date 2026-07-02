@@ -45,6 +45,124 @@ function getInstitutionLabel(instType: string): string {
   }
 }
 
+interface Particle3D {
+  x: number;
+  y: number;
+  z: number;
+  color: string;
+}
+
+export function Sally3DCanvas({ active }: { active: boolean }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    let animationId: number;
+    let width = canvas.width = canvas.offsetWidth;
+    let height = canvas.height = canvas.offsetHeight;
+
+    // Create 3D helical particles
+    const particleCount = 40;
+    const particles: Particle3D[] = [];
+    const colors = ['rgba(99, 102, 241, ', 'rgba(139, 92, 246, ', 'rgba(6, 182, 212, ', 'rgba(16, 185, 129, '];
+    for (let i = 0; i < particleCount; i++) {
+      const theta = (i / particleCount) * Math.PI * 2 * 3.5; // spiral twist
+      const y = (i / particleCount - 0.5) * height * 0.75;
+      const radius = 55 + Math.sin(theta * 1.5) * 12;
+      particles.push({
+        x: Math.cos(theta) * radius,
+        y: y,
+        z: Math.sin(theta) * radius,
+        color: colors[i % colors.length]
+      });
+    }
+
+    let angleY = 0.004;
+    let angleX = 0.0025;
+
+    const handleResize = () => {
+      if (!canvas) return;
+      width = canvas.width = canvas.offsetWidth;
+      height = canvas.height = canvas.offsetHeight;
+    };
+    window.addEventListener('resize', handleResize);
+
+    const render = () => {
+      ctx.clearRect(0, 0, width, height);
+
+      // Rotate points relative to active load status
+      const currentAngleY = active ? angleY * 2.8 : angleY;
+      const currentAngleX = active ? angleX * 2.2 : angleX;
+
+      const projected = particles
+        .map(p => {
+          // Y rotation
+          const cosY = Math.cos(currentAngleY);
+          const sinY = Math.sin(currentAngleY);
+          const nx = p.x * cosY - p.z * sinY;
+          const nz = p.x * sinY + p.z * cosY;
+
+          // X rotation
+          const cosX = Math.cos(currentAngleX);
+          const sinX = Math.sin(currentAngleX);
+          const ny = p.y * cosX - nz * sinX;
+          const rz = p.y * sinX + nz * cosX;
+
+          p.x = nx;
+          p.y = ny;
+          p.z = rz;
+
+          // Projection formula
+          const fov = 280;
+          const scale = fov / (fov + rz);
+          const px = nx * scale + width / 2;
+          const py = ny * scale + height / 2;
+
+          return { px, py, scale, color: p.color, z: rz };
+        })
+        .sort((a, b) => b.z - a.z); // painter's sorting algorithm
+
+      projected.forEach(p => {
+        if (p.px < 0 || p.px > width || p.py < 0 || p.py > height) return;
+        const size = Math.max(0.8, p.scale * 3);
+        const alpha = Math.max(0.08, Math.min(0.65, p.scale * 0.45));
+        
+        ctx.beginPath();
+        ctx.arc(p.px, p.py, size, 0, Math.PI * 2);
+        ctx.fillStyle = p.color + alpha + ')';
+        ctx.fill();
+
+        if (p.scale > 1.05) {
+          ctx.beginPath();
+          ctx.arc(p.px, p.py, size * 2.2, 0, Math.PI * 2);
+          ctx.fillStyle = p.color + (alpha * 0.2) + ')';
+          ctx.fill();
+        }
+      });
+
+      animationId = requestAnimationFrame(render);
+    };
+
+    render();
+
+    return () => {
+      cancelAnimationFrame(animationId);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [active]);
+
+  return (
+    <canvas 
+      ref={canvasRef} 
+      className="absolute inset-0 w-full h-full pointer-events-none opacity-30 mix-blend-screen z-0"
+    />
+  );
+}
+
 async function sallyFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const response = await fetch(input, init);
   if (response.ok) return response;
@@ -1411,6 +1529,9 @@ export function SallyChat({ currentView }: { currentView?: string }) {
               }}
             />
 
+            {/* Ambient 3D Helix Background Canvas */}
+            <Sally3DCanvas active={isLoading} />
+
             {/* Header Panel */}
             <div className="p-4 bg-slate-950/40 backdrop-blur-md flex items-center justify-between border-b border-white/5 flex-shrink-0 z-10">
               <div className="flex items-center gap-3">
@@ -1662,25 +1783,26 @@ export function SallyChat({ currentView }: { currentView?: string }) {
 
               {/* Streaming/Thinking Loader Shimmer Card */}
               {isLoading && (
-                <div className="flex justify-start animate-pulse">
-                  <div className="sally-glass-bubble rounded-2xl rounded-tl-none p-4 text-slate-300 text-xs w-[82%] space-y-3 border-l-2 border-l-indigo-500">
+                <div className="flex justify-start">
+                  <div className="sally-glass-bubble rounded-2xl rounded-tl-none p-4 text-slate-300 text-xs w-[82%] space-y-3.5 border-l-2 border-l-indigo-500 shadow-lg">
                     <div className="flex items-center gap-2">
                       <div className="relative w-4 h-4 flex items-center justify-center">
                         <Sparkles className="w-3.5 h-3.5 text-indigo-400 absolute animate-spin" style={{ animationDuration: '6s' }} />
                         <Sparkles className="w-2.5 h-2.5 text-pink-400 absolute animate-pulse" />
                       </div>
-                      <span className="font-semibold text-[11px] tracking-wide text-indigo-300/90 font-space uppercase">Thinking...</span>
+                      <span className="font-semibold text-[10px] tracking-wide text-indigo-300/90 font-space uppercase">Thinking...</span>
                     </div>
 
                     {/* Gemini-Style pulsing gradient slider */}
-                    <div className="h-1.5 w-full rounded-full overflow-hidden relative bg-slate-900/60 border border-white/5 shadow-inner">
+                    <div className="h-1 w-full rounded-full overflow-hidden relative bg-slate-900/60 border border-white/5 shadow-inner">
                       <div className="absolute inset-0 gemini-thinking-bar rounded-full" />
                     </div>
 
-                    {/* Progressive loading paragraphs */}
-                    <div className="space-y-2 pt-1 opacity-70">
-                      <div className="h-2 bg-white/10 rounded-full w-[92%] transition-all" />
-                      <div className="h-2 bg-white/10 rounded-full w-[78%] transition-all" style={{ animationDelay: '150ms' }} />
+                    {/* Three colored bouncing gradient dots with shadow glow */}
+                    <div className="flex items-center gap-2 px-1 py-1">
+                      <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-blue-400 to-indigo-500 animate-bounce shadow-[0_0_8px_rgba(99,102,241,0.6)]" style={{ animationDelay: '0s', animationDuration: '0.8s' }} />
+                      <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-violet-400 to-pink-500 animate-bounce shadow-[0_0_8px_rgba(139,92,246,0.6)]" style={{ animationDelay: '0.15s', animationDuration: '0.8s' }} />
+                      <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-pink-400 to-emerald-500 animate-bounce shadow-[0_0_8px_rgba(16,185,129,0.6)]" style={{ animationDelay: '0.3s', animationDuration: '0.8s' }} />
                     </div>
                   </div>
                 </div>
