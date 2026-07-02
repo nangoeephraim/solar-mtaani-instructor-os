@@ -217,6 +217,7 @@ export function SallyChat({ currentView }: { currentView?: string }) {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [input, setInput] = useState('');
   const [lastUserMessage, setLastUserMessage] = useState('');
+  const [hasAttemptedRestore, setHasAttemptedRestore] = useState(false);
   const messageEndRef = useRef<HTMLDivElement | null>(null);
   const activeUtterancesRef = useRef<SpeechSynthesisUtterance[]>([]);
 
@@ -295,7 +296,7 @@ export function SallyChat({ currentView }: { currentView?: string }) {
     return [];
   };
 
-  const { messages, sendMessage, status, error, setMessages } = useChat({
+  const { messages, sendMessage, status, error, setMessages, append } = useChat({
     maxSteps: 5, // Enable multi-step tool calls
     transport: new DefaultChatTransport({
       api: '/api/ai/chat',
@@ -346,6 +347,7 @@ export function SallyChat({ currentView }: { currentView?: string }) {
         }
       }
     } catch { /* corrupt data — silent fail */ }
+    setHasAttemptedRestore(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -353,6 +355,32 @@ export function SallyChat({ currentView }: { currentView?: string }) {
     setMessages([]);
     localStorage.removeItem(STORAGE_KEY);
   }, [setMessages]);
+
+  const handleChipClick = useCallback((promptText: string) => {
+    setLastUserMessage(promptText);
+    sendMessage({ text: promptText });
+  }, [sendMessage]);
+
+  const getProactiveChips = useCallback(() => {
+    // Dynamic context-sensitive suggestions
+    const baseChips = [
+      { label: "Class Attendance", prompt: "Show me the class attendance summary" },
+      { label: "Run Analytics Insights", prompt: "Run the analytics engine and show me insights about our class" },
+      { label: "Check Inventory Stock", prompt: "Check inventory stock at Kibera" },
+      { label: "Today's Timetable", prompt: "Show me the schedule details for today" }
+    ];
+    return baseChips;
+  }, []);
+
+  // Trigger proactive welcome briefing if chat is opened with empty history
+  useEffect(() => {
+    if (isOpen && hasAttemptedRestore && messages.length === 0 && !isLoading) {
+      append({
+        role: 'user',
+        content: '[SYSTEM_INIT_WELCOME_BRIEFING] Please greet me warmly by name, check the database context (attendance averages, low stock items, recent CAT grades), and summarize our training center status in 2 natural sentences.',
+      });
+    }
+  }, [isOpen, hasAttemptedRestore, messages.length, isLoading, append]);
 
   // Auto-scroll logic
   useEffect(() => {
@@ -1277,6 +1305,11 @@ export function SallyChat({ currentView }: { currentView?: string }) {
                 const toolInvocations = getToolInvocations(m);
                 const hasTools = toolInvocations.length > 0;
                 
+                // Skip rendering trigger messages used for initial welcome briefings
+                if (isUser && messageText.includes('[SYSTEM_INIT_')) {
+                  return null;
+                }
+                
                 return (
                   <div key={m.id} className="space-y-3">
                     {/* Render Text message content */}
@@ -1407,6 +1440,19 @@ export function SallyChat({ currentView }: { currentView?: string }) {
 
             {/* Floating Pill Input Box */}
             <div className="p-4 bg-transparent flex-shrink-0">
+              {/* Proactive suggestion chips */}
+              <div className="flex gap-2 overflow-x-auto pb-2 px-0.5 scrollbar-hide no-scrollbar -mx-2 max-w-[calc(100%+16px)]">
+                {getProactiveChips().map((chip, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => handleChipClick(chip.prompt)}
+                    className="flex-shrink-0 px-3 py-1.5 rounded-full text-[10px] font-bold border bg-slate-900/60 hover:bg-slate-900/90 text-slate-300 border-white/5 hover:border-slate-800 transition-all font-google cursor-pointer"
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
               <form onSubmit={handleSubmit} className="relative flex items-center bg-slate-900/90 border border-white/10 focus-within:border-indigo-500/50 focus-within:ring-2 focus-within:ring-indigo-500/20 rounded-2xl p-1.5 transition-all shadow-2xl">
                 <input
                   value={input}
