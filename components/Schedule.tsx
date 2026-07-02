@@ -153,6 +153,14 @@ const Schedule: React.FC<ScheduleProps> = ({ data, onUpdateSchedule, onUpdateStu
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Custom confirm dialog state to bypass window.confirm issues in webviews
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  }>({ isOpen: false, title: '', message: '', onConfirm: () => { } });
+
   // Intercept back button to close modals or settings
   useEffect(() => {
     const handleBackButton = (e: Event) => {
@@ -174,15 +182,6 @@ const Schedule: React.FC<ScheduleProps> = ({ data, onUpdateSchedule, onUpdateStu
     window.addEventListener('app-back-button', handleBackButton);
     return () => window.removeEventListener('app-back-button', handleBackButton);
   }, [showSettings, showAddModal, selectedSlot, confirmDialog.isOpen]);
-
-  // Custom confirm dialog state to bypass window.confirm issues in webviews
-  const [confirmDialog, setConfirmDialog] = useState<{
-    isOpen: boolean;
-    title: string;
-    message: string;
-    onConfirm: () => void;
-  }>({ isOpen: false, title: '', message: '', onConfirm: () => { } });
-
 
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 60000); // update every minute

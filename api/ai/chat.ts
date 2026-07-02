@@ -4,7 +4,7 @@ import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createGroq } from '@ai-sdk/groq';
 import { createOpenAI } from '@ai-sdk/openai';
 import { buildPrismAIContext, buildPrismSystemPrompt } from '../../lib/aiContext.js';
-import { createServerSupabaseClient } from '../../lib/supabase-server.js';
+import { requireApiUser, requireRole } from '../../lib/supabase-server.js';
 
 // Cast tool helper to any and automatically apply passthrough() to allow extra properties safely
 const tool: any = (options: any) => {
@@ -36,15 +36,16 @@ let cachedHealthyProvider: AIProviderType | null = null;
 
 // ── Provider Resolution ──────────────────────────────────────────────
 function getProviderConfigsFromEnv(): ProviderConfig[] {
-    const mapping: { provider: AIProviderType; envKey: string; fallback?: string }[] = [
-      { provider: 'google', envKey: 'GOOGLE_GENERATIVE_AI_API_KEY', fallback: 'AIzaSyBQ' + 'hB_bOydpOVEslD4jUZUiGUN2EJaPb-Q' },
-      { provider: 'groq', envKey: 'GROQ_API_KEY', fallback: 'gsk_Wd0GJKdyHD' + 'pPNetFG294WGdyb3FYZOGOzTODmZJRjkboZFlho6Ps' },
-      { provider: 'cerebras', envKey: 'CEREBRAS_API_KEY', fallback: 'csk-f288h6e' + 'vry2cw26m2epd4yfn89vnxtemphk6ryjpwy385844' },
-      { provider: 'openrouter', envKey: 'OPENROUTER_API_KEY', fallback: 'sk-or-v1-8a47' + '7a6ba4b22252063de0f797f4a8ecf77730ee19254973881b33ece3e12a44' },
+    const mapping: { provider: AIProviderType; envKey: string }[] = [
+      { provider: 'google', envKey: 'GOOGLE_GENERATIVE_AI_API_KEY' },
+      { provider: 'groq', envKey: 'GROQ_API_KEY' },
+      { provider: 'cerebras', envKey: 'CEREBRAS_API_KEY' },
+      { provider: 'openrouter', envKey: 'OPENROUTER_API_KEY' },
     ];
 
   return mapping
-    .map(m => ({ provider: m.provider, apiKey: (process.env[m.envKey] || m.fallback!).replace(/\n/g, '').trim() }))
+    .map(m => ({ provider: m.provider, apiKey: (process.env[m.envKey] || '').replace(/\n/g, '').trim() }))
+    .filter(config => config.apiKey.length > 0);
 }
 
 // ── Model Factory ────────────────────────────────────────────────────
@@ -108,6 +109,16 @@ export default async function handler(req: Request) {
     return new Response('Method Not Allowed', { status: 405 });
   }
 
+  const auth = await requireApiUser(req);
+  if ('response' in auth) return auth.response;
+
+  const apiContext = auth.context;
+  const supabase = apiContext.supabase;
+  const requireToolRole = (roles: Array<'admin' | 'instructor' | 'viewer'>) => {
+    const allowed = requireRole(apiContext, roles);
+    return 'error' in allowed ? { error: allowed.error } : null;
+  };
+
   try {
     const body = await req.json();
     console.log('[Sally] Chat handler invoked');
@@ -163,7 +174,7 @@ export default async function handler(req: Request) {
     let systemPrompt = getFallbackSystemPrompt(institutionType);
     try {
       const ctx = await Promise.race([
-        buildPrismAIContext(),
+        buildPrismAIContext(supabase),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error('Context build exceeded timeout')), 1500)
         ),
@@ -198,7 +209,7 @@ export default async function handler(req: Request) {
             if (!locationName) {
               return { error: 'Location name is required' };
             }
-            const supabase = await createServerSupabaseClient();
+            const supabase = apiContext.supabase;
             let query = supabase.from('equipment_inventory').select('*').ilike('location', `%${locationName}%`).abortSignal((globalThis as any).reqAbortSignal);
             if (itemName) query = query.ilike('item_name', `%${itemName}%`);
             const { data, error } = await query;
@@ -228,6 +239,8 @@ export default async function handler(req: Request) {
         }),
         execute: async (args: any) => {
           try {
+            const denied = requireToolRole(['admin', 'instructor']);
+            if (denied) return denied;
             const studentName = args.studentName ?? args.student_name ?? args.student;
             const moduleName = args.moduleName ?? args.module_name ?? args.module;
             const rawScore = args.score ?? args.grade ?? args.mark;
@@ -239,7 +252,7 @@ export default async function handler(req: Request) {
             const score = typeof rawScore === 'number' ? rawScore : parseFloat(rawScore);
             if (isNaN(score)) return { error: 'Invalid score value' };
 
-            const supabase = await createServerSupabaseClient();
+            const supabase = apiContext.supabase;
             const { data: students, error: stdErr } = await supabase
               .from('students')
               .select('id, name')
@@ -270,7 +283,7 @@ export default async function handler(req: Request) {
           try {
             const studentName = args.studentName ?? args.student_name ?? args.student;
             const getStats = args.getStats ?? args.get_stats;
-            const supabase = await createServerSupabaseClient();
+            const supabase = apiContext.supabase;
             
             if (getStats) {
               const { data, error } = await supabase.from('students').select('id, attendance_rate, average_score').abortSignal((globalThis as any).reqAbortSignal);
@@ -316,7 +329,7 @@ export default async function handler(req: Request) {
             const mpesaReceipt = args.mpesaReceipt ?? args.mpesa_receipt ?? args.receipt;
             const status = args.status;
             const getStats = args.getStats ?? args.get_stats;
-            const supabase = await createServerSupabaseClient();
+            const supabase = apiContext.supabase;
             
             if (getStats) {
               const { data, error } = await supabase.from('fee_payments').select('amount, status').abortSignal((globalThis as any).reqAbortSignal);
@@ -360,7 +373,7 @@ export default async function handler(req: Request) {
           try {
             const searchTerm = args.searchTerm ?? args.search_term ?? args.search;
             const category = args.category;
-            const supabase = await createServerSupabaseClient();
+            const supabase = apiContext.supabase;
             
             let query = supabase.from('library_resources').select('*').order('uploaded_at', { ascending: false }).abortSignal((globalThis as any).reqAbortSignal);
             if (category) {
@@ -399,7 +412,7 @@ export default async function handler(req: Request) {
             const channelName = args.channelName ?? args.channel_name ?? args.channel ?? 'general';
             const searchTerm = args.searchTerm ?? args.search_term ?? args.search;
             const limit = Math.min(args.limit ?? 15, 50);
-            const supabase = await createServerSupabaseClient();
+            const supabase = apiContext.supabase;
             
             // Resolve channel name to ID
             const { data: channels, error: chErr } = await supabase
@@ -486,7 +499,7 @@ export default async function handler(req: Request) {
             const location = args.locationName ?? args.location_name ?? args.location;
             const type = args.type;
             
-            const supabase = await createServerSupabaseClient();
+            const supabase = apiContext.supabase;
             let query = supabase.from('schedule_slots').select('*').abortSignal((globalThis as any).reqAbortSignal);
             
             if (rawDay !== undefined) {
@@ -532,8 +545,10 @@ export default async function handler(req: Request) {
         }),
         execute: async (args: any) => {
           try {
+            const denied = requireToolRole(['admin', 'instructor']);
+            if (denied) return denied;
             const { action, id } = args;
-            const supabase = await createServerSupabaseClient();
+            const supabase = apiContext.supabase;
             
             if (action === 'delete') {
               if (!id) return { error: 'Schedule slot ID is required for deletion' };
@@ -595,7 +610,7 @@ export default async function handler(req: Request) {
           try {
             const status = args.status;
             const hostName = args.hostName ?? args.host_name;
-            const supabase = await createServerSupabaseClient();
+            const supabase = apiContext.supabase;
             let query = supabase.from('meetings').select('*').order('created_at', { ascending: false }).abortSignal((globalThis as any).reqAbortSignal);
             
             if (status) {
@@ -626,14 +641,17 @@ export default async function handler(req: Request) {
         }),
         execute: async (args: any) => {
           try {
+            const denied = requireToolRole(['admin', 'instructor']);
+            if (denied) return denied;
             const { action } = args;
             const meetingCode = args.meetingCode ?? args.meeting_code;
-            const hostName = args.hostName ?? args.host_name;
-            const hostId = args.hostId ?? args.host_id;
+            const requestedHostName = args.hostName ?? args.host_name;
+            const hostName = apiContext.profile.name || apiContext.user.email || requestedHostName || 'PRISM User';
+            const hostId = apiContext.user.id;
             const title = args.title || 'PRISM Meeting';
             
             if (!meetingCode) return { error: 'Meeting code is required' };
-            const supabase = await createServerSupabaseClient();
+            const supabase = apiContext.supabase;
             
             if (action === 'create') {
               if (!hostName) return { error: 'Host name is required to start a meeting' };
@@ -674,7 +692,7 @@ export default async function handler(req: Request) {
           try {
             const instructorName = args.instructorName ?? args.instructor_name ?? args.instructor;
             const subject = args.subject;
-            const supabase = await createServerSupabaseClient();
+            const supabase = apiContext.supabase;
             
             let query = supabase.from('instructor_profiles').select('*').abortSignal((globalThis as any).reqAbortSignal);
             if (instructorName) {
@@ -722,8 +740,10 @@ export default async function handler(req: Request) {
         }),
         execute: async (args: any) => {
           try {
+            const denied = requireToolRole(['admin']);
+            if (denied) return denied;
             const { action, id } = args;
-            const supabase = await createServerSupabaseClient();
+            const supabase = apiContext.supabase;
             
             const fullName = args.fullName ?? args.full_name;
             const email = args.email;
@@ -773,6 +793,8 @@ export default async function handler(req: Request) {
         }),
         execute: async (args: any) => {
           try {
+            const denied = requireToolRole(['admin', 'instructor']);
+            if (denied) return denied;
             const location = args.location;
             const itemName = args.itemName ?? args.item_name;
             const action = args.action;
@@ -782,7 +804,7 @@ export default async function handler(req: Request) {
               return { error: 'Location, itemName, and quantity/qty are required' };
             }
             
-            const supabase = await createServerSupabaseClient();
+            const supabase = apiContext.supabase;
             
             // Check if item exists at location
             const { data: existing, error: findErr } = await supabase
@@ -851,7 +873,7 @@ export default async function handler(req: Request) {
           try {
             const name = args.name;
             const studentGroup = args.studentGroup ?? args.student_group;
-            const supabase = await createServerSupabaseClient();
+            const supabase = apiContext.supabase;
             
             let query = supabase.from('fee_structures').select('*').abortSignal((globalThis as any).reqAbortSignal);
             if (name) {
@@ -879,7 +901,7 @@ export default async function handler(req: Request) {
         execute: async (args: any) => {
           try {
             const studentName = args.studentName ?? args.student_name ?? args.student;
-            const supabase = await createServerSupabaseClient();
+            const supabase = apiContext.supabase;
             
             let query = supabase.from('student_fee_balances').select('*').abortSignal((globalThis as any).reqAbortSignal);
             if (studentName) {
@@ -901,20 +923,22 @@ export default async function handler(req: Request) {
           channel_name: z.string().optional().describe('Target channel name: general, announcements'),
           channel: z.string().optional().describe('Target channel name: general, announcements'),
           content: z.string().describe('Text content of message or announcement to post'),
-          senderName: z.string().describe('Name of the sender instructor profile (must exist in profiles name column)'),
+          senderName: z.string().optional().describe('Legacy sender name; ignored in favor of the authenticated user'),
           sender_name: z.string().optional().describe('Name of the sender instructor profile (must exist in profiles name column)'),
         }),
         execute: async (args: any) => {
           try {
+            const denied = requireToolRole(['admin', 'instructor']);
+            if (denied) return denied;
             const channelName = args.channelName ?? args.channel_name ?? args.channel;
             const content = args.content;
-            const senderName = args.senderName ?? args.sender_name;
+            const senderName = apiContext.profile.name || apiContext.user.email || 'PRISM User';
             
-            if (!channelName || !content || !senderName) {
-              return { error: 'Channel name, content, and sender name are required' };
+            if (!channelName || !content) {
+              return { error: 'Channel name and content are required' };
             }
             
-            const supabase = await createServerSupabaseClient();
+            const supabase = apiContext.supabase;
             
             // Resolve channel
             const { data: channels, error: chErr } = await supabase
@@ -930,34 +954,12 @@ export default async function handler(req: Request) {
             );
             if (!targetChannel) return { error: `Could not find chat channel matching "${channelName}"` };
             
-            // Resolve sender profile using name. Since we don't have UUID, we query profiles table.
-            const { data: profiles, error: profErr } = await supabase
-              .from('profiles')
-              .select('id, name')
-              .ilike('name', `%${senderName}%`)
-              .abortSignal((globalThis as any).reqAbortSignal);
-              
-            if (profErr) return { error: profErr.message };
-            
-            let senderId = '00000000-0000-0000-0000-000000000000'; // Default system sender
-            if (profiles?.length) {
-              senderId = profiles[0].id;
-            } else {
-              // Fetch any active profile from database to use as sender fallback
-              const { data: anyProfile } = await supabase.from('profiles').select('id, name').limit(1);
-              if (anyProfile?.length) {
-                senderId = anyProfile[0].id;
-                console.log(`[Sally] Sender profile "${senderName}" not found. Falling back to active sender "${anyProfile[0].name}" (${senderId})`);
-              } else {
-                return { error: `Sender profile matching name "${senderName}" does not exist, and no fallback profiles are available in the system.` };
-              }
-            }
-            
             const { data: posted, error: postErr } = await supabase
               .from('chat_messages')
               .insert({
                 channel_id: targetChannel.id,
-                sender_id: senderId,
+                sender_id: apiContext.user.id,
+                sender_name: senderName,
                 content: content
               })
               .select();
@@ -982,7 +984,7 @@ export default async function handler(req: Request) {
           try {
             const studentName = args.studentName ?? args.student_name ?? args.student;
             const getClassSummary = args.getClassSummary ?? args.get_class_summary;
-            const supabase = await createServerSupabaseClient();
+            const supabase = apiContext.supabase;
 
             if (getClassSummary) {
               const { data, error } = await supabase
@@ -1052,7 +1054,7 @@ export default async function handler(req: Request) {
         }),
         execute: async (args: any) => {
           try {
-            const supabase = await createServerSupabaseClient();
+            const supabase = apiContext.supabase;
             const focusArea = (args.focusArea ?? args.focus_area ?? 'all').toLowerCase();
 
             // Fetch students and schedule for the intelligence engine
@@ -1182,6 +1184,8 @@ export default async function handler(req: Request) {
         }),
         execute: async (args: any) => {
           try {
+            const denied = requireToolRole(['admin', 'instructor']);
+            if (denied) return denied;
             const recipientName = args.recipientName ?? args.recipient_name;
             const message = args.message;
             const type = args.type || 'push';
@@ -1191,7 +1195,7 @@ export default async function handler(req: Request) {
               return { error: 'Recipient name and message content are required' };
             }
 
-            const supabase = await createServerSupabaseClient();
+            const supabase = apiContext.supabase;
 
             // Try to resolve recipient from students table for phone number
             let resolvedPhone = phone;
@@ -1210,7 +1214,8 @@ export default async function handler(req: Request) {
             // Log the notification to the database
             const { error: logErr } = await supabase.from('chat_messages').insert({
               channel_id: 'chan_announcements',
-              sender_id: '00000000-0000-0000-0000-000000000000',
+              sender_id: apiContext.user.id,
+              sender_name: apiContext.profile.name || apiContext.user.email || 'PRISM User',
               content: `[Sally Notification to ${recipientName}]: ${message}`,
             });
 
@@ -1276,7 +1281,7 @@ export default async function handler(req: Request) {
               await generateText({
                 model,
                 prompt: 'ok',
-                maxTokens: 1,
+                maxOutputTokens: 1,
                 maxRetries: 0,
               });
             })(),

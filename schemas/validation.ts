@@ -189,7 +189,7 @@ export function useValidation<T>(schema: z.ZodSchema<T>) {
     return {
         validate: (data: unknown) => validateWithSchema(schema, data),
         validateField: (field: string, value: unknown) => {
-            const fieldSchema = (schema as z.ZodObject<any>).shape?.[field];
+            const fieldSchema = (schema as unknown as z.ZodObject<any>).shape?.[field];
             if (!fieldSchema) return { success: true };
             return validateWithSchema(fieldSchema, value);
         },

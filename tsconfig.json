@@ -16,7 +16,7 @@
     "moduleResolution": "bundler",
     "isolatedModules": true,
     "moduleDetection": "force",
-    "allowJs": true,
+    "allowJs": false,
     "jsx": "react-jsx",
     "paths": {
       "@/*": [
@@ -26,7 +26,31 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
+  "include": [
+    "App.tsx",
+    "index.tsx",
+    "types.ts",
+    "constants.ts",
+    "vite.config.ts",
+    "components/**/*.ts",
+    "components/**/*.tsx",
+    "contexts/**/*.ts",
+    "contexts/**/*.tsx",
+    "hooks/**/*.ts",
+    "lib/**/*.ts",
+    "services/**/*.ts",
+    "schemas/**/*.ts",
+    "utils/**/*.ts",
+    "api/**/*.ts",
+    "scripts/**/*.ts"
+  ],
   "exclude": [
-    "supabase/functions/**/*"
+    "node_modules",
+    "dist",
+    "android",
+    "scratch",
+    "supabase/functions/**/*",
+    "*.bak",
+    "temp_*"
   ]
 }

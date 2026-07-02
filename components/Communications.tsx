@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence, useMotionValue, useTransform, animate } from 'framer-motion';
 import { AppData, ChatChannel, ChatMessage, ChatAttachment } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -21,8 +21,9 @@ import UserAvatar from './UserAvatar';
 import { fetchAvatarMap, fetchActiveUsers, ProfileData } from '../services/profileService';
 import { createTypingChannel, broadcastTyping, TypingEvent } from '../services/realtimeService';
 import { playSendSound, playReceiveSound } from '../utils/audioUtils';
-import Meetings from './Meetings';
 import { supabase } from '../services/supabase';
+
+const Meetings = lazy(() => import('./Meetings'));
 
 const EMOJI_OPTIONS = ['👍', '❤️', '😂', '🎉', '✅', '👀', '🔥'];
 const ANNOUNCEMENT_TEMPLATES = [
@@ -1494,7 +1495,18 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
             {/* ═══ MAIN CHAT AREA ═══ */}
             {activeChannelId === 'video_meetings' ? (
                 <div className={clsx("flex-1 flex flex-col relative overflow-hidden", mobileView === 'chat' ? "flex" : "hidden lg:flex")} style={{ background: 'var(--md-sys-color-background)' }}>
-                    <Meetings pendingMeetCode={internalMeetCode || pendingMeetCode} />
+                    <Suspense
+                        fallback={
+                            <div className="flex-1 grid place-items-center p-6">
+                                <div className="flex items-center gap-3 rounded-2xl border px-5 py-4 shadow-sm" style={{ background: 'var(--md-sys-color-surface)', borderColor: 'var(--md-sys-color-outline-variant)', color: 'var(--md-sys-color-on-surface)' }}>
+                                    <div className="h-3 w-3 rounded-full animate-pulse" style={{ background: 'var(--md-sys-color-primary)' }} />
+                                    <span className="text-sm font-semibold">Preparing meeting room...</span>
+                                </div>
+                            </div>
+                        }
+                    >
+                        <Meetings pendingMeetCode={internalMeetCode || pendingMeetCode} />
+                    </Suspense>
                 </div>
             ) : activeChannel ? (
                 <>

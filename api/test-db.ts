@@ -1,10 +1,13 @@
 import { buildPrismAIContext } from '../lib/aiContext.js';
+import { requireApiUser } from '../lib/supabase-server.js';
 
 export default async function handler(req: Request) {
+  const auth = await requireApiUser(req, { roles: ['admin'] });
+  if ('response' in auth) return auth.response;
+
   try {
-    console.log("Entering test-db handler...");
     const start = Date.now();
-    const ctx = await buildPrismAIContext();
+    const ctx = await buildPrismAIContext(auth.context.supabase);
     const duration = Date.now() - start;
     
     return new Response(JSON.stringify({ 

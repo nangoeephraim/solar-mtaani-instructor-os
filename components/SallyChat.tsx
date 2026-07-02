@@ -7,6 +7,7 @@ import { Sparkles, Send, Volume2, VolumeX, X, Box, ClipboardCheck, ArrowUpRight,
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
 import { useTheme } from '../contexts/ThemeContext';
+import { getAuthHeaders } from '../services/authHeaders';
 
 // ── Constants ────────────────────────────────────────────────────────
 const STORAGE_KEY = 'sally_chat_history_v2';
@@ -245,10 +246,11 @@ export function SallyChat({ currentView }: { currentView?: string }) {
   const { messages, sendMessage, status, error, setMessages } = useChat({
     transport: new DefaultChatTransport({
       api: '/api/ai/chat',
+      headers: () => getAuthHeaders(),
+      body: {
+        institutionType: instType,
+      },
     }),
-    body: {
-      institutionType: instType,
-    },
     onFinish: (response: any) => {
       // Extract assistant response safely from the event payload
       const msg = response?.responseMessage || response;

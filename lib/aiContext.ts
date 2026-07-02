@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from './supabase-server.js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 export interface PrismAIContext {
   systemIdentity: string;
@@ -77,8 +78,8 @@ async function safeQuery<T>(
  * Each query is individually guarded with a timeout and error handler
  * so that a single slow/failing query doesn't block the entire context.
  */
-export async function buildPrismAIContext(): Promise<PrismAIContext> {
-  const supabase = await createServerSupabaseClient();
+export async function buildPrismAIContext(client?: SupabaseClient): Promise<PrismAIContext> {
+  const supabase = client || createServerSupabaseClient();
 
   // Parallel fetch DB snapshots — each query is independently resilient
   const [

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '../../services/supabase';
+import { getAuthHeaders } from '../../services/authHeaders';
 import { useAuth } from '../../contexts/AuthContext';
 import { Room, RoomEvent, VideoPresets, LocalParticipant, RemoteParticipant, RemoteTrackPublication, RemoteTrack, Track } from 'livekit-client';
 import { BackgroundBlur, VirtualBackground } from '@livekit/track-processors';
@@ -328,8 +329,8 @@ export function useMeetingEngine(pendingMeetCode?: string) {
                 // BUG-09 FIX: 5 second timeout on token fetch — prevents indefinite hang on cold starts
                 const response = await fetch('/api/livekit-token', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ roomName: mid, participantName: userName, participantId: user?.id || crypto.randomUUID() }),
+                    headers: await getAuthHeaders({ 'Content-Type': 'application/json' }),
+                    body: JSON.stringify({ roomName: mid, participantName: userName }),
                     signal: AbortSignal.timeout(5000),
                 });
                 const data = await response.json();
@@ -1794,6 +1795,7 @@ export function useMeetingEngine(pendingMeetCode?: string) {
                         
                         const res = await fetch('/api/upload-recording', {
                             method: 'POST',
+                            headers: await getAuthHeaders(),
                             body: formData
                         });
                         const data = await res.json();

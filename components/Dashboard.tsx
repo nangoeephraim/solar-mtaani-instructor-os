@@ -14,6 +14,7 @@ import clsx from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { analyzeData } from '../services/intelligenceService';
+import { getPendingMutations } from '../services/offlineSyncService';
 import PageTransition from './PageTransition';
 import WordRotator from './WordRotator';
 
@@ -203,7 +204,6 @@ const ConnectionStatus: React.FC = React.memo(() => {
     // Check pending mutations count
     const checkPending = async () => {
       try {
-        const { getPendingMutations } = await import('../services/offlineSyncService');
         const mutations = await getPendingMutations();
         setPendingCount(mutations.length);
       } catch { /* silent */ }

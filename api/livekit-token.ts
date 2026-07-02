@@ -1,4 +1,5 @@
 import { AccessToken } from 'livekit-server-sdk';
+import { requireApiUser } from '../lib/supabase-server.js';
 
 
 export default async function handler(req: Request) {
@@ -6,8 +7,17 @@ export default async function handler(req: Request) {
     return new Response('Method Not Allowed', { status: 405 });
   }
 
+  const auth = await requireApiUser(req);
+  if ('response' in auth) return auth.response;
+
   try {
-    const { roomName, participantName, participantId } = await req.json();
+    const { roomName, participantName } = await req.json();
+    if (typeof roomName !== 'string' || !/^[a-zA-Z0-9_-]{4,80}$/.test(roomName)) {
+      return new Response(JSON.stringify({ error: 'Invalid room name' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
     const apiKey = process.env.LIVEKIT_API_KEY;
     const apiSecret = process.env.LIVEKIT_API_SECRET;
@@ -20,8 +30,8 @@ export default async function handler(req: Request) {
     }
 
     const at = new AccessToken(apiKey, apiSecret, {
-      identity: participantId,
-      name: participantName,
+      identity: auth.context.user.id,
+      name: participantName || auth.context.profile.name || auth.context.user.email || 'PRISM User',
     });
     
     at.addGrant({ roomJoin: true, room: roomName, canPublish: true, canSubscribe: true });

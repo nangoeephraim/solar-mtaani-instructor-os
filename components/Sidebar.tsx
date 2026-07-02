@@ -52,7 +52,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, data }) => {
   const handlePreload = useCallback((viewId: string) => {
     const loader = VIEW_PRELOAD_MAP[viewId];
     if (loader) {
-      loader(); // Triggers webpack/vite chunk fetch — cached by browser
+      loader(); // Triggers webpack/vite chunk fetch â€” cached by browser
     }
   }, []);
 
@@ -76,7 +76,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, data }) => {
   const visibleItems = navItems.filter(item => userLevel >= (ROLE_LEVEL[item.minRole] || 1));
 
   return (
-    <div className="hidden lg:flex w-[260px] flex-col h-[calc(100vh-2rem)] my-4 ml-4 rounded-3xl z-20 sidebar-glass shadow-lg border border-[var(--md-sys-color-outline-variant)] bg-[var(--glass-bg)] backdrop-blur-3xl overflow-hidden">
+    <div className="hidden lg:flex w-[260px] flex-col h-[calc(100vh-2rem)] my-4 ml-4 rounded-[24px] z-20 sidebar-glass shadow-lg border border-[var(--md-sys-color-outline-variant)] bg-[var(--glass-bg)] backdrop-blur-3xl overflow-hidden">
       {/* Logo Header */}
       <div className="p-4 flex items-center gap-3 border-b border-[var(--md-sys-color-outline)]">
         <motion.div
@@ -106,7 +106,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, data }) => {
                 ? "bg-blue-500/10 text-blue-700 dark:bg-blue-400/20 dark:text-blue-300 border-blue-200 dark:border-blue-800/50"
                 : "bg-slate-500/10 text-slate-700 dark:bg-slate-400/20 dark:text-slate-300 border-slate-200 dark:border-slate-800/50"
           )}>
-            {user.role === 'admin' ? '🛡️ Administrator' : user.role === 'instructor' ? '📘 Instructor' : '👁️ Viewer'}
+            {user.role === 'admin' ? 'Administrator' : user.role === 'instructor' ? 'Instructor' : 'Viewer'}
           </div>
         </div>
       )}
@@ -120,13 +120,14 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, data }) => {
               key={item.id}
               onClick={() => onNavigate(item.id)}
               onMouseEnter={() => handlePreload(item.id)}
+              aria-current={isActive ? 'page' : undefined}
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: index * 0.04 }}
-              whileHover={{ scale: 1.02 }}
+              whileHover={{ scale: 1.01, x: 2 }}
               whileTap={{ scale: 0.98 }}
               className={clsx(
-                "w-full flex items-center gap-3.5 px-4 py-2.5 rounded-2xl transition-all duration-200 group font-medium relative overflow-hidden tap-target mx-auto nav-preload-hint",
+                "w-full flex items-center gap-3.5 px-4 py-2.5 rounded-xl transition-all duration-200 group font-medium relative overflow-hidden tap-target mx-auto nav-preload-hint",
                 isActive
                   ? "bg-[var(--md-sys-color-primary)] text-white shadow-md sidebar-active-glow"
                   : "text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-surface-variant)] hover:text-[var(--md-sys-color-on-surface)]"

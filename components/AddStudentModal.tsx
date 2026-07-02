@@ -160,13 +160,30 @@ const AddStudentModal: React.FC<AddStudentModalProps> = ({ isOpen, onClose, onAd
             return;
         }
 
+        const valid = result.data;
         const newStudent: Omit<Student, 'id'> = {
-            ...result.data,
-            studentGroup: studentGroup,
+            name: valid.name,
+            grade: valid.grade,
+            lot: valid.lot,
+            subject: valid.subject,
+            email: valid.email || undefined,
+            phone: valid.phone || undefined,
+            dateOfBirth: valid.dateOfBirth || undefined,
+            guardianName: valid.guardianName || undefined,
+            guardianPhone: valid.guardianPhone || undefined,
+            admissionNumber: valid.admissionNumber || undefined,
+            nemisNumber: valid.nemisNumber || undefined,
+            upi: valid.upi || undefined,
+            kcpeMarks: typeof valid.kcpeMarks === 'number' ? valid.kcpeMarks : undefined,
+            nationalId: valid.nationalId || undefined,
+            nitaNumber: valid.nitaNumber || undefined,
+            epraLicenseStatus: valid.epraLicenseStatus,
+            kcseGrade: valid.kcseGrade || undefined,
+            notes: valid.notes || [],
+            studentGroup,
             competencies: getDefaultCompetencies(subject),
             attendancePct: 100,
             attendanceHistory: [],
-            notes: [],
             assessment: { units: {}, termStats: [] }
         };
 

@@ -3,3 +3,11 @@ android/
 
 # Skip pre-built dist — Vercel runs its own build
 dist/
+
+# Never upload local credentials or machine-specific caches.
+.env
+.env.*
+!.env.example
+.npm-cache/
+node_modules/
+.git/

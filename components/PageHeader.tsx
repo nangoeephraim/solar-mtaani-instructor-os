@@ -15,7 +15,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, icon: Icon, ac
         <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6"
+            className="page-header-surface flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6"
         >
             <div className="flex items-center gap-4">
                 {Icon && (
@@ -23,7 +23,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, icon: Icon, ac
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                         className={clsx(
-                            "w-12 h-12 rounded-xl flex items-center justify-center shadow-sm border border-[var(--md-sys-color-outline)] bg-[var(--md-sys-color-surface)]",
+                            "w-12 h-12 rounded-2xl flex items-center justify-center shadow-sm border border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface)]",
                             color
                         )}
                     >
@@ -31,7 +31,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, icon: Icon, ac
                     </motion.div>
                 )}
                 <div>
-                    <h1 className="text-3xl font-google font-black text-[var(--md-sys-color-on-surface)] tracking-tight">
+                    <h1 className="text-2xl md:text-3xl font-google font-black text-[var(--md-sys-color-on-surface)]">
                         {title}
                     </h1>
                     {subtitle && (

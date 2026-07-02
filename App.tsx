@@ -25,7 +25,7 @@ import {
   getSettings
 } from './services/storageService';
 import { INITIAL_DATA, DEFAULT_SCHEDULE_TEMPLATE } from './constants';
-import { AppData, Student, ScheduleSlot, Resource, LibraryResource, ChatMessage, FeePayment, FeeStructure, DEFAULT_SETTINGS } from './types';
+import { AppData, Student, ScheduleSlot, Resource, LibraryResource, ChatMessage, FeePayment, FeeStructure, DEFAULT_SETTINGS, CurriculumUnit } from './types';
 import { ToastProvider, useToast } from './components/Toast';
 import { ThemeProvider, useTheme } from './contexts/ThemeContext';
 import { KENYAN_CURRICULA } from './utils/curriculumData';
@@ -51,6 +51,7 @@ import {
   startHealthMonitor,
   unsubscribeAll
 } from './services/realtimeService';
+import { getPendingMutations } from './services/offlineSyncService';
 
 
 // Lazy load components for code splitting
@@ -158,6 +159,12 @@ const INITIAL_MEET_CODE: string | null = (() => {
   }
 })();
 
+const resolveCurriculum = (curriculum?: Record<string, CurriculumUnit[]>): AppData['curriculum'] => ({
+  ...(curriculum || {}),
+  solar: curriculum?.solar || [],
+  ict: curriculum?.ict || [],
+});
+
 const AppContent: React.FC = () => {
   const { preferences } = useTheme();
   const activeCurriculum = preferences?.selectedCurriculum || 'TVET_CDACC';
@@ -167,7 +174,7 @@ const AppContent: React.FC = () => {
   // Reactively populate/update curriculum state when preferences change
   useEffect(() => {
     if (data) {
-      const targetCurriculum = KENYAN_CURRICULA[activeCurriculum] || {};
+      const targetCurriculum = resolveCurriculum(KENYAN_CURRICULA[activeCurriculum]);
       if (JSON.stringify(data.curriculum) !== JSON.stringify(targetCurriculum)) {
         setData((prev) => {
           if (!prev) return null;
@@ -217,8 +224,7 @@ const AppContent: React.FC = () => {
     
     // Check/sync on mount if online and has pending queue
     if (navigator.onLine) {
-      import('./services/offlineSyncService').then(async ({ getPendingMutations }) => {
-        const pending = await getPendingMutations();
+      getPendingMutations().then((pending) => {
         if (pending.length > 0) {
           handleOnline();
         }
@@ -228,8 +234,7 @@ const AppContent: React.FC = () => {
     // Periodic check every 30s if online and has pending mutations
     const intervalId = setInterval(() => {
       if (navigator.onLine) {
-        import('./services/offlineSyncService').then(async ({ getPendingMutations }) => {
-          const pending = await getPendingMutations();
+        getPendingMutations().then((pending) => {
           if (pending.length > 0) {
             handleOnline();
           }
@@ -413,7 +418,7 @@ const AppContent: React.FC = () => {
         if (isMounted) {
           const currentPrefs = getSettings()?.preferences || DEFAULT_SETTINGS.preferences;
           const activeCurr = currentPrefs.selectedCurriculum || 'TVET_CDACC';
-          appData.curriculum = KENYAN_CURRICULA[activeCurr] || {};
+          appData.curriculum = resolveCurriculum(KENYAN_CURRICULA[activeCurr]);
           setData(appData);
           setIsLoading(false);
         }
@@ -1307,7 +1312,7 @@ const AppContent: React.FC = () => {
   );
 
   return (
-    <div className="flex relative h-full bg-[var(--md-sys-color-background)] overflow-hidden">
+    <div className="app-shell flex relative h-full bg-[var(--md-sys-color-background)] overflow-hidden">
       {/* Global Animated Background */}
       <AnimatedBackground />
 
@@ -1319,7 +1324,7 @@ const AppContent: React.FC = () => {
         <Sidebar currentView={currentView} onNavigate={handleNavigate} data={data} />
 
         {/* Main Content Area */}
-        <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative z-10">
+        <div className="app-main-surface flex-1 flex flex-col min-w-0 overflow-hidden relative z-10 lg:rounded-l-[28px]">
           {(() => {
             const isAppView = currentView === 'communications' || currentView === 'schedule';
             return (
@@ -1328,7 +1333,7 @@ const AppContent: React.FC = () => {
                 isAppView ? "overflow-hidden" : "overflow-y-auto"
               )}>
                 <div className={clsx(
-                  "mx-auto w-full transition-all duration-300",
+                   "page-shell mx-auto w-full transition-all duration-300",
                   isAppView 
                     ? "app-view-container p-0 max-w-none"
                     : "p-4 md:p-6 lg:p-8 pb-32 lg:pb-8 max-w-[1600px]"
