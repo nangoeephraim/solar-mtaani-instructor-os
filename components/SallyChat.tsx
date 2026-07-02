@@ -295,8 +295,8 @@ export function SallyChat({ currentView }: { currentView?: string }) {
     return [];
   };
 
-  // Vercel AI SDK integration hook using modular transport
   const { messages, sendMessage, status, error, setMessages } = useChat({
+    maxSteps: 5, // Enable multi-step tool calls
     transport: new DefaultChatTransport({
       api: '/api/ai/chat',
       headers: () => getAuthHeaders(),

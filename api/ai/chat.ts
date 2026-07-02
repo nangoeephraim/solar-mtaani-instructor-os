@@ -370,19 +370,10 @@ export default async function handler(req: Request) {
       logStudentAssessment: tool({
         description: 'Submit a training module grade/score for a student directly from conversation.',
         parameters: z.object({
-          studentName: z.string().optional().describe('Full name of the student'),
-          student_name: z.string().optional().describe('Full name of the student'),
-          student: z.string().optional().describe('Full name of the student'),
-          moduleName: z.string().optional().describe('Solar training module name'),
-          module_name: z.string().optional().describe('Solar training module name'),
-          module: z.string().optional().describe('Solar training module name'),
-          score: z.union([z.number(), z.string()]).optional().describe('Assessment score out of 100'),
-          grade: z.union([z.number(), z.string()]).optional().describe('Assessment score out of 100'),
-          mark: z.union([z.number(), z.string()]).optional().describe('Assessment score out of 100'),
-          comments: z.string().optional().describe('Brief feedback notes'),
-          comment: z.string().optional().describe('Brief feedback notes'),
-          notes: z.string().optional().describe('Brief feedback notes'),
-          feedback: z.string().optional().describe('Brief feedback notes'),
+          studentName: z.string().optional().describe('Full name of the student to grade.'),
+          moduleName: z.string().optional().describe('Name of the training module.'),
+          score: z.union([z.number(), z.string()]).optional().describe('Assessment score/mark out of 100.'),
+          comments: z.string().optional().describe('Feedback comments or notes.'),
         }),
         execute: async (args: any) => {
           try {
@@ -420,11 +411,8 @@ export default async function handler(req: Request) {
       getStudentData: tool({
         description: 'Query student database records. Can search for a student by name, retrieve stats, or get details.',
         parameters: z.object({
-          studentName: z.string().optional().describe('Full or partial name of student'),
-          student_name: z.string().optional().describe('Full or partial name of student'),
-          student: z.string().optional().describe('Full or partial name of student'),
-          getStats: z.boolean().optional().describe('Set true to get global student statistics (average scores, counts)'),
-          get_stats: z.boolean().optional().describe('Set true to get global student statistics (average scores, counts)'),
+          studentName: z.string().optional().describe('Full or partial name of the student to look up.'),
+          getStats: z.boolean().optional().describe('Set true to get global student statistics (average scores, counts).'),
         }),
         execute: async (args: any) => {
           try {
@@ -460,15 +448,10 @@ export default async function handler(req: Request) {
       getFeePayments: tool({
         description: 'Query fee payment receipts and financial transactions from the database.',
         parameters: z.object({
-          studentName: z.string().optional().describe('Full or partial name of student to find payments for'),
-          student_name: z.string().optional().describe('Full or partial name of student to find payments for'),
-          student: z.string().optional().describe('Full or partial name of student to find payments for'),
-          mpesaReceipt: z.string().optional().describe('M-Pesa receipt code or phone number to lookup'),
-          mpesa_receipt: z.string().optional().describe('M-Pesa receipt code or phone number to lookup'),
-          receipt: z.string().optional().describe('M-Pesa receipt code or phone number to lookup'),
-          status: z.string().optional().describe('Payment status: completed, pending, failed, cancelled'),
-          getStats: z.boolean().optional().describe('Set true to get total fee collection statistics'),
-          get_stats: z.boolean().optional().describe('Set true to get total fee collection statistics'),
+          studentName: z.string().optional().describe('Full or partial name of student to find payments for.'),
+          mpesaReceipt: z.string().optional().describe('M-Pesa receipt code or phone number to lookup.'),
+          status: z.string().optional().describe('Payment status: completed, pending, failed, cancelled.'),
+          getStats: z.boolean().optional().describe('Set true to get total fee collection statistics.'),
         }),
         execute: async (args: any) => {
           try {
@@ -1121,11 +1104,8 @@ export default async function handler(req: Request) {
       getAttendanceData: tool({
         description: 'Query student attendance records, rates, streaks, and daily history. Use when the instructor asks about attendance for a specific student or for the class overall.',
         parameters: z.object({
-          studentName: z.string().optional().describe('Full or partial name of student to check attendance for'),
-          student_name: z.string().optional().describe('Full or partial name of student to check attendance for'),
-          student: z.string().optional().describe('Full or partial name of student to check attendance for'),
-          getClassSummary: z.boolean().optional().describe('Set true to get a class-wide attendance summary instead of per-student'),
-          get_class_summary: z.boolean().optional().describe('Set true to get a class-wide attendance summary instead of per-student'),
+          studentName: z.string().optional().describe('Full or partial name of the student to check attendance for. Leave empty to query class summary.'),
+          getClassSummary: z.boolean().optional().describe('Set true to get a class-wide attendance summary instead of an individual student.'),
         }),
         execute: async (args: any) => {
           try {
@@ -1433,6 +1413,7 @@ export default async function handler(req: Request) {
           tools,
           toolChoice: routeMode === 'simple-chat' ? 'none' : 'auto',
           maxRetries: 0,
+          maxSteps: 5,
           abortSignal: (globalThis as any).reqAbortSignal
         });
 
