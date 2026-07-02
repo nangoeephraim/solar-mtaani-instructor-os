@@ -123,7 +123,7 @@ function getCachedProvider(): AIProviderType | null {
   return cachedHealthyProvider;
 }
 
-function markProviderSuccess(provider: AIProviderType, latencyMs: number) {
+export function markProviderSuccess(provider: AIProviderType, latencyMs: number) {
   const previous = providerHealth.get(provider);
   providerHealth.set(provider, {
     provider,
@@ -137,7 +137,7 @@ function markProviderSuccess(provider: AIProviderType, latencyMs: number) {
   cachedHealthyProviderExpiresAt = Date.now() + HEALTHY_PROVIDER_TTL_MS;
 }
 
-function markProviderFailure(provider: AIProviderType, err: any) {
+export function markProviderFailure(provider: AIProviderType, err: any) {
   const previous = providerHealth.get(provider);
   providerHealth.set(provider, {
     provider,

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, LayoutDashboard, Calendar, Users, ClipboardCheck, Settings, BarChart3, UserCheck, LineChart, Box, Moon, Sun, Monitor, LogOut, ChevronRight, User } from 'lucide-react';
+import { Search, LayoutDashboard, Calendar, Users, ClipboardCheck, Settings, BarChart3, UserCheck, LineChart, Box, Moon, Sun, Monitor, LogOut, ChevronRight, User, Wallet } from 'lucide-react';
 import clsx from 'clsx';
 import { AppData, Student, Resource } from '../types';
 import { useTheme } from '../contexts/ThemeContext';
@@ -72,6 +72,7 @@ const CommandPalette: React.FC<CommandPaletteProps> = ({ data, onNavigate, onClo
             { id: 'nav-attendance', type: 'navigation', label: 'Attendance', icon: UserCheck, action: () => onNavigate('attendance'), keywords: ['roll call', 'present'] },
             { id: 'nav-analytics', type: 'navigation', label: 'Analytics', icon: BarChart3, action: () => onNavigate('analytics'), keywords: ['stats', 'overview'] },
             { id: 'nav-resources', type: 'navigation', label: 'Resources', icon: Box, action: () => onNavigate('resources'), keywords: ['equipment', 'inventory'] },
+            { id: 'nav-fees', type: 'navigation', label: 'Fee Management', icon: Wallet, action: () => onNavigate('fees'), keywords: ['finance', 'money', 'payment', 'mpesa', 'ledger', 'billings', 'balances'] },
             { id: 'nav-settings', type: 'navigation', label: 'Settings', icon: Settings, action: () => onNavigate('settings'), keywords: ['config', 'theme'] },
 
             // Actions

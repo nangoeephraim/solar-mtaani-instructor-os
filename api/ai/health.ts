@@ -1,4 +1,4 @@
-import { providerHealth, cachedHealthyProvider, cachedHealthyProviderExpiresAt } from './chat.js';
+import { providerHealth, cachedHealthyProvider, cachedHealthyProviderExpiresAt, markProviderFailure } from './chat.js';
 import { requireApiUser } from '../../lib/supabase-server.js';
 
 export const config = { runtime: 'edge' };
@@ -25,6 +25,20 @@ export default async function handler(req: Request) {
     }), {
       headers: { 'Content-Type': 'application/json' },
     });
+  }
+
+  if (req.method === 'POST') {
+    try {
+      const { provider, error } = await req.json();
+      if (provider) {
+        markProviderFailure(provider as any, new Error(error || 'Client-reported streaming failure'));
+        return new Response(JSON.stringify({ success: true, message: `Marked provider ${provider} as degraded` }), {
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    } catch (err: any) {
+      return new Response(JSON.stringify({ error: 'Invalid payload' }), { status: 400 });
+    }
   }
 
   return new Response('Method Not Allowed', { status: 405 });

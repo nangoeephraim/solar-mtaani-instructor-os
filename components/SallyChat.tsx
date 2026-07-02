@@ -496,6 +496,8 @@ export function SallyChat({ currentView }: { currentView?: string }) {
     return [];
   };
 
+  const lastProviderRef = useRef<string | null>(null);
+
   const { messages, sendMessage, status, error, setMessages } = useChat({
     transport: new DefaultChatTransport({
       api: '/api/ai/chat',
@@ -503,7 +505,14 @@ export function SallyChat({ currentView }: { currentView?: string }) {
       body: {
         institutionType: instType,
       },
-      fetch: sallyFetch,
+      fetch: async (input, init) => {
+        const response = await sallyFetch(input, init);
+        const activeProvider = response.headers.get('X-Provider-Used');
+        if (activeProvider) {
+          lastProviderRef.current = activeProvider;
+        }
+        return response;
+      },
     }),
     onFinish: (response: any) => {
       // Extract assistant response safely from the event payload
@@ -514,6 +523,15 @@ export function SallyChat({ currentView }: { currentView?: string }) {
     },
     onError: (err: Error) => {
       console.warn('[SallyChat] Chat request failed:', err.message);
+      if (lastProviderRef.current) {
+        getAuthHeaders().then(authHeaders => {
+          fetch('/api/ai/health', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...authHeaders },
+            body: JSON.stringify({ provider: lastProviderRef.current, error: err.message }),
+          }).catch(() => {});
+        });
+      }
     },
   });
 
@@ -1536,12 +1554,17 @@ export function SallyChat({ currentView }: { currentView?: string }) {
             <div className="p-4 bg-slate-950/40 backdrop-blur-md flex items-center justify-between border-b border-white/5 flex-shrink-0 z-10">
               <div className="flex items-center gap-3">
                 <div className="relative">
-                  {/* Glowing Ring Around Avatar */}
-                  <div className="absolute inset-0 rounded-2xl bg-gradient-to-tr from-blue-500 via-violet-600 to-emerald-500 blur-sm opacity-60 animate-pulse" />
-                  <div className="relative w-9 h-9 rounded-2xl bg-gradient-to-tr from-blue-500 to-indigo-600 flex items-center justify-center font-bold text-white text-lg shadow-lg border border-white/10 font-space">
-                    S
+                  {/* Glowing Pulsing Ring */}
+                  <div className="absolute inset-0 rounded-full bg-gradient-to-tr from-indigo-500 via-purple-600 to-pink-500 blur-md opacity-75 animate-pulse" />
+                  
+                  {/* Modernized organic sphere with inner sparkle */}
+                  <div className="relative w-9 h-9 rounded-full bg-slate-950 border border-white/15 flex items-center justify-center shadow-lg shadow-indigo-500/10 overflow-hidden">
+                    {/* Inner morphing gradient core */}
+                    <div className="absolute inset-0.5 bg-gradient-to-tr from-indigo-600 to-pink-600 rounded-full opacity-60 blur-[1px] animate-pulse" style={{ animationDuration: '4s' }} />
+                    <Sparkles className="w-4 h-4 text-white relative z-10 animate-pulse" />
                   </div>
-                  <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-400 border-2 border-slate-950 rounded-full" />
+                  {/* Active status indicator dot */}
+                  <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-400 border-2 border-slate-950 rounded-full shadow-[0_0_8px_#34d399]" />
                 </div>
                 <div>
                   <h3 className="font-bold text-sm font-space tracking-wide bg-gradient-to-r from-slate-100 to-slate-300 bg-clip-text text-transparent">Sally</h3>
