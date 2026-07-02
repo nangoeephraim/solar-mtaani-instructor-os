@@ -1,7 +1,11 @@
 import { put } from '@vercel/blob';
 import { requireApiUser } from '../lib/supabase-server.js';
 
-export const config = { runtime: 'edge' };
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024; // 50MB limit
 
@@ -15,26 +19,24 @@ export default async function handler(req: Request) {
   if ('response' in auth) return auth.response;
 
   try {
-    const form = await req.formData();
-    const file = form.get('file') as File;
-    const bucket = form.get('bucket') as string || 'library_documents';
-    const pathPrefix = form.get('pathPrefix') as string || '';
+    const filename = req.headers.get('x-filename') || 'file';
+    const bucket = req.headers.get('x-bucket') || 'library_documents';
+    const pathPrefix = req.headers.get('x-path-prefix') || '';
 
-    if (!file) {
-      return new Response('Missing file', { status: 400 });
-    }
-
-    if (file.size > MAX_FILE_BYTES) {
+    // Read raw body stream
+    const arrayBuffer = await req.arrayBuffer();
+    
+    if (arrayBuffer.byteLength > MAX_FILE_BYTES) {
       return new Response('File size exceeds the 50MB limit', { status: 413 });
     }
 
     // Sanitize path names and file name
-    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+    const sanitizedFileName = filename.replace(/[^a-zA-Z0-9.\-_]/g, '_');
     const uniqueName = `${Date.now()}_${sanitizedFileName}`;
     const blobPath = `${bucket}/${pathPrefix ? pathPrefix + '/' : ''}${uniqueName}`;
 
     // Direct file upload to Vercel Blob
-    const blob = await put(blobPath, file, {
+    const blob = await put(blobPath, Buffer.from(arrayBuffer), {
       access: 'public',
       addRandomSuffix: false, // We prefix with timestamp to guarantee uniqueness and sort order
       cacheControlMaxAge: 3600,

@@ -1,8 +1,6 @@
 import { list } from '@vercel/blob';
 import { requireApiUser } from '../lib/supabase-server.js';
 
-export const config = { runtime: 'edge' };
-
 export default async function handler(req: Request) {
   if (req.method !== 'GET') {
     return new Response('Method Not Allowed', { status: 405 });

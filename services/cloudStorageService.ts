@@ -163,17 +163,17 @@ export const uploadFile = async (
     const fileName = options?.fileName || (file instanceof File ? file.name : 'file');
     const pathPrefix = options?.pathPrefix || '';
 
-    const formData = new FormData();
-    formData.append('file', file, fileName);
-    formData.append('bucket', bucket);
-    formData.append('pathPrefix', pathPrefix);
-
-    const headers = await getAuthHeaders();
+    const headers = await getAuthHeaders({
+        'x-filename': fileName,
+        'x-bucket': bucket,
+        'x-path-prefix': pathPrefix,
+        'Content-Type': file.type || 'application/octet-stream'
+    });
 
     const response = await fetch('/api/upload', {
         method: 'POST',
         headers,
-        body: formData
+        body: file
     });
 
     if (!response.ok) {
