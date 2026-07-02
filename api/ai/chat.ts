@@ -1,15 +1,32 @@
-import { streamText, convertToModelMessages, tool as aiTool, createUIMessageStreamResponse, generateText } from 'ai';
+import { streamText, convertToModelMessages, tool as aiTool, createUIMessageStreamResponse } from 'ai';
 import { z } from 'zod';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createGroq } from '@ai-sdk/groq';
 import { createOpenAI } from '@ai-sdk/openai';
 import { buildPrismAIContext, buildPrismSystemPrompt } from '../../lib/aiContext.js';
+import { getPrioritizedProviderConfigs } from '../../lib/aiProvider.js';
 import { requireApiUser, requireRole } from '../../lib/supabase-server.js';
 
-// Cast tool helper to any and automatically apply passthrough() to allow extra properties safely
+// Cast tool helper to any, apply passthrough(), and wrap execute with per-tool timeout
+const TOOL_EXECUTION_TIMEOUT_MS = 8000;
 const tool: any = (options: any) => {
   if (options.parameters && typeof options.parameters.passthrough === 'function') {
     options.parameters = options.parameters.passthrough();
+  }
+  if (options.execute) {
+    const originalExecute = options.execute;
+    options.execute = async (...executeArgs: any[]) => {
+      try {
+        return await Promise.race([
+          originalExecute(...executeArgs),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Tool execution timed out after 8s')), TOOL_EXECUTION_TIMEOUT_MS)
+          ),
+        ]);
+      } catch (err: any) {
+        return { error: err.message || 'Tool execution timed out' };
+      }
+    };
   }
   return aiTool(options);
 };
@@ -24,7 +41,7 @@ if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY && process.env.GEMINI_API_KEY) {
 }
 
 // ── Types ────────────────────────────────────────────────────────────
-type AIProviderType = 'groq' | 'cerebras' | 'openrouter' | 'google';
+export type AIProviderType = 'groq' | 'cerebras' | 'openrouter' | 'google';
 
 interface ProviderConfig {
   provider: AIProviderType;
@@ -32,7 +49,106 @@ interface ProviderConfig {
 }
 
 // Global cache for the last verified working AI provider
-let cachedHealthyProvider: AIProviderType | null = null;
+export let cachedHealthyProvider: AIProviderType | null = null;
+export let cachedHealthyProviderExpiresAt = 0;
+
+const REQUEST_TIMEOUT_MS = 25000;
+const LIVE_CONTEXT_TIMEOUT_MS = 1800;
+const HEALTHY_PROVIDER_TTL_MS = 5 * 60 * 1000;
+
+type SallyRouteMode = 'simple-chat' | 'live-context';
+
+export interface ProviderHealthSnapshot {
+  provider: AIProviderType;
+  lastSuccessAt?: string;
+  lastFailureAt?: string;
+  lastLatencyMs?: number;
+  failures: number;
+  lastError?: string;
+}
+
+export const providerHealth = new Map<AIProviderType, ProviderHealthSnapshot>();
+
+function getRequestId(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `sally_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  }
+}
+
+function getTextFromMessage(message: any): string {
+  if (!message) return '';
+  if (typeof message.content === 'string') return message.content;
+  if (Array.isArray(message.parts)) {
+    return message.parts
+      .filter((part: any) => part?.type === 'text' && typeof part.text === 'string')
+      .map((part: any) => part.text)
+      .join(' ');
+  }
+  return '';
+}
+
+function getLatestUserText(messages: any[]): string {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]?.role === 'user') return getTextFromMessage(messages[i]).trim();
+  }
+  return '';
+}
+
+function shouldUseLiveContext(userText: string): boolean {
+  const text = userText.toLowerCase();
+  if (!text) return false;
+
+  const liveDataPattern = /\b(student|students|attendance|absent|present|fee|fees|payment|payments|receipt|mpesa|balance|balances|schedule|timetable|meeting|meetings|inventory|stock|library|asset|assets|document|documents|announcement|announcements|feed|message|messages|instructor|instructors|cohort|cohorts|analytics|insights|assessment|assessments)\b/;
+  const actionPattern = /\b(log|record|update|create|delete|send|notify|post|start|end|add|subtract|set)\b/;
+
+  return liveDataPattern.test(text) || actionPattern.test(text);
+}
+
+function getCachedProvider(): AIProviderType | null {
+  if (!cachedHealthyProvider) return null;
+  if (Date.now() > cachedHealthyProviderExpiresAt) {
+    cachedHealthyProvider = null;
+    cachedHealthyProviderExpiresAt = 0;
+    return null;
+  }
+  return cachedHealthyProvider;
+}
+
+function markProviderSuccess(provider: AIProviderType, latencyMs: number) {
+  const previous = providerHealth.get(provider);
+  providerHealth.set(provider, {
+    provider,
+    failures: previous?.failures || 0,
+    lastSuccessAt: new Date().toISOString(),
+    lastFailureAt: previous?.lastFailureAt,
+    lastLatencyMs: latencyMs,
+    lastError: previous?.lastError,
+  });
+  cachedHealthyProvider = provider;
+  cachedHealthyProviderExpiresAt = Date.now() + HEALTHY_PROVIDER_TTL_MS;
+}
+
+function markProviderFailure(provider: AIProviderType, err: any) {
+  const previous = providerHealth.get(provider);
+  providerHealth.set(provider, {
+    provider,
+    failures: (previous?.failures || 0) + 1,
+    lastSuccessAt: previous?.lastSuccessAt,
+    lastFailureAt: new Date().toISOString(),
+    lastLatencyMs: previous?.lastLatencyMs,
+    lastError: err?.message || String(err),
+  });
+  if (provider === cachedHealthyProvider) {
+    cachedHealthyProvider = null;
+    cachedHealthyProviderExpiresAt = 0;
+  }
+}
+
+function logSallyEvent(requestId: string, stage: string, message: string, details: Record<string, unknown> = {}) {
+  console.log(`[Sally][${requestId}][${stage}] ${message}`, details);
+}
 
 // ── Provider Resolution ──────────────────────────────────────────────
 function getProviderConfigsFromEnv(): ProviderConfig[] {
@@ -93,6 +209,8 @@ You help instructors succeed. Think of yourself as the instructor's ${institutio
 
 Be concise, professional, and technical when needed. Use occasional technical humor. Respond in plain flowing text without markdown formatting.
 
+You have live PRISM tools for student records, attendance, analytics, fees, library assets, chat feeds, schedules, meetings, instructors, inventory, assessment logging, feed posting, and notifications. Use read-only tools when the instructor asks for specific live details. Use write/action tools only when the instructor clearly asks you to change data, post content, start or end a meeting, record a grade, update inventory, or send a notification. Confirm notification message content before sending unless the instructor already supplied the final message.
+
 Current time: ${new Date().toISOString()}`;
 }
 
@@ -100,17 +218,22 @@ export const config = { runtime: 'edge' };
 
 // ── Main Handler ─────────────────────────────────────────────────────
 export default async function handler(req: Request) {
-  // Enforce an absolute hard stop at 9 seconds to prevent Vercel container hang
+  const requestId = getRequestId();
+  // Enforce an absolute hard stop to prevent Vercel container hangs.
   const reqAbortController = new AbortController();
-  const reqTimeout = setTimeout(() => reqAbortController.abort(), 12000);
+  const reqTimeout = setTimeout(() => reqAbortController.abort(), REQUEST_TIMEOUT_MS);
   (globalThis as any).reqAbortSignal = reqAbortController.signal;
 
   if (req.method !== 'POST') {
+    clearTimeout(reqTimeout);
     return new Response('Method Not Allowed', { status: 405 });
   }
 
   const auth = await requireApiUser(req);
-  if ('response' in auth) return auth.response;
+  if ('response' in auth) {
+    clearTimeout(reqTimeout);
+    return auth.response;
+  }
 
   const apiContext = auth.context;
   const supabase = apiContext.supabase;
@@ -119,9 +242,12 @@ export default async function handler(req: Request) {
     return 'error' in allowed ? { error: allowed.error } : null;
   };
 
+  let failureStage = 'request';
+  const providerErrors: Array<{ provider: AIProviderType; error: string }> = [];
+
   try {
     const body = await req.json();
-    console.log('[Sally] Chat handler invoked');
+    logSallyEvent(requestId, 'request_received', 'Chat handler invoked');
     const { messages, institutionType } = body;
 
     // ── 1. Sanitize messages ─────────────────────────────────────────
@@ -168,25 +294,39 @@ export default async function handler(req: Request) {
       .filter((msg: any) => msg && (msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system'))
       .map(sanitizeMessage);
 
+    const latestUserText = getLatestUserText(sanitizedMessages);
+    const routeMode: SallyRouteMode = shouldUseLiveContext(latestUserText) ? 'live-context' : 'simple-chat';
+    logSallyEvent(requestId, 'route_selected', `Using ${routeMode}`, {
+      routeMode,
+      latestUserChars: latestUserText.length,
+    });
+
     const modelMessages = await convertToModelMessages(sanitizedMessages);
 
     // ── 2. Build live database context (with 5s fallback) ───────────
     let systemPrompt = getFallbackSystemPrompt(institutionType);
-    try {
-      const ctx = await Promise.race([
-        buildPrismAIContext(supabase),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Context build exceeded timeout')), 1500)
-        ),
-      ]);
-      systemPrompt = buildPrismSystemPrompt(ctx, institutionType);
-      console.log('[Sally] Live database context loaded');
-    } catch (ctxErr: any) {
-      console.warn('[Sally] Context build failed/timed out, using fallback:', ctxErr.message);
+    if (routeMode === 'live-context') {
+      try {
+        const ctx = await Promise.race([
+          buildPrismAIContext(supabase),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Context build exceeded timeout')), LIVE_CONTEXT_TIMEOUT_MS)
+          ),
+        ]);
+        systemPrompt = buildPrismSystemPrompt(ctx, institutionType);
+        logSallyEvent(requestId, 'context_loaded', 'Live database context loaded');
+      } catch (ctxErr: any) {
+        logSallyEvent(requestId, 'context_fallback', 'Context build failed or timed out; using fallback prompt', {
+          error: ctxErr?.message || String(ctxErr),
+        });
+      }
+    } else {
+      logSallyEvent(requestId, 'context_skipped', 'Skipped live database context for simple chat');
     }
 
     // ── 3. Resolve provider configs ─────────────────────────────────
-    const configs = getProviderConfigsFromEnv();
+    const configs = (await getPrioritizedProviderConfigs(supabase))
+      .filter((config): config is ProviderConfig => config.apiKey.trim().length > 0);
     if (configs.length === 0) {
       throw new Error('No AI provider API keys found in environment variables.');
     }
@@ -1258,8 +1398,9 @@ export default async function handler(req: Request) {
     
     // Sort configs so that the cached healthy provider is tried first
     const sortedConfigs = [...configs];
-    if (cachedHealthyProvider) {
-      const cachedIndex = sortedConfigs.findIndex(c => c.provider === cachedHealthyProvider);
+    const cachedProvider = getCachedProvider();
+    if (cachedProvider) {
+      const cachedIndex = sortedConfigs.findIndex(c => c.provider === cachedProvider);
       if (cachedIndex > -1) {
         const [cachedConfig] = sortedConfigs.splice(cachedIndex, 1);
         sortedConfigs.unshift(cachedConfig);
@@ -1267,66 +1408,100 @@ export default async function handler(req: Request) {
     }
 
     for (const config of sortedConfigs) {
-      console.log(`[Sally] Attempting provider: ${config.provider}`);
+      const providerStart = Date.now();
+      failureStage = `provider:${config.provider}`;
+      logSallyEvent(requestId, 'provider_attempt', `Attempting provider ${config.provider}`, {
+        provider: config.provider,
+        routeMode,
+      });
       try {
         const model = createModelForProvider(config);
         
         // Fast health verification — lightweight connection test without wasting tokens
-        if (config.provider !== cachedHealthyProvider) {
-          console.log(`[Sally] Running lightweight health probe for ${config.provider}...`);
-          await Promise.race([
-            (async () => {
-              // Use a minimal generateText call with 1 max token to verify connectivity
-              // This costs virtually nothing compared to the old full "Ping" generation
-              await generateText({
-                model,
-                prompt: 'ok',
-                maxOutputTokens: 1,
-                maxRetries: 0,
-              });
-            })(),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Health probe timeout')), 2000))
-          ]);
-          console.log(`[Sally] Provider ${config.provider} verified healthy!`);
-        }
-
         const result = streamText({
           model,
           system: systemPrompt,
           messages: modelMessages,
           temperature: 0.7,
           tools,
+          toolChoice: routeMode === 'simple-chat' ? 'none' : 'auto',
           maxRetries: 0,
           abortSignal: (globalThis as any).reqAbortSignal
         });
 
         const uiStream = result.toUIMessageStream();
-        cachedHealthyProvider = config.provider;
+        const startupLatencyMs = Date.now() - providerStart;
+        markProviderSuccess(config.provider, startupLatencyMs);
+        logSallyEvent(requestId, 'provider_stream_ready', `Provider ${config.provider} stream ready`, {
+          provider: config.provider,
+          startupLatencyMs,
+          routeMode,
+        });
 
         return createUIMessageStreamResponse({
           stream: uiStream,
           headers: {
-            'X-Provider-Used': config.provider
+            'X-Provider-Used': config.provider,
+            'X-Sally-Mode': routeMode,
+            'X-Sally-Request-Id': requestId
           }
         });
 
       } catch (err: any) {
-        console.warn(`[Sally] Provider ${config.provider} failed: ${err.message}`);
+        markProviderFailure(config.provider, err);
+        providerErrors.push({ provider: config.provider, error: err?.message || String(err) });
+        logSallyEvent(requestId, 'provider_failed', `Provider ${config.provider} failed before stream`, {
+          provider: config.provider,
+          error: err?.message || String(err),
+        });
         lastError = err;
-        if (config.provider === cachedHealthyProvider) {
-          cachedHealthyProvider = null;
-        }
         continue;
       }
     }
 
-    throw new Error(`All providers failed. Last error: ${lastError?.message}`);
+    failureStage = 'all_providers_failed';
+    logSallyEvent(requestId, 'degraded_mode', 'All providers failed, returning degraded fallback', {
+      providers: providerErrors,
+    });
+    const degradedMessage = "I am experiencing some difficulty reaching the AI service right now. Your PRISM session is still fully active and all your data, schedules, and records are safe. Please try again in a moment, or check the Sally provider status in Settings if this persists.";
+    const encoder = new TextEncoder();
+    const degradedStream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(`0:"${degradedMessage}"\n`));
+        controller.enqueue(encoder.encode(`e:{"finishReason":"stop","usage":{"promptTokens":0,"completionTokens":0}}\n`));
+        controller.enqueue(encoder.encode(`d:{"finishReason":"stop","usage":{"promptTokens":0,"completionTokens":0}}\n`));
+        controller.close();
+      },
+    });
+    clearTimeout(reqTimeout);
+    return new Response(degradedStream, {
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'X-Provider-Used': 'degraded',
+        'X-Sally-Mode': 'degraded',
+        'X-Sally-Request-Id': requestId,
+      },
+    });
 
   } catch (error: any) {
-    console.error('[Sally] Handler error:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
+    logSallyEvent(requestId, 'handler_error', 'Handler returned an error response', {
+      stage: failureStage,
+      error: error?.message || String(error),
+      providers: providerErrors,
+    });
+    clearTimeout(reqTimeout);
+    return new Response(JSON.stringify({
+      error: error.message,
+      stage: failureStage,
+      requestId,
+      providers: providerErrors,
+    }), {
       status: 500,
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Sally-Request-Id': requestId,
+        'X-Sally-Stage': failureStage,
+      },
     });
   }
 }

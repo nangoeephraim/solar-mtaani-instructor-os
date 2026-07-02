@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from './supabase-server.js';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 export type AIProviderType = 'groq' | 'cerebras' | 'openrouter' | 'google';
 
@@ -21,15 +22,19 @@ const PROVIDER_ENV_MAP: Record<AIProviderType, string> = {
   google: 'GOOGLE_GENERATIVE_AI_API_KEY',
 };
 
+function normalizeApiKey(value: string | null | undefined): string {
+  return (value || '').replace(/\n/g, '').trim();
+}
+
 /**
  * Resolves the active AI provider and key using database fallback settings in public.sally_settings.
  */
-export async function getAIProviderConfig(): Promise<AIProviderConfig> {
+export async function getAIProviderConfig(client?: SupabaseClient): Promise<AIProviderConfig> {
   let dbProvider: AIProviderType | null = null;
   let dbKey: string | null = null;
 
   try {
-    const supabase = await createServerSupabaseClient();
+    const supabase = client || createServerSupabaseClient();
     const { data } = await supabase
       .from('sally_settings')
       .select('key, value')
@@ -39,7 +44,7 @@ export async function getAIProviderConfig(): Promise<AIProviderConfig> {
       const settings = Object.fromEntries(data.map(d => [d.key, d.value]));
       if (settings.ai_provider) {
         dbProvider = settings.ai_provider as AIProviderType;
-        dbKey = settings[PROVIDER_KEY_MAP[dbProvider]];
+        dbKey = normalizeApiKey(settings[PROVIDER_KEY_MAP[dbProvider]]);
       }
     }
   } catch (err) {
@@ -48,33 +53,33 @@ export async function getAIProviderConfig(): Promise<AIProviderConfig> {
 
   if (dbProvider) {
     if (dbKey) return { provider: dbProvider, apiKey: dbKey };
-    const envKey = process.env[PROVIDER_ENV_MAP[dbProvider]];
+    const envKey = normalizeApiKey(process.env[PROVIDER_ENV_MAP[dbProvider]]);
     if (envKey) return { provider: dbProvider, apiKey: envKey };
   }
 
   // Fallback Priority Sequence: Groq -> Cerebras -> OpenRouter -> Google
   const fallbackOrder: AIProviderType[] = ['groq', 'cerebras', 'openrouter', 'google'];
   for (const p of fallbackOrder) {
-    const envKey = process.env[PROVIDER_ENV_MAP[p]];
+    const envKey = normalizeApiKey(process.env[PROVIDER_ENV_MAP[p]]);
     if (envKey) return { provider: p, apiKey: envKey };
   }
 
   // Default fallback to Google with whatever key we have
   return { 
     provider: 'google', 
-    apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY || '' 
+    apiKey: normalizeApiKey(process.env.GOOGLE_GENERATIVE_AI_API_KEY)
   };
 }
 
 /**
  * Resolves the prioritized list of AI provider configurations to try in case of failover.
  */
-export async function getPrioritizedProviderConfigs(): Promise<AIProviderConfig[]> {
+export async function getPrioritizedProviderConfigs(client?: SupabaseClient): Promise<AIProviderConfig[]> {
   let dbProvider: AIProviderType | null = null;
   let settings: Record<string, string> = {};
 
   try {
-    const supabase = await createServerSupabaseClient();
+    const supabase = client || createServerSupabaseClient();
     const { data } = await supabase
       .from('sally_settings')
       .select('key, value')
@@ -92,9 +97,9 @@ export async function getPrioritizedProviderConfigs(): Promise<AIProviderConfig[
 
   // Resolve key helper for a provider
   const getApiKey = (p: AIProviderType): string => {
-    const dbKey = settings[PROVIDER_KEY_MAP[p]];
+    const dbKey = normalizeApiKey(settings[PROVIDER_KEY_MAP[p]]);
     if (dbKey) return dbKey;
-    return process.env[PROVIDER_ENV_MAP[p]] || '';
+    return normalizeApiKey(process.env[PROVIDER_ENV_MAP[p]]);
   };
 
   const configs: AIProviderConfig[] = [];
@@ -145,4 +150,3 @@ export async function getPrioritizedProviderConfigs(): Promise<AIProviderConfig[
 
   return configs;
 }
-

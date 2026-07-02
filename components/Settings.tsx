@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { InstructorSettings, DEFAULT_SETTINGS, AppPreferences } from '../types';
 import { getSettings, saveSettings, resetData, exportDataAsCSV, exportFullBackup, importFullBackup } from '../services/storageService';
 import { useToast } from './Toast';
@@ -108,6 +108,65 @@ const Settings: React.FC<SettingsProps> = ({ onDataReset }) => {
     const [permissionStatus, setPermissionStatus] = useState<NotificationPermission>('default');
     const [testNotificationDelay, setTestNotificationDelay] = useState<number>(3); // seconds
     const [isSchedulingTest, setIsSchedulingTest] = useState(false);
+
+    // Sally Health Dashboard state
+    const [sallyHealth, setSallyHealth] = useState<{
+        activeProvider: string | null;
+        cacheTtlSeconds: number;
+        providers: Array<{ provider: string; lastSuccessAt?: string; lastFailureAt?: string; lastLatencyMs?: number; failures: number; lastError?: string }>;
+        timestamp: string;
+    } | null>(null);
+    const [sallyHealthLoading, setSallyHealthLoading] = useState(false);
+    const [sallyTestResult, setSallyTestResult] = useState<string | null>(null);
+
+    const fetchSallyHealth = useCallback(async () => {
+        setSallyHealthLoading(true);
+        setSallyTestResult(null);
+        try {
+            const { getAuthHeaders: getHeaders } = await import('../services/authHeaders');
+            const headers = await getHeaders();
+            const res = await fetch('/api/ai/health', { headers });
+            if (res.ok) {
+                const data = await res.json();
+                setSallyHealth(data);
+            } else {
+                setSallyTestResult(`Health check failed: ${res.status}`);
+            }
+        } catch (err: any) {
+            setSallyTestResult(`Error: ${err.message}`);
+        } finally {
+            setSallyHealthLoading(false);
+        }
+    }, []);
+
+    const testSally = useCallback(async () => {
+        setSallyTestResult(null);
+        setSallyHealthLoading(true);
+        try {
+            const { getAuthHeaders: getHeaders } = await import('../services/authHeaders');
+            const headers = await getHeaders();
+            const start = Date.now();
+            const res = await fetch('/api/ai/chat', {
+                method: 'POST',
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ messages: [{ role: 'user', content: 'ping' }] }),
+            });
+            const elapsed = Date.now() - start;
+            const provider = res.headers.get('X-Provider-Used') || 'unknown';
+            const mode = res.headers.get('X-Sally-Mode') || 'unknown';
+            if (res.ok) {
+                setSallyTestResult(`✅ Provider: ${provider} | Mode: ${mode} | ${elapsed}ms`);
+            } else {
+                setSallyTestResult(`❌ Failed (${res.status}) — ${elapsed}ms`);
+            }
+            // Refresh health data after test
+            await fetchSallyHealth();
+        } catch (err: any) {
+            setSallyTestResult(`❌ ${err.message}`);
+        } finally {
+            setSallyHealthLoading(false);
+        }
+    }, [fetchSallyHealth]);
 
     const [newSubjectInput, setNewSubjectInput] = useState('');
 
@@ -1073,6 +1132,78 @@ const Settings: React.FC<SettingsProps> = ({ onDataReset }) => {
                                 />
                             </div>
                         </div>
+                    </div>
+                </div>
+            </motion.div>
+
+            {/* ═══ SALLY AI HEALTH ═══ */}
+            <motion.div className="glass-panel rounded-3xl overflow-hidden" custom={2.8} initial="hidden" animate="visible" variants={cardVariant}>
+                <div className="p-5 pb-2"><SectionHeader icon={<Activity size={18} />} title="Sally AI Health" iconColor="text-cyan-500" badge="Live" /></div>
+                <div className="px-5 pb-5 pt-1 space-y-3">
+                    {!sallyHealth && !sallyHealthLoading && (
+                        <button
+                            onClick={fetchSallyHealth}
+                            className="w-full py-2.5 rounded-xl text-sm font-bold bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/20 text-cyan-400 hover:border-cyan-400/40 transition-all duration-200"
+                        >
+                            Load Provider Status
+                        </button>
+                    )}
+                    {sallyHealthLoading && (
+                        <div className="flex items-center justify-center gap-2 py-3 text-xs text-slate-400">
+                            <div className="w-3 h-3 border-2 border-cyan-400 border-t-transparent rounded-full animate-spin" />
+                            Checking Sally...
+                        </div>
+                    )}
+                    {sallyHealth && (
+                        <>
+                            <div className="flex items-center gap-3 p-3 rounded-xl bg-[var(--md-sys-color-surface-variant)]/50">
+                                <div className={clsx("w-2.5 h-2.5 rounded-full", sallyHealth.activeProvider ? "bg-emerald-400 shadow-emerald-400/40 shadow-lg" : "bg-red-400 shadow-red-400/40 shadow-lg")} />
+                                <div className="flex-1 min-w-0">
+                                    <p className="text-xs font-bold text-[var(--md-sys-color-on-surface)]">
+                                        {sallyHealth.activeProvider ? `Active: ${sallyHealth.activeProvider.toUpperCase()}` : 'No active provider'}
+                                    </p>
+                                    <p className="text-[10px] text-[var(--md-sys-color-on-surface-variant)]">
+                                        Cache TTL: {sallyHealth.cacheTtlSeconds}s
+                                    </p>
+                                </div>
+                            </div>
+                            {sallyHealth.providers.length > 0 && (
+                                <div className="space-y-1.5">
+                                    {sallyHealth.providers.map((p) => (
+                                        <div key={p.provider} className="flex items-center gap-2 py-1.5 px-2 rounded-lg text-[11px] bg-[var(--md-sys-color-surface-variant)]/30">
+                                            <span className={clsx("w-1.5 h-1.5 rounded-full flex-shrink-0", p.lastSuccessAt && !p.lastFailureAt ? "bg-emerald-400" : p.failures > 0 ? "bg-amber-400" : "bg-slate-500")} />
+                                            <span className="font-bold text-[var(--md-sys-color-on-surface)] uppercase min-w-[70px]">{p.provider}</span>
+                                            {p.lastLatencyMs != null && <span className="text-slate-400 font-mono">{p.lastLatencyMs}ms</span>}
+                                            {p.failures > 0 && <span className="text-amber-400 ml-auto">{p.failures} fail{p.failures > 1 ? 's' : ''}</span>}
+                                            {p.lastError && <span className="text-red-400 text-[9px] truncate max-w-[120px] ml-auto" title={p.lastError}>{p.lastError}</span>}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </>
+                    )}
+                    {sallyTestResult && (
+                        <div className="p-2.5 rounded-xl bg-slate-900/50 text-xs font-mono text-slate-300 border border-white/5">
+                            {sallyTestResult}
+                        </div>
+                    )}
+                    <div className="flex gap-2">
+                        <button
+                            onClick={testSally}
+                            disabled={sallyHealthLoading}
+                            className="flex-1 py-2 rounded-xl text-xs font-bold bg-gradient-to-r from-violet-500/10 to-indigo-500/10 border border-violet-500/20 text-violet-400 hover:border-violet-400/40 transition-all duration-200 disabled:opacity-50"
+                        >
+                            <Zap className="w-3 h-3 inline mr-1" /> Test Sally
+                        </button>
+                        {sallyHealth && (
+                            <button
+                                onClick={fetchSallyHealth}
+                                disabled={sallyHealthLoading}
+                                className="px-3 py-2 rounded-xl text-xs font-bold bg-[var(--md-sys-color-surface-variant)] text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-surface-variant)]/80 transition-all duration-200 disabled:opacity-50"
+                            >
+                                Refresh
+                            </button>
+                        )}
                     </div>
                 </div>
             </motion.div>

@@ -13,6 +13,20 @@ import { getAuthHeaders } from '../services/authHeaders';
 const STORAGE_KEY = 'sally_chat_history_v2';
 const MAX_STORED_MESSAGES = 50;
 
+// Write tools that modify data — shown with a visual distinction
+const WRITE_TOOLS = new Set([
+  'logStudentAssessment', 'postFeedMessage', 'manageSchedule',
+  'manageMeetings', 'manageInstructors', 'manageInventory', 'sendNotification',
+]);
+const isWriteTool = (name: string) => WRITE_TOOLS.has(name);
+
+const WriteActionBadge = () => (
+  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase bg-amber-500/10 text-amber-400 border border-amber-500/20 ml-auto flex-shrink-0">
+    <Zap className="w-2.5 h-2.5" /> Write
+  </span>
+);
+
+
 // ── Helpers ──────────────────────────────────────────────────────────
 function getTimeGreeting(): string {
   const hour = new Date().getHours();
@@ -29,6 +43,23 @@ function getInstitutionLabel(instType: string): string {
     case 'university': return 'University';
     case 'tvet': default: return 'TVET Solar';
   }
+}
+
+async function sallyFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const response = await fetch(input, init);
+  if (response.ok) return response;
+
+  let payload: any = null;
+  try {
+    payload = await response.clone().json();
+  } catch {
+    // Keep the original status-driven fallback below.
+  }
+
+  const stage = payload?.stage ? ` at ${payload.stage}` : '';
+  const requestId = payload?.requestId ? ` Request ${payload.requestId}.` : '';
+  const detail = payload?.error || response.statusText || 'Sally could not complete the request.';
+  throw new Error(`Sally failed${stage}: ${detail}.${requestId}`.trim());
 }
 
 export function SallyChat({ currentView }: { currentView?: string }) {
@@ -230,13 +261,35 @@ export function SallyChat({ currentView }: { currentView?: string }) {
 
   // Helper to extract tool invocations from a modular message
   const getToolInvocations = (message: any): any[] => {
+    const normalizeToolInvocation = (toolInvocation: any) => ({
+      ...toolInvocation,
+      args: toolInvocation.args ?? toolInvocation.input,
+      result: toolInvocation.result ?? toolInvocation.output,
+    });
+
     if (message.toolInvocations && Array.isArray(message.toolInvocations)) {
-      return message.toolInvocations;
+      return message.toolInvocations.map(normalizeToolInvocation);
     }
     if (message.parts && Array.isArray(message.parts)) {
       return message.parts
-        .filter((part: any) => part.type === 'tool-invocation')
-        .map((part: any) => part.toolInvocation)
+        .map((part: any) => {
+          if (part.type === 'tool-invocation' && part.toolInvocation) {
+            return normalizeToolInvocation(part.toolInvocation);
+          }
+
+          if (part.type === 'dynamic-tool' || (typeof part.type === 'string' && part.type.startsWith('tool-'))) {
+            return normalizeToolInvocation({
+              toolName: part.toolName || part.type.replace(/^tool-/, ''),
+              toolCallId: part.toolCallId,
+              state: part.state,
+              input: part.input,
+              output: part.output,
+              errorText: part.errorText,
+            });
+          }
+
+          return null;
+        })
         .filter(Boolean);
     }
     return [];
@@ -250,14 +303,18 @@ export function SallyChat({ currentView }: { currentView?: string }) {
       body: {
         institutionType: instType,
       },
+      fetch: sallyFetch,
     }),
     onFinish: (response: any) => {
       // Extract assistant response safely from the event payload
-      const msg = response?.responseMessage || response;
+      const msg = response?.message || response?.responseMessage || response;
       if (speechEnabled && msg && msg.role === 'assistant') {
         speak(getMessageText(msg));
       }
-    }
+    },
+    onError: (err: Error) => {
+      console.warn('[SallyChat] Chat request failed:', err.message);
+    },
   });
 
   const isLoading = status === 'streaming' || status === 'submitted';
@@ -422,6 +479,12 @@ export function SallyChat({ currentView }: { currentView?: string }) {
     if (lastUserMessage) {
       sendMessage({ text: lastUserMessage });
     }
+  };
+
+  const getSallyErrorMessage = (err: Error) => {
+    const message = err.message || 'Failed to retrieve response';
+    if (message.includes('Sally failed')) return message;
+    return `Sally hit a temporary connection issue: ${message}`;
   };
 
   // ── Tool Result Card Renderers ──────────────────────────────────
@@ -733,6 +796,175 @@ export function SallyChat({ currentView }: { currentView?: string }) {
     );
   };
 
+  const renderActionCard = (title: string, result: any, icon: React.ElementType = CheckCircle2) => {
+    if (result.error) return renderErrorCard(result.error);
+    const IconComponent = icon;
+    const summary = result.message || (result.success ? 'Action completed successfully.' : 'Request completed.');
+    return (
+      <div className="w-[85%] bg-slate-900 border border-emerald-500/20 backdrop-blur-md rounded-2xl p-4 shadow-xl">
+        <div className="flex items-center gap-2 mb-2">
+          <IconComponent className="w-4 h-4 text-emerald-400" />
+          <h4 className="text-xs font-bold text-emerald-300 uppercase tracking-wider font-space">{title}</h4>
+        </div>
+        <p className="text-xs text-slate-300 leading-relaxed">{summary}</p>
+      </div>
+    );
+  };
+
+  const renderLibraryAssetsCard = (result: any) => {
+    if (result.error) return renderErrorCard(result.error);
+    const assets = result.assets || [];
+    if (assets.length === 0) return <div className="text-xs text-slate-400 italic py-2">No library assets found.</div>;
+    return (
+      <div className="w-[85%] bg-slate-900 border border-white/5 backdrop-blur-md rounded-2xl p-4 shadow-xl">
+        <div className="flex items-center gap-2 mb-3">
+          <ClipboardCheck className="w-4 h-4 text-cyan-400" />
+          <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-space">Library Assets</h4>
+        </div>
+        <div className="space-y-2">
+          {assets.slice(0, 5).map((asset: any, i: number) => (
+            <div key={asset.id || i} className="py-2 border-b border-white/5 last:border-0 text-xs">
+              <p className="font-medium text-slate-200 truncate">{asset.title || asset.file_name || 'Untitled asset'}</p>
+              <p className="text-[10px] text-slate-500 truncate">{asset.category || 'uncategorized'}{asset.uploaded_by ? ` - ${asset.uploaded_by}` : ''}</p>
+            </div>
+          ))}
+          {assets.length > 5 && <p className="text-[10px] text-slate-500 pt-1">+ {assets.length - 5} more assets</p>}
+        </div>
+      </div>
+    );
+  };
+
+  const renderFeedMessagesCard = (result: any) => {
+    if (result.error) return renderErrorCard(result.error);
+    const feedMessages = result.messages || [];
+    if (feedMessages.length === 0) return <div className="text-xs text-slate-400 italic py-2">No feed messages found.</div>;
+    return (
+      <div className="w-[85%] bg-slate-900 border border-white/5 backdrop-blur-md rounded-2xl p-4 shadow-xl">
+        <div className="flex items-center gap-2 mb-3">
+          <Bell className="w-4 h-4 text-violet-400" />
+          <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-space">{result.channelName || 'Feed Messages'}</h4>
+        </div>
+        <div className="space-y-2">
+          {feedMessages.slice(0, 5).map((msg: any, i: number) => (
+            <div key={msg.id || i} className="py-2 border-b border-white/5 last:border-0 text-xs">
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <p className="font-medium text-slate-200 truncate">{msg.senderName || 'Unknown User'}</p>
+                {msg.isPinned && <span className="text-[9px] text-amber-400 uppercase font-bold">Pinned</span>}
+              </div>
+              <p className="text-[11px] text-slate-400 leading-relaxed line-clamp-2">{msg.content}</p>
+            </div>
+          ))}
+          {feedMessages.length > 5 && <p className="text-[10px] text-slate-500 pt-1">+ {feedMessages.length - 5} more messages</p>}
+        </div>
+      </div>
+    );
+  };
+
+  const renderMeetingsCard = (result: any) => {
+    if (result.error) return renderErrorCard(result.error);
+    const meetings = result.meetings || [];
+    if (meetings.length === 0) return <div className="text-xs text-slate-400 italic py-2">No meetings found.</div>;
+    return (
+      <div className="w-[85%] bg-slate-900 border border-white/5 backdrop-blur-md rounded-2xl p-4 shadow-xl">
+        <div className="flex items-center gap-2 mb-3">
+          <Calendar className="w-4 h-4 text-cyan-400" />
+          <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-space">Video Meetings</h4>
+        </div>
+        <div className="space-y-2">
+          {meetings.slice(0, 5).map((meeting: any, i: number) => (
+            <div key={meeting.id || i} className="flex justify-between items-start gap-3 py-2 border-b border-white/5 last:border-0 text-xs">
+              <div className="min-w-0">
+                <p className="font-medium text-slate-200 truncate">{meeting.title || meeting.meeting_code || 'PRISM Meeting'}</p>
+                <p className="text-[10px] text-slate-500 truncate">{meeting.host_name || 'Unknown host'} - {meeting.meeting_code}</p>
+              </div>
+              <span className={clsx("px-2 py-0.5 rounded-full text-[9px] font-bold uppercase border", meeting.status === 'active' ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-slate-800 text-slate-400 border-white/5")}>
+                {meeting.status || 'unknown'}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderInstructorsCard = (result: any) => {
+    if (result.error) return renderErrorCard(result.error);
+    const instructors = result.instructors || [];
+    if (instructors.length === 0) return <div className="text-xs text-slate-400 italic py-2">No instructors found.</div>;
+    return (
+      <div className="w-[85%] bg-slate-900 border border-white/5 backdrop-blur-md rounded-2xl p-4 shadow-xl">
+        <div className="flex items-center gap-2 mb-3">
+          <Users className="w-4 h-4 text-indigo-400" />
+          <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-space">Instructors</h4>
+        </div>
+        <div className="space-y-2">
+          {instructors.slice(0, 5).map((instructor: any, i: number) => (
+            <div key={instructor.id || i} className="py-2 border-b border-white/5 last:border-0 text-xs">
+              <div className="flex justify-between items-center gap-2">
+                <p className="font-medium text-slate-200 truncate">{instructor.full_name || instructor.name || 'Unnamed Instructor'}</p>
+                {instructor.is_active === false && <span className="text-[9px] text-red-400 uppercase font-bold">Inactive</span>}
+              </div>
+              <p className="text-[10px] text-slate-500 truncate">{instructor.subject || 'No subject'}{instructor.email ? ` - ${instructor.email}` : ''}</p>
+            </div>
+          ))}
+          {instructors.length > 5 && <p className="text-[10px] text-slate-500 pt-1">+ {instructors.length - 5} more instructors</p>}
+        </div>
+      </div>
+    );
+  };
+
+  const renderFeeStructuresCard = (result: any) => {
+    if (result.error) return renderErrorCard(result.error);
+    const structures = result.feeStructures || [];
+    if (structures.length === 0) return <div className="text-xs text-slate-400 italic py-2">No fee structures found.</div>;
+    return (
+      <div className="w-[85%] bg-slate-900 border border-white/5 backdrop-blur-md rounded-2xl p-4 shadow-xl">
+        <div className="flex items-center gap-2 mb-3">
+          <CreditCard className="w-4 h-4 text-green-400" />
+          <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-space">Fee Structures</h4>
+        </div>
+        <div className="space-y-2">
+          {structures.slice(0, 5).map((item: any, i: number) => (
+            <div key={item.id || i} className="flex justify-between items-center gap-3 py-2 border-b border-white/5 last:border-0 text-xs">
+              <div className="min-w-0">
+                <p className="font-medium text-slate-200 truncate">{item.name || 'Fee structure'}</p>
+                <p className="text-[10px] text-slate-500 truncate">{item.student_group || 'All students'}</p>
+              </div>
+              <span className="font-mono text-green-400 font-bold">KES {Number(item.amount || 0).toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const renderStudentBalancesCard = (result: any) => {
+    if (result.error) return renderErrorCard(result.error);
+    const balances = result.studentBalances || [];
+    if (balances.length === 0) return <div className="text-xs text-slate-400 italic py-2">No fee balances found.</div>;
+    return (
+      <div className="w-[85%] bg-slate-900 border border-white/5 backdrop-blur-md rounded-2xl p-4 shadow-xl">
+        <div className="flex items-center gap-2 mb-3">
+          <CreditCard className="w-4 h-4 text-amber-400" />
+          <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider font-space">Student Fee Balances</h4>
+        </div>
+        <div className="space-y-2">
+          {balances.slice(0, 5).map((item: any, i: number) => (
+            <div key={item.student_id || item.id || i} className="flex justify-between items-center gap-3 py-2 border-b border-white/5 last:border-0 text-xs">
+              <div className="min-w-0">
+                <p className="font-medium text-slate-200 truncate">{item.student_name || item.name || 'Student'}</p>
+                <p className="text-[10px] text-slate-500 truncate">Paid KES {Number(item.total_paid || 0).toLocaleString()}</p>
+              </div>
+              <span className={clsx("font-mono font-bold", Number(item.balance || 0) > 0 ? "text-amber-400" : "text-emerald-400")}>
+                KES {Number(item.balance || 0).toLocaleString()}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
   const renderErrorCard = (errorMsg: string) => (
     <div className="w-[85%] text-xs text-red-400 bg-red-950/20 border border-red-500/20 p-2.5 rounded-xl flex items-center gap-2">
       <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
@@ -766,7 +998,7 @@ export function SallyChat({ currentView }: { currentView?: string }) {
   };
 
   // ── Tool Card Router ────────────────────────────────────────────
-  const renderToolResult = (toolName: string, result: any, args: any) => {
+  const renderToolResult = (toolName: string, result: any, args: any = {}) => {
     switch (toolName) {
       case 'getInventoryStock':
         return (
@@ -843,8 +1075,30 @@ export function SallyChat({ currentView }: { currentView?: string }) {
         return renderStudentDataCard(result, args);
       case 'getFeePayments':
         return renderFeePaymentsCard(result, args);
+      case 'getFeeStructures':
+        return renderFeeStructuresCard(result);
+      case 'getStudentFeeBalances':
+        return renderStudentBalancesCard(result);
+      case 'getLibraryAssets':
+        return renderLibraryAssetsCard(result);
+      case 'getFeedMessages':
+        return renderFeedMessagesCard(result);
       case 'getSchedule':
         return renderScheduleCard(result);
+      case 'manageSchedule':
+        return renderActionCard('Schedule Updated', result, Calendar);
+      case 'getMeetings':
+        return renderMeetingsCard(result);
+      case 'manageMeetings':
+        return renderActionCard('Meeting Updated', result, Calendar);
+      case 'getInstructors':
+        return renderInstructorsCard(result);
+      case 'manageInstructors':
+        return renderActionCard('Instructor Updated', result, Users);
+      case 'manageInventory':
+        return renderActionCard('Inventory Updated', result, Box);
+      case 'postFeedMessage':
+        return renderActionCard('Feed Message Posted', result, Bell);
       case 'getAttendanceData':
         return renderAttendanceCard(result);
       case 'getAnalyticsInsights':
@@ -1045,23 +1299,44 @@ export function SallyChat({ currentView }: { currentView?: string }) {
                     
                     {/* Render Interactive Tool Output Cards */}
                     {hasTools && toolInvocations.map((toolInvocation: any) => {
-                      const { toolName, toolCallId, state, args, result } = toolInvocation;
+                      const { toolName, toolCallId, state, args, result, errorText } = toolInvocation;
+                      const isResultState = state === 'result' || state === 'output-available';
+                      const isErrorState = state === 'output-error' || state === 'error';
+                      const isLoadingState = state === 'call' || state === 'partial-call' || state === 'input-streaming' || state === 'input-available' || state === 'approval-requested';
                       
-                      if (state === 'result' && result) {
+                      if (isResultState && result !== undefined) {
                         return (
-                          <motion.div 
+                          <motion.div
+                            key={toolCallId}
+                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            className="flex flex-col items-start w-full gap-1"
+                          >
+                            {isWriteTool(toolName) && (
+                              <div className="flex items-center gap-1.5 ml-1">
+                                <WriteActionBadge />
+                              </div>
+                            )}
+                            {renderToolResult(toolName, result, args)}
+                          </motion.div>
+                        );
+                      }
+
+                      if (isErrorState) {
+                        return (
+                          <motion.div
                             key={toolCallId}
                             initial={{ opacity: 0, y: 10, scale: 0.95 }}
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             className="flex justify-start w-full"
                           >
-                            {renderToolResult(toolName, result, args)}
+                            {renderToolResult(toolName, { error: errorText || 'Tool request failed' }, args)}
                           </motion.div>
                         );
                       }
                       
                       // Show loading state for in-progress tool calls
-                      if (state === 'call' || state === 'partial-call') {
+                      if (isLoadingState) {
                         return (
                           <motion.div 
                             key={toolCallId}
@@ -1111,7 +1386,7 @@ export function SallyChat({ currentView }: { currentView?: string }) {
                   <div className="bg-red-950/30 border border-red-800/40 rounded-2xl rounded-tl-none p-3.5 text-red-300 text-xs space-y-2">
                     <div className="flex items-center gap-2">
                       <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
-                      <span>Error: {error.message || "Failed to retrieve response"}</span>
+                      <span>{getSallyErrorMessage(error)}</span>
                     </div>
                     {lastUserMessage && (
                       <button
