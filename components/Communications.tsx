@@ -930,6 +930,24 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
         return () => { supabase.removeChannel(channel); };
     }, []);
 
+    // Listen to insert-sally-draft events to populate the active channel text input
+    useEffect(() => {
+        const handleInsertDraft = (e: Event) => {
+            const detail = (e as CustomEvent).detail;
+            if (detail && typeof detail.draft === 'string') {
+                setMessageInput(detail.draft);
+                // Adjust height of textarea
+                if (textareaRef.current) {
+                    textareaRef.current.style.height = 'auto';
+                    textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 128)}px`;
+                    textareaRef.current.focus();
+                }
+            }
+        };
+        window.addEventListener('insert-sally-draft', handleInsertDraft);
+        return () => window.removeEventListener('insert-sally-draft', handleInsertDraft);
+    }, []);
+
     // ─── Typing Broadcast Channel ───
     // Subscribe to the typing broadcast channel for the active chat channel.
     // When another user types, we receive their event and show the indicator for 3 seconds.
@@ -1942,7 +1960,21 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                                  type="button" 
                                                  onClick={() => {
                                                      triggerHaptics('light');
-                                                     window.dispatchEvent(new Event('open-sally-chat'));
+                                                     const lastMessages = allActiveMessages.slice(-20).map((m: any) => ({
+                                                         senderName: m.senderName,
+                                                         senderRole: m.senderRole,
+                                                         content: m.content,
+                                                         timestamp: m.timestamp
+                                                     }));
+                                                     window.dispatchEvent(new CustomEvent('open-sally-chat', {
+                                                         detail: {
+                                                             context: 'comms',
+                                                             channelId: activeChannel?.id,
+                                                             channelName: activeChannel?.type === 'dm' ? getDMPartnerName(activeChannel) : activeChannel?.name,
+                                                             channelType: activeChannel?.type,
+                                                             messages: lastMessages
+                                                         }
+                                                     }));
                                                  }} 
                                                  className="p-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 transition-colors flex items-center justify-center animate-pulse" 
                                                  title="Ask Sally AI Assistant"

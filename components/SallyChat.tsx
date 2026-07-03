@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
-import { Sparkles, Send, Volume2, VolumeX, X, Box, ClipboardCheck, ArrowUpRight, CheckCircle2, AlertTriangle, HelpCircle, Trash2, RotateCcw, Users, CreditCard, Calendar, BarChart3, Bell, TrendingUp, TrendingDown, Clock, Zap, Mic, MicOff } from 'lucide-react';
+import { Sparkles, Send, Volume2, VolumeX, X, Box, ClipboardCheck, ArrowUpRight, CheckCircle2, AlertTriangle, HelpCircle, Trash2, RotateCcw, Users, CreditCard, Calendar, BarChart3, Bell, TrendingUp, TrendingDown, Clock, Zap, Mic, MicOff, Megaphone } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
 import { useTheme } from '../contexts/ThemeContext';
@@ -184,6 +184,13 @@ export function SallyChat({ currentView }: { currentView?: string }) {
   const { preferences } = useTheme();
   const instType = preferences?.institutionType || 'tvet';
 
+  const [commsContext, setCommsContext] = useState<{
+    channelId: string;
+    channelName: string;
+    channelType: string;
+    messages: { senderName: string; senderRole: string; content: string; timestamp: string }[];
+  } | null>(null);
+
   const copilotDescription = React.useMemo(() => {
     switch (instType) {
       case 'primary':
@@ -200,6 +207,42 @@ export function SallyChat({ currentView }: { currentView?: string }) {
   }, [instType]);
 
   const suggestedPrompts = React.useMemo(() => {
+    if (currentView === 'communications' || commsContext) {
+      return [
+        {
+          label: "Summarize Recent Messages",
+          subtext: "Catch up on what you missed",
+          prompt: commsContext?.messages && commsContext.messages.length > 0
+            ? `Summarize the last 20 messages in #${commsContext.channelName} and highlight any decisions, main topics, and clear action items:\n\n${commsContext.messages.map(m => `[${m.senderName} (${m.senderRole})]: ${m.content}`).join('\n')}`
+            : "Summarize the last 20 messages in this channel and extract any key decisions or action items.",
+          icon: ClipboardCheck,
+          color: "emerald"
+        },
+        {
+          label: "Extract Unresolved Tasks",
+          subtext: "Find action items & follow-ups",
+          prompt: commsContext?.messages && commsContext.messages.length > 0
+            ? `Identify and extract all unresolved questions, tasks, follow-ups, or action items in the following chat conversation, and list them clearly as a checklist:\n\n${commsContext.messages.map(m => `[${m.senderName} (${m.senderRole})]: ${m.content}`).join('\n')}`
+            : "Find all unresolved questions, tasks, assignments or action items in this channel, and list them as a checklist.",
+          icon: Sparkles,
+          color: "indigo"
+        },
+        {
+          label: "Draft Announcement",
+          subtext: "Create professional post",
+          prompt: "Draft a professional announcement template. Ask me what the topic should be.",
+          icon: Megaphone,
+          color: "violet"
+        },
+        {
+          label: "Optimize Draft Tone",
+          subtext: "Polite, Encouraging, Urgent",
+          prompt: "Improve the tone of a chat message response. Ask me what message I want to optimize, or give me some response templates.",
+          icon: Box,
+          color: "amber"
+        }
+      ];
+    }
     if (currentView === 'timetable') {
       return [
         {
@@ -435,7 +478,13 @@ export function SallyChat({ currentView }: { currentView?: string }) {
 
   // Listen to open sally custom events from other chat triggers
   useEffect(() => {
-    const handleOpenSally = () => {
+    const handleOpenSally = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail && customEvent.detail.context === 'comms') {
+        setCommsContext(customEvent.detail);
+      } else {
+        setCommsContext(null);
+      }
       setIsOpen(true);
     };
     window.addEventListener('open-sally-chat', handleOpenSally);
@@ -656,11 +705,17 @@ export function SallyChat({ currentView }: { currentView?: string }) {
   // Trigger proactive welcome briefing if chat is opened with empty history
   useEffect(() => {
     if (isOpen && hasAttemptedRestore && messages.length === 0 && !isLoading) {
-      sendMessage({
-        text: '[SYSTEM_INIT_WELCOME_BRIEFING] Please greet me warmly by name, check the database context (attendance averages, low stock items, recent CAT grades), and summarize our training center status in 2 natural sentences.',
-      });
+      if (commsContext) {
+        sendMessage({
+          text: `[SYSTEM_INIT_WELCOME_BRIEFING] You are serving as a dedicated Communication Copilot for #${commsContext.channelName}. Please greet me warmly, introduce yourself as the PRISM Comms Assistant, and explain that you can help summarize channel history, find action items, draft messages, or rewrite announcements. Keep it under 2 short, professional sentences.`,
+        });
+      } else {
+        sendMessage({
+          text: '[SYSTEM_INIT_WELCOME_BRIEFING] Please greet me warmly by name, check the database context (attendance averages, low stock items, recent CAT grades), and summarize our training center status in 2 natural sentences.',
+        });
+      }
     }
-  }, [isOpen, hasAttemptedRestore, messages.length, isLoading, sendMessage]);
+  }, [isOpen, hasAttemptedRestore, messages.length, isLoading, sendMessage, commsContext]);
 
   // Dynamic scroll-to-bottom logic
   useEffect(() => {
@@ -1485,6 +1540,11 @@ export function SallyChat({ currentView }: { currentView?: string }) {
     }
   };
 
+  const handleInsertDraft = (text: string) => {
+    window.dispatchEvent(new CustomEvent('insert-sally-draft', { detail: { draft: text } }));
+    setIsOpen(false);
+  };
+
   return (
     <>
       {/* 1. Floating Action Orb Trigger Button */}
@@ -1568,7 +1628,14 @@ export function SallyChat({ currentView }: { currentView?: string }) {
                 </div>
                 <div>
                   <h3 className="font-bold text-sm font-space tracking-wide bg-gradient-to-r from-slate-100 to-slate-300 bg-clip-text text-transparent">Sally</h3>
-                  <span className="text-[10px] text-emerald-400 font-medium font-mono uppercase tracking-wider">PRISM · {getInstitutionLabel(instType)}</span>
+                  {commsContext ? (
+                    <span className="text-[10px] text-indigo-400 font-bold font-mono uppercase tracking-wider flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-pulse" />
+                      #{commsContext.channelName} Copilot
+                    </span>
+                  ) : (
+                    <span className="text-[10px] text-emerald-400 font-medium font-mono uppercase tracking-wider">PRISM · {getInstitutionLabel(instType)}</span>
+                  )}
                 </div>
               </div>
 
@@ -1647,10 +1714,24 @@ export function SallyChat({ currentView }: { currentView?: string }) {
                     <Sparkles className="w-6 h-6" />
                   </div>
                   <h4 className="font-bold text-slate-200 text-sm mb-0.5 font-space">{getTimeGreeting()}!</h4>
-                  <p className="text-[10px] text-emerald-400/80 font-mono uppercase tracking-wider mb-1">Sally · {getInstitutionLabel(instType)}</p>
-                  <p className="text-xs text-slate-400 max-w-[260px] leading-relaxed mb-6">
-                    {copilotDescription}
-                  </p>
+                  {commsContext ? (
+                    <>
+                      <p className="text-[10px] text-indigo-400 font-bold font-mono uppercase tracking-wider mb-1 flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-pulse" />
+                        #{commsContext.channelName} Communication Copilot
+                      </p>
+                      <p className="text-xs text-slate-400 max-w-[260px] leading-relaxed mb-6">
+                        I am acting as your communication copilot for this channel. I can help summarize messages, extract action items, draft broadcasts, or optimize your message tone.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-[10px] text-emerald-400/80 font-mono uppercase tracking-wider mb-1">Sally · {getInstitutionLabel(instType)}</p>
+                      <p className="text-xs text-slate-400 max-w-[260px] leading-relaxed mb-6">
+                        {copilotDescription}
+                      </p>
+                    </>
+                  )}
                   
                   {/* Suggested Prompts Cards Grid */}
                   <div className="grid grid-cols-1 gap-2.5 w-full max-w-sm">
@@ -1703,12 +1784,22 @@ export function SallyChat({ currentView }: { currentView?: string }) {
                       <div className={clsx("flex", isUser ? 'justify-end' : 'justify-start')}>
                         {(m as any).isHistorical ? (
                           <div className={clsx(
-                            "max-w-[85%] rounded-2xl p-3.5 text-xs md:text-sm shadow-md transition-all",
+                            "max-w-[85%] rounded-2xl p-3.5 text-xs md:text-sm shadow-md transition-all flex flex-col items-start gap-2",
                             isUser 
                               ? "bg-gradient-to-tr from-indigo-600 to-violet-600 text-white rounded-tr-none border border-white/10 shadow-indigo-500/5" 
                               : "sally-glass-bubble text-slate-100 rounded-tl-none border-l-2 border-l-emerald-400"
                           )}>
                             <p className="leading-relaxed whitespace-pre-wrap">{messageText}</p>
+                            {!isUser && commsContext && (
+                              <button 
+                                onClick={() => handleInsertDraft(messageText)}
+                                className="mt-1 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold transition-all active:scale-95 hover:scale-105"
+                                title="Insert this draft into the chat input box"
+                              >
+                                <ArrowUpRight className="w-3.5 h-3.5" />
+                                Insert into Chat
+                              </button>
+                            )}
                           </div>
                         ) : (
                           <motion.div 
@@ -1716,13 +1807,23 @@ export function SallyChat({ currentView }: { currentView?: string }) {
                             animate={{ opacity: 1, y: 0, scale: 1 }}
                             transition={{ type: 'spring', stiffness: 450, damping: 28 }}
                             className={clsx(
-                              "max-w-[85%] rounded-2xl p-3.5 text-xs md:text-sm shadow-md transition-all",
+                              "max-w-[85%] rounded-2xl p-3.5 text-xs md:text-sm shadow-md transition-all flex flex-col items-start gap-2",
                               isUser 
                                 ? "bg-gradient-to-tr from-indigo-600 to-violet-600 text-white rounded-tr-none border border-white/10 shadow-indigo-500/5" 
                                 : "sally-glass-bubble text-slate-100 rounded-tl-none border-l-2 border-l-emerald-400"
                             )}
                           >
                             <p className="leading-relaxed whitespace-pre-wrap">{messageText}</p>
+                            {!isUser && commsContext && (
+                              <button 
+                                onClick={() => handleInsertDraft(messageText)}
+                                className="mt-1 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold transition-all active:scale-95 hover:scale-105"
+                                title="Insert this draft into the chat input box"
+                              >
+                                <ArrowUpRight className="w-3.5 h-3.5" />
+                                Insert into Chat
+                              </button>
+                            )}
                           </motion.div>
                         )}
                       </div>

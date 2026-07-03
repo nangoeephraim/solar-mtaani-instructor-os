@@ -1,4 +1,4 @@
-import { ScheduleSlot, Holiday } from '../types';
+import { ScheduleSlot, Holiday, Resource } from '../types';
 
 /**
  * Converts a time string (HH:MM) to minutes from midnight
@@ -118,4 +118,94 @@ export const isHoliday = (date: Date, holidays: Holiday[]): Holiday | undefined 
     const dateStr = `${year}-${month}-${day}`;
 
     return holidays.find(h => dateStr >= h.startDate && dateStr <= h.endDate);
+};
+
+export interface RecommendedResource {
+    resource: Resource;
+    fitScore: number;
+    isAvailable: boolean;
+    capacityFit: number;
+    conflictingSlot?: ScheduleSlot;
+}
+
+/**
+ * Recommends resources based on availability, capacity matching, and status.
+ */
+export const recommendResources = (
+    slot: { startTime: string; durationMinutes: number; dayOfWeek: number; studentCount?: number },
+    resources: Resource[],
+    schedule: ScheduleSlot[]
+): RecommendedResource[] => {
+    const slotStart = timeToMinutes(slot.startTime);
+    const slotDuration = slot.durationMinutes;
+    const targetDay = slot.dayOfWeek;
+    const targetCount = slot.studentCount || 0;
+
+    return resources.map(res => {
+        let isAvailable = true;
+        let conflictingSlot: ScheduleSlot | undefined;
+        
+        if (res.status === 'maintenance') {
+            isAvailable = false;
+        } else {
+            const resourceSlots = schedule.filter(s => 
+                s.status !== 'Cancelled' && 
+                s.dayOfWeek === targetDay && 
+                s.resourceIds?.includes(res.id)
+            );
+            
+            for (const rSlot of resourceSlots) {
+                const rStart = timeToMinutes(rSlot.startTime);
+                if (doTimesOverlap(slotStart, slotDuration, rStart, rSlot.durationMinutes)) {
+                    isAvailable = false;
+                    conflictingSlot = rSlot;
+                    break;
+                }
+            }
+        }
+
+        let capacityFit = 1;
+        if (res.capacity && targetCount > 0) {
+            if (res.capacity < targetCount) {
+                capacityFit = 0.1;
+            } else {
+                capacityFit = 1 - ((res.capacity - targetCount) / res.capacity);
+            }
+        }
+
+        const statusScore = res.status === 'available' ? 1.0 : res.status === 'in-use' ? 0.5 : 0.0;
+        const availabilityWeight = isAvailable ? 1.0 : 0.0;
+        const fitScore = (0.6 * availabilityWeight) + (0.3 * capacityFit) + (0.1 * statusScore);
+
+        return {
+            resource: res,
+            fitScore: Math.round(fitScore * 100),
+            isAvailable,
+            capacityFit,
+            conflictingSlot
+        };
+    }).sort((a, b) => b.fitScore - a.fitScore);
+};
+
+/**
+ * Calculates a resource's weekly utilization based on scheduled teaching hours.
+ */
+export const calculateResourceUtilization = (
+    resourceId: string,
+    schedule: ScheduleSlot[]
+): { hoursBooked: number; percentage: number } => {
+    const activeSlots = schedule.filter(s => 
+        s.status !== 'Cancelled' && 
+        s.resourceIds?.includes(resourceId)
+    );
+
+    const totalMinutes = activeSlots.reduce((acc, slot) => acc + (slot.durationMinutes || 60), 0);
+    const hoursBooked = parseFloat((totalMinutes / 60).toFixed(1));
+    const weeklyHoursCapacity = 40; // 40 hour standard week
+    const percentage = Math.min(Math.round((hoursBooked / weeklyHoursCapacity) * 100), 100);
+
+    return {
+        hoursBooked,
+        percentage
+    };
 };

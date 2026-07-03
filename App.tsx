@@ -1351,6 +1351,7 @@ const AppContent: React.FC = () => {
           onAddLibraryResource={handleAddLibraryResource}
           onDeleteLibraryResource={handleDeleteLibraryResource}
           onUpdateLibraryResource={handleUpdateLibraryResource}
+          onUpdateScheduleSlot={handleEditScheduleSlot}
         />
       )}
 
