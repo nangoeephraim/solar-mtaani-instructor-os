@@ -602,12 +602,22 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
             const chunk = decoder.decode(value);
             const lines = chunk.split('\n');
             for (const line of lines) {
-                if (line.startsWith('0:')) {
-                    try {
-                        const content = JSON.parse(line.substring(2));
-                        currentText += content;
+                const trimmed = line.trim();
+                if (!trimmed) continue;
+                try {
+                    const parsed = JSON.parse(trimmed);
+                    if (parsed.type === 'text-delta' && typeof parsed.delta === 'string') {
+                        currentText += parsed.delta;
                         onChunk(currentText);
-                    } catch {}
+                    }
+                } catch (e) {
+                    if (trimmed.startsWith('0:')) {
+                        try {
+                            const content = JSON.parse(trimmed.substring(2));
+                            currentText += content;
+                            onChunk(currentText);
+                        } catch {}
+                    }
                 }
             }
         }
