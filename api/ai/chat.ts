@@ -144,11 +144,23 @@ function hasTextOrToolContent(chunk: any): boolean {
   if (!chunk) return false;
 
   if (typeof chunk === 'string') {
-    return chunk.includes('0:"') || chunk.includes('1:') || chunk.includes('9:');
+    const trimmed = chunk.trim();
+    if (trimmed.startsWith('0:') || trimmed.startsWith('1:') || trimmed.startsWith('9:') || trimmed.startsWith('b:') || trimmed.startsWith('e:') || trimmed.startsWith('d:')) {
+      return true;
+    }
+    return false;
   }
 
   if (typeof chunk === 'object') {
-    if (chunk.type === 'text-delta' || chunk.type === 'tool-call') return true;
+    const contentTypes = [
+      'text-delta',
+      'tool-call',
+      'tool-call-start',
+      'tool-input-start',
+      'tool-input-delta',
+      'tool-input-available'
+    ];
+    if (contentTypes.includes(chunk.type)) return true;
     
     // Support message object format
     if (chunk.role === 'assistant') {

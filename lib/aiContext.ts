@@ -115,7 +115,7 @@ export async function buildPrismAIContext(client?: SupabaseClient, abortSignal?:
       async () => {
         let q = supabase
           .from('equipment_inventory')
-          .select('item_name, category, location, available_qty, quantity, low_stock_threshold');
+          .select('item_name, category, location, available_qty, total_qty, low_stock_threshold');
         if (abortSignal) q = q.abortSignal(abortSignal);
         return await q;
       },
@@ -238,7 +238,7 @@ export async function buildPrismAIContext(client?: SupabaseClient, abortSignal?:
   const allInventory = inventoryData || [];
   const lowStockItems: InventoryContext[] = (allInventory as any[])
     .filter((item: any) => {
-      const available = Number(item.available_qty ?? item.quantity ?? 0);
+      const available = Number(item.available_qty ?? item.total_qty ?? 0);
       const threshold = Number(item.low_stock_threshold ?? 5);
       return available < threshold;
     })
@@ -246,7 +246,7 @@ export async function buildPrismAIContext(client?: SupabaseClient, abortSignal?:
       itemName: item.item_name,
       category: item.category,
       location: item.location,
-      available: Number(item.available_qty ?? item.quantity ?? 0),
+      available: Number(item.available_qty ?? item.total_qty ?? 0),
       threshold: Number(item.low_stock_threshold ?? 5),
     }));
 

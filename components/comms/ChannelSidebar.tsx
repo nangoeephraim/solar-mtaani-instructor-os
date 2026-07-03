@@ -71,13 +71,16 @@ export function ChannelSidebar({ channels, activeChannelId, onSelectChannel, onC
                                         className={clsx(
                                             "w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl transition-all duration-300 text-sm font-semibold text-left relative group hover:translate-x-1", 
                                             active 
-                                                ? "bg-gradient-to-r from-indigo-600/95 to-violet-600/95 text-white shadow-[0_4px_15px_rgba(99,102,241,0.25)] scale-[1.02] border border-white/10 z-10" 
+                                                ? "bg-slate-900/10 dark:bg-white/10 text-slate-900 dark:text-white border border-slate-900/10 dark:border-white/10 z-10" 
                                                 : "text-slate-700 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white"
                                         )}
                                     >
+                                        {active && (
+                                            <div className="absolute left-0 top-3 bottom-3 w-[3px] bg-indigo-500 dark:bg-indigo-400 rounded-r" />
+                                        )}
                                         <div className={clsx(
                                             "p-1.5 rounded-lg shadow-sm transition-transform group-hover:scale-110 duration-300", 
-                                            active ? "bg-white/20 text-white" : "bg-slate-200/50 dark:bg-white/5 text-slate-500 dark:text-slate-400"
+                                            active ? "bg-indigo-500/10 dark:bg-white/10 text-indigo-600 dark:text-indigo-400" : "bg-slate-200/50 dark:bg-white/5 text-slate-500 dark:text-slate-400"
                                         )}>
                                             <Megaphone size={15} />
                                         </div>
@@ -103,13 +106,16 @@ export function ChannelSidebar({ channels, activeChannelId, onSelectChannel, onC
                             className={clsx(
                                 "w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl transition-all duration-300 text-sm font-semibold text-left relative group hover:translate-x-1", 
                                 activeChannelId === 'video_meetings' 
-                                    ? "bg-gradient-to-r from-indigo-600/95 to-violet-600/95 text-white shadow-[0_4px_15px_rgba(99,102,241,0.25)] scale-[1.02] border border-white/10 z-10" 
+                                    ? "bg-slate-900/10 dark:bg-white/10 text-slate-900 dark:text-white border border-slate-900/10 dark:border-white/10 z-10" 
                                     : "text-slate-700 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white"
                             )}
                         >
+                            {activeChannelId === 'video_meetings' && (
+                                <div className="absolute left-0 top-3 bottom-3 w-[3px] bg-indigo-500 dark:bg-indigo-400 rounded-r" />
+                            )}
                             <div className={clsx(
                                 "p-1.5 rounded-lg shadow-sm transition-transform group-hover:scale-110 duration-300", 
-                                activeChannelId === 'video_meetings' ? "bg-white/20 text-white" : "bg-slate-200/50 dark:bg-white/5 text-slate-500 dark:text-slate-400"
+                                activeChannelId === 'video_meetings' ? "bg-indigo-500/10 dark:bg-white/10 text-indigo-600 dark:text-indigo-400" : "bg-slate-200/50 dark:bg-white/5 text-slate-500 dark:text-slate-400"
                             )}>
                                 <Video size={15} />
                             </div>
@@ -141,15 +147,18 @@ export function ChannelSidebar({ channels, activeChannelId, onSelectChannel, onC
                                     <button 
                                         onClick={() => onSelectChannel(ch.id)} 
                                         className={clsx(
-                                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl transition-all duration-300 text-sm font-semibold text-left group hover:translate-x-1", 
+                                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl transition-all duration-300 text-sm font-semibold text-left group hover:translate-x-1 relative", 
                                             active 
-                                                ? "bg-gradient-to-r from-indigo-600/95 to-violet-600/95 text-white shadow-[0_4px_15px_rgba(99,102,241,0.25)] scale-[1.02] border border-white/10 z-10" 
+                                                ? "bg-slate-900/10 dark:bg-white/10 text-slate-900 dark:text-white border border-slate-900/10 dark:border-white/10 z-10" 
                                                 : "text-slate-700 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white"
                                         )}
                                     >
+                                        {active && (
+                                            <div className="absolute left-0 top-3 bottom-3 w-[3px] bg-indigo-500 dark:bg-indigo-400 rounded-r" />
+                                        )}
                                         <div className={clsx(
                                             "p-1.5 rounded-lg shadow-sm transition-transform group-hover:scale-110 duration-300", 
-                                            active ? "bg-white/20 text-white" : "bg-slate-200/50 dark:bg-white/5 text-slate-500 dark:text-slate-400"
+                                            active ? "bg-indigo-500/10 dark:bg-white/10 text-indigo-600 dark:text-indigo-400" : "bg-slate-200/50 dark:bg-white/5 text-slate-500 dark:text-slate-400"
                                         )}>
                                             <Hash size={15} />
                                         </div>
@@ -199,12 +208,15 @@ export function ChannelSidebar({ channels, activeChannelId, onSelectChannel, onC
                                     <button 
                                         onClick={() => onSelectChannel(ch.id)} 
                                         className={clsx(
-                                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl transition-all duration-300 text-sm font-semibold text-left group hover:translate-x-1", 
+                                            "w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl transition-all duration-300 text-sm font-semibold text-left group hover:translate-x-1 relative", 
                                             active 
-                                                ? "bg-gradient-to-r from-indigo-600/95 to-violet-600/95 text-white shadow-[0_4px_15px_rgba(99,102,241,0.25)] scale-[1.02] border border-white/10 z-10" 
+                                                ? "bg-slate-900/10 dark:bg-white/10 text-slate-900 dark:text-white border border-slate-900/10 dark:border-white/10 z-10" 
                                                 : "text-slate-700 dark:text-slate-300 hover:bg-slate-200/50 dark:hover:bg-white/5 hover:text-slate-900 dark:hover:text-white"
                                         )}
                                     >
+                                        {active && (
+                                            <div className="absolute left-0 top-3 bottom-3 w-[3px] bg-indigo-500 dark:bg-indigo-400 rounded-r" />
+                                        )}
                                         <div 
                                             className="w-8 h-8 rounded-full flex items-center justify-center shadow-md overflow-hidden text-white text-xs font-black border transition-all group-hover:scale-105 duration-300" 
                                             style={{ 
@@ -270,7 +282,7 @@ export function ChannelSidebar({ channels, activeChannelId, onSelectChannel, onC
         <>
             {/* Main Sidebar (Desktop sidebar or Mobile full screen list view) */}
             <div className={clsx(
-                "w-full lg:w-72 flex-col flex-shrink-0 sidebar-glass backdrop-blur-xl bg-white/85 dark:bg-slate-950/20 z-20 h-full border-r border-slate-200/80 dark:border-white/[0.06]",
+                "w-full lg:w-72 flex-col flex-shrink-0 sidebar-glass backdrop-blur-2xl bg-white/35 dark:bg-slate-950/15 z-20 h-full border-r border-slate-200/50 dark:border-white/[0.04]",
                 mobileView === 'list' ? 'flex' : 'hidden lg:flex'
             )}>
                 {sidebarContent}
@@ -280,8 +292,8 @@ export function ChannelSidebar({ channels, activeChannelId, onSelectChannel, onC
             <AnimatePresence>
                 {isOpen && (
                     <>
-                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden" onClick={onToggle} />
-                        <motion.div initial={{ x: -300 }} animate={{ x: 0 }} exit={{ x: -300 }} transition={{ type: 'spring', stiffness: 350, damping: 28 }} className="fixed left-0 top-0 bottom-0 w-72 flex flex-col z-50 lg:hidden sidebar-glass backdrop-blur-xl bg-white/95 dark:bg-slate-950/80 border-r border-slate-200/80 dark:border-white/[0.06]">
+                        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40 lg:hidden" onClick={onToggle} />
+                        <motion.div initial={{ x: -300 }} animate={{ x: 0 }} exit={{ x: -300 }} transition={{ type: 'spring', stiffness: 350, damping: 28 }} className="fixed left-0 top-0 bottom-0 w-72 flex flex-col z-50 lg:hidden sidebar-glass backdrop-blur-2xl bg-white/70 dark:bg-slate-950/60 border-r border-slate-200/50 dark:border-white/[0.04]">
                             {sidebarContent}
                         </motion.div>
                     </>

@@ -23,6 +23,7 @@ import { createTypingChannel, broadcastTyping, TypingEvent } from '../services/r
 import { playSendSound, playReceiveSound } from '../utils/audioUtils';
 import { supabase } from '../services/supabase';
 import { getAuthHeaders } from '../services/authHeaders';
+import { MeshBackground } from './comms/MeshBackground';
 
 const Meetings = lazy(() => import('./Meetings'));
 
@@ -273,6 +274,7 @@ const MessageGroupRenderer = React.memo(({
     chatBubbleTheme,
     messageAiAssists,
     onDismissAiAssist,
+    chatWallpaper,
 }: any) => {
     const first = group[0];
 
@@ -310,31 +312,61 @@ const MessageGroupRenderer = React.memo(({
                             let baseClass = "";
                             let inlineStyle: React.CSSProperties = {};
 
-                            if (!isMyMsg) {
-                                baseClass = `rounded-r-2xl text-[var(--md-sys-color-on-surface)] ${isFirst ? 'rounded-tl-2xl' : 'rounded-tl-md'} ${isLast ? 'rounded-bl-2xl' : 'rounded-bl-md'} border border-white/[0.04] backdrop-blur-md shadow-sm`;
-                                inlineStyle = { background: 'rgba(255, 255, 255, 0.03)' };
+                            if (chatWallpaper === 'mesh') {
+                                if (!isMyMsg) {
+                                    baseClass = `rounded-r-2xl text-slate-800 dark:text-slate-200 ${isFirst ? 'rounded-tl-2xl' : 'rounded-tl-md'} ${isLast ? 'rounded-bl-2xl' : 'rounded-bl-md'} border border-slate-200/40 dark:border-white/5 backdrop-blur-md shadow-sm`;
+                                    inlineStyle = { background: 'rgba(255, 255, 255, 0.04)' };
+                                } else {
+                                    const cornerClasses = `${isFirst ? 'rounded-tr-2xl' : 'rounded-tr-md'} ${isLast ? 'rounded-br-2xl' : 'rounded-br-md'} rounded-l-2xl backdrop-blur-md shadow-sm`;
+                                    switch (chatBubbleTheme) {
+                                        case 'lavender':
+                                            baseClass = `${cornerClasses} bg-indigo-500/10 dark:bg-indigo-500/15 border border-indigo-500/25 text-indigo-900 dark:text-indigo-200`;
+                                            break;
+                                        case 'rose':
+                                            baseClass = `${cornerClasses} bg-rose-500/10 dark:bg-rose-500/15 border border-rose-500/25 text-rose-900 dark:text-rose-200`;
+                                            break;
+                                        case 'ocean':
+                                            baseClass = `${cornerClasses} bg-sky-500/10 dark:bg-sky-500/15 border border-sky-500/25 text-sky-900 dark:text-sky-200`;
+                                            break;
+                                        case 'emerald':
+                                            baseClass = `${cornerClasses} bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/25 text-emerald-900 dark:text-emerald-200`;
+                                            break;
+                                        case 'amethyst':
+                                            baseClass = `${cornerClasses} bg-purple-500/10 dark:bg-purple-500/15 border border-purple-500/25 text-purple-900 dark:text-purple-200`;
+                                            break;
+                                        case 'default':
+                                        default:
+                                            baseClass = `${cornerClasses} bg-[var(--md-sys-color-primary)]/10 dark:bg-[var(--md-sys-color-primary)]/15 border border-[var(--md-sys-color-primary)]/25 text-[var(--md-sys-color-on-primary-container)] dark:text-indigo-200`;
+                                            break;
+                                    }
+                                }
                             } else {
-                                const cornerClasses = `${isFirst ? 'rounded-tr-2xl' : 'rounded-tr-md'} ${isLast ? 'rounded-br-2xl' : 'rounded-br-md'} rounded-l-2xl border border-white/10`;
-                                switch (chatBubbleTheme) {
-                                    case 'lavender':
-                                        baseClass = `bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 text-white shadow-[0_3px_12px_rgba(99,102,241,0.25)] ${cornerClasses}`;
-                                        break;
-                                    case 'rose':
-                                        baseClass = `bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 text-white shadow-[0_3px_12px_rgba(244,63,94,0.25)] ${cornerClasses}`;
-                                        break;
-                                    case 'ocean':
-                                        baseClass = `bg-gradient-to-tr from-sky-600 via-sky-500 to-cyan-500 text-white shadow-[0_3px_12px_rgba(14,165,233,0.25)] ${cornerClasses}`;
-                                        break;
-                                    case 'emerald':
-                                        baseClass = `bg-gradient-to-tr from-emerald-600 via-emerald-500 to-teal-500 text-white shadow-[0_3px_12px_rgba(16,185,129,0.25)] ${cornerClasses}`;
-                                        break;
-                                    case 'amethyst':
-                                        baseClass = `bg-gradient-to-tr from-purple-600 via-purple-500 to-fuchsia-500 text-white shadow-[0_3px_12px_rgba(168,85,247,0.25)] ${cornerClasses}`;
-                                        break;
-                                    case 'default':
-                                    default:
-                                        baseClass = `bg-gradient-to-tr from-[var(--md-sys-color-primary)] to-indigo-600/90 text-white shadow-[0_3px_12px_rgba(99,102,241,0.2)] ${cornerClasses}`;
-                                        break;
+                                if (!isMyMsg) {
+                                    baseClass = `rounded-r-2xl text-[var(--md-sys-color-on-surface)] ${isFirst ? 'rounded-tl-2xl' : 'rounded-tl-md'} ${isLast ? 'rounded-bl-2xl' : 'rounded-bl-md'} border border-white/[0.04] backdrop-blur-md shadow-sm`;
+                                    inlineStyle = { background: 'rgba(255, 255, 255, 0.03)' };
+                                } else {
+                                    const cornerClasses = `${isFirst ? 'rounded-tr-2xl' : 'rounded-tr-md'} ${isLast ? 'rounded-br-2xl' : 'rounded-br-md'} rounded-l-2xl border border-white/10`;
+                                    switch (chatBubbleTheme) {
+                                        case 'lavender':
+                                            baseClass = `bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 text-white shadow-[0_3px_12px_rgba(99,102,241,0.25)] ${cornerClasses}`;
+                                            break;
+                                        case 'rose':
+                                            baseClass = `bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 text-white shadow-[0_3px_12px_rgba(244,63,94,0.25)] ${cornerClasses}`;
+                                            break;
+                                        case 'ocean':
+                                            baseClass = `bg-gradient-to-tr from-sky-600 via-sky-500 to-cyan-500 text-white shadow-[0_3px_12px_rgba(14,165,233,0.25)] ${cornerClasses}`;
+                                            break;
+                                        case 'emerald':
+                                            baseClass = `bg-gradient-to-tr from-emerald-600 via-emerald-500 to-teal-500 text-white shadow-[0_3px_12px_rgba(16,185,129,0.25)] ${cornerClasses}`;
+                                            break;
+                                        case 'amethyst':
+                                            baseClass = `bg-gradient-to-tr from-purple-600 via-purple-500 to-fuchsia-500 text-white shadow-[0_3px_12px_rgba(168,85,247,0.25)] ${cornerClasses}`;
+                                            break;
+                                        case 'default':
+                                        default:
+                                            baseClass = `bg-gradient-to-tr from-[var(--md-sys-color-primary)] to-indigo-600/90 text-white shadow-[0_3px_12px_rgba(99,102,241,0.2)] ${cornerClasses}`;
+                                            break;
+                                    }
                                 }
                             }
                             return { className: baseClass, style: inlineStyle };
@@ -868,8 +900,8 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
     const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Android customizable chat preferences
-    const [chatWallpaper, setChatWallpaper] = useState<'default' | 'midnight' | 'sunset' | 'emerald' | 'doodle'>(() => {
-        return (localStorage.getItem('prism_chat_wallpaper') as any) || 'default';
+    const [chatWallpaper, setChatWallpaper] = useState<'default' | 'midnight' | 'sunset' | 'emerald' | 'doodle' | 'mesh'>(() => {
+        return (localStorage.getItem('prism_chat_wallpaper') as any) || 'mesh';
     });
     const [enterIsSend, setEnterIsSend] = useState<boolean>(() => {
         return localStorage.getItem('prism_enter_is_send') !== 'false';
@@ -954,6 +986,10 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                     backgroundColor: 'var(--md-sys-color-background)',
                     backgroundImage: 'radial-gradient(var(--md-sys-color-outline-variant) 1px, transparent 0px)',
                     backgroundSize: '24px 24px',
+                };
+            case 'mesh':
+                return {
+                    background: 'linear-gradient(135deg, #1e1b4b 0%, #020617 100%)',
                 };
             case 'default':
             default:
@@ -1687,7 +1723,17 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
     }
 
     return (
-        <div className="flex h-full w-full glass-panel overflow-hidden animate-fade-in relative">
+        <div 
+            className={clsx(
+                "flex h-full w-full glass-panel overflow-hidden animate-fade-in relative transition-all duration-500",
+                chatWallpaper === 'mesh' && "bg-transparent! border-white/10 dark:border-white/5 backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.15)]"
+            )}
+            style={chatWallpaper !== 'mesh' ? getWallpaperStyle() : undefined}
+        >
+            {chatWallpaper === 'mesh' && (
+                <MeshBackground className="absolute inset-0 z-0" />
+            )}
+
             {/* Sidebar */}
             <ChannelSidebar 
                 channels={channels} 
@@ -1713,7 +1759,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
 
             {/* ═══ MAIN CHAT AREA ═══ */}
             {activeChannelId === 'video_meetings' ? (
-                <div className={clsx("flex-1 flex flex-col relative overflow-hidden", mobileView === 'chat' ? "flex" : "hidden lg:flex")} style={{ background: 'var(--md-sys-color-background)' }}>
+                <div className={clsx("flex-1 flex flex-col relative overflow-hidden z-10", mobileView === 'chat' ? "flex" : "hidden lg:flex")} style={chatWallpaper === 'mesh' ? { background: 'transparent' } : { background: 'var(--md-sys-color-background)' }}>
                     <Suspense
                         fallback={
                             <div className="flex-1 grid place-items-center p-6">
@@ -1730,8 +1776,8 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
             ) : activeChannel ? (
                 <>
                     <div
-                        className={clsx("flex-1 flex flex-col relative overflow-hidden", mobileView === 'chat' ? "flex" : "hidden lg:flex")}
-                        style={{ background: 'var(--md-sys-color-background)' }}
+                        className={clsx("flex-1 flex flex-col relative overflow-hidden z-10", mobileView === 'chat' ? "flex" : "hidden lg:flex")}
+                        style={chatWallpaper === 'mesh' ? { background: 'transparent' } : { background: 'var(--md-sys-color-background)' }}
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
                         onDrop={handleDrop}
@@ -1750,7 +1796,10 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                             )}
                         </AnimatePresence>
                         {/* Header */}
-                        <div className="h-14 px-4 flex items-center justify-between flex-shrink-0 z-10 sidebar-glass backdrop-blur-xl bg-white/80 dark:bg-slate-950/20 border-b border-slate-200 dark:border-white/[0.05]">
+                        <div className={clsx(
+                            "h-14 px-4 flex items-center justify-between flex-shrink-0 z-10 sidebar-glass backdrop-blur-xl border-b border-slate-200 dark:border-white/[0.05] transition-colors duration-300",
+                            chatWallpaper === 'mesh' ? "bg-white/10 dark:bg-slate-950/10" : "bg-white/80 dark:bg-slate-950/20"
+                        )}>
                             <div className="flex items-center gap-2">
                                 {/* Mobile back button (returns to channel list view) */}
                                 <button
@@ -1964,18 +2013,21 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                                             onLongPress={setMobileActionMsg}
                                                             onSwipeReply={(msg: any) => {
                                                                 setReplyToMsg(msg);
-                                                                setTimeout(() => textareaRef.current?.focus(), 80);
+                                                                textareaRef.current?.focus();
                                                             }}
                                                             onSwipeEdit={(msg: any) => {
-                                                                setEditingMsgId(msg.id);
-                                                                setEditContent(msg.content);
+                                                                if (msg.senderId === userId && !msg.isDeleted) {
+                                                                    setEditingMsgId(msg.id);
+                                                                    setEditContent(msg.content);
+                                                                }
                                                             }}
-                                                            messageAiAssists={messageAiAssists}
-                                                            onDismissAiAssist={handleDismissAiAssist}
-                                                            channelData={activeChannel}
+                                                            channelData={data}
                                                             chatFontSize={chatFontSize}
                                                             triggerHaptics={triggerHaptics}
                                                             chatBubbleTheme={chatBubbleTheme}
+                                                            messageAiAssists={messageAiAssists}
+                                                            onDismissAiAssist={handleDismissAiAssist}
+                                                            chatWallpaper={chatWallpaper}
                                                         />
                                                     </React.Fragment>
                                                 );
@@ -2036,7 +2088,10 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                     <p className="text-sm font-bold flex items-center justify-center gap-2" style={{ color: 'var(--md-sys-color-secondary)' }}><ShieldAlert size={16} /> Only administrators can broadcast here.</p>
                                 </div>
                             ) : (
-                                <div className="px-3 pb-safe-bottom pt-3 md:px-5 md:pb-5" style={{ background: 'var(--md-sys-color-surface)', paddingBottom: 'max(12px, env(safe-area-inset-bottom, 12px))' }}>
+                                <div className={clsx(
+                                    "px-3 pb-safe-bottom pt-3 md:px-5 md:pb-5 transition-all duration-300",
+                                    chatWallpaper === 'mesh' ? "bg-white/5 dark:bg-slate-950/5 backdrop-blur-md border-t border-white/10 dark:border-white/5" : "border-t border-slate-200 dark:border-white/[0.05]"
+                                )} style={chatWallpaper === 'mesh' ? { paddingBottom: 'max(12px, env(safe-area-inset-bottom, 12px))' } : { background: 'var(--md-sys-color-surface)', paddingBottom: 'max(12px, env(safe-area-inset-bottom, 12px))' }}>
                                 <AnimatePresence>
                                     {replyToMsg && (
                                         <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden max-w-4xl mx-auto">
@@ -2178,7 +2233,16 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                         )}
                                     </AnimatePresence>
 
-                                     <div className={clsx("flex items-end rounded-[24px] transition-all duration-300 p-2 gap-2 backdrop-blur-xl bg-slate-100/60 dark:bg-slate-900/35 border shadow-[0_4px_30px_rgba(0,0,0,0.08)]", isInputFocused || isRecording ? "shadow-[0_4px_32px_rgba(99,102,241,0.12)] bg-white dark:bg-slate-900/70 scale-[1.005] border-indigo-500/30" : "bg-slate-100/40 dark:bg-slate-900/25 border-slate-200 dark:border-white/[0.06] hover:bg-slate-200/50 dark:hover:bg-slate-900/40")}>
+                                     <div className={clsx(
+                                         "flex items-end rounded-[24px] transition-all duration-300 p-2 gap-2 backdrop-blur-xl border shadow-[0_4px_30px_rgba(0,0,0,0.04)]", 
+                                         chatWallpaper === 'mesh'
+                                             ? (isInputFocused || isRecording 
+                                                 ? "bg-white/15 dark:bg-slate-950/30 border-white/30 dark:border-white/20 shadow-[0_4px_32px_rgba(255,255,255,0.05)] scale-[1.005]" 
+                                                 : "bg-white/5 dark:bg-slate-950/10 border-white/10 dark:border-white/5 hover:bg-white/10 dark:hover:bg-slate-950/20")
+                                             : (isInputFocused || isRecording 
+                                                 ? "shadow-[0_4px_32px_rgba(99,102,241,0.12)] bg-white dark:bg-slate-900/70 scale-[1.005] border-indigo-500/30" 
+                                                 : "bg-slate-100/40 dark:bg-slate-900/25 border-slate-200 dark:border-white/[0.06] hover:bg-slate-200/50 dark:hover:bg-slate-900/40")
+                                     )}>
                                          <div className="flex items-center gap-1">
                                              {/* Mobile: '+' opens the attach sheet */}
                                              <button type="button" onClick={() => setShowMobileAttachSheet(p => !p)} className="md:hidden p-2 rounded-xl bg-slate-200/50 dark:bg-white/5 hover:bg-slate-200/80 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-all active:scale-90" title="Attach">
@@ -2282,7 +2346,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                     </div>
                 </>
             ) : (
-                <div className={clsx("flex-1 flex items-center justify-center", mobileView === 'chat' ? "flex" : "hidden lg:flex")} style={{ background: 'var(--md-sys-color-background)' }}>
+                <div className={clsx("flex-1 flex items-center justify-center z-10", mobileView === 'chat' ? "flex" : "hidden lg:flex")} style={chatWallpaper === 'mesh' ? { background: 'transparent' } : { background: 'var(--md-sys-color-background)' }}>
                     <div className="text-center">
                         <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-4" style={{ background: 'var(--md-sys-color-primary-container)' }}>
                             <MessageSquare className="w-10 h-10" style={{ color: 'var(--md-sys-color-primary)' }} />
@@ -2658,6 +2722,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                     <label className="text-xs font-black uppercase tracking-wider block mb-2 text-indigo-400">Chat Wallpaper</label>
                                     <div className="grid grid-cols-5 gap-2">
                                         {[
+                                            { id: 'mesh', label: '3D Mesh', bg: 'linear-gradient(135deg, #1e1b4b 0%, #020617 100%)' },
                                             { id: 'default', label: 'Default', bg: 'var(--md-sys-color-background)' },
                                             { id: 'midnight', label: 'Midnight', bg: 'radial-gradient(circle, #1e1b4b 0%, #030712 100%)' },
                                             { id: 'sunset', label: 'Sunset', bg: 'linear-gradient(135deg, #fef08a 0%, #f43f5e 50%, #4c1d95 100%)' },
