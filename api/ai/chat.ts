@@ -1454,30 +1454,43 @@ export default async function handler(req: Request) {
         
         // Probe stream to ensure connection/API keys/rate limits are functional before sending 200 headers
         const reader = uiStream.getReader();
-        let firstChunk: any = null;
-        let firstChunkDone = false;
+        const bufferedChunks: any[] = [];
+        let isDone = false;
         
         try {
-          const firstRead = await Promise.race([
-            reader.read(),
+          const readPromise = async () => {
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) {
+                isDone = true;
+                break;
+              }
+              bufferedChunks.push(value);
+              // Read up to 2 chunks to bypass initial setup/metadata frames and verify API request resolution
+              if (bufferedChunks.length >= 2) {
+                break;
+              }
+            }
+          };
+
+          await Promise.race([
+            readPromise(),
             new Promise<never>((_, reject) =>
               setTimeout(() => reject(new Error('Connection handshake timed out after 5s')), 5000)
             )
           ]);
-          firstChunk = firstRead.value;
-          firstChunkDone = firstRead.done;
         } catch (streamErr: any) {
           reader.releaseLock();
           throw streamErr;
         }
 
-        // Reconstruct the stream using the probed first chunk
+        // Reconstruct the stream using the probed buffered chunks
         const customStream = new ReadableStream({
           async start(controller) {
-            if (firstChunk !== null && firstChunk !== undefined) {
-              controller.enqueue(firstChunk);
+            for (const chunk of bufferedChunks) {
+              controller.enqueue(chunk);
             }
-            if (firstChunkDone) {
+            if (isDone) {
               controller.close();
               return;
             }
