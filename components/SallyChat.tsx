@@ -3,13 +3,21 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
-import { Sparkles, Send, Volume2, VolumeX, X, Box, ClipboardCheck, ArrowUpRight, CheckCircle2, AlertTriangle, HelpCircle, Trash2, RotateCcw, Users, CreditCard, Calendar, BarChart3, Bell, TrendingUp, TrendingDown, Clock, Zap, Mic, MicOff, Megaphone } from 'lucide-react';
+import { Sparkles, Send, Volume2, VolumeX, X, Box, ClipboardCheck, ArrowUpRight, CheckCircle2, AlertTriangle, HelpCircle, Trash2, RotateCcw, Users, CreditCard, Calendar, BarChart3, Bell, TrendingUp, TrendingDown, Clock, Zap, Mic, MicOff, Megaphone, History, Plus } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
 import { useTheme } from '../contexts/ThemeContext';
 import { getAuthHeaders } from '../services/authHeaders';
 
 // ── Constants ────────────────────────────────────────────────────────
+interface Conversation {
+  id: string;
+  title: string;
+  messages: Array<any>;
+  createdAt: string;
+  updatedAt: string;
+}
+
 const STORAGE_KEY = 'sally_chat_history_v2';
 const MAX_STORED_MESSAGES = 50;
 
@@ -455,6 +463,9 @@ export function SallyChat({ currentView }: { currentView?: string }) {
   const [input, setInput] = useState('');
   const [lastUserMessage, setLastUserMessage] = useState('');
   const [hasAttemptedRestore, setHasAttemptedRestore] = useState(false);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string>('');
+  const [showHistoryList, setShowHistoryList] = useState(false);
   const [shouldAnimateScroll, setShouldAnimateScroll] = useState(false);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [particles, setParticles] = useState<any[]>([]);
@@ -586,37 +597,179 @@ export function SallyChat({ currentView }: { currentView?: string }) {
 
   const isLoading = status === 'streaming' || status === 'submitted';
 
-  // ── Conversation Memory: Persist to localStorage ────────────────
-  useEffect(() => {
-    if (messages.length > 0) {
-      try {
-        const toStore = messages.slice(-MAX_STORED_MESSAGES).map(m => ({
-          id: m.id,
-          role: m.role,
-          content: (m as any).content || '',
-          parts: (m as any).parts,
-          createdAt: (m as any).createdAt,
-        }));
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(toStore));
-      } catch { /* quota exceeded — silent fail */ }
-    }
-  }, [messages]);
-
-  // ── Conversation Memory: Restore from localStorage on mount ─────
+  // ── Conversation Memory: Load conversations and restore active on mount ──
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const historical = parsed.map((m: any) => ({ ...m, isHistorical: true }));
+      const storedList = localStorage.getItem('sally_conversations_list_v1');
+      const storedActiveId = localStorage.getItem('sally_active_conversation_id_v1');
+      
+      let list: Conversation[] = [];
+      if (storedList) {
+        list = JSON.parse(storedList);
+      }
+      
+      // Upgrade path for legacy single-chat history if present
+      if (list.length === 0) {
+        const legacyStored = localStorage.getItem(STORAGE_KEY);
+        if (legacyStored) {
+          try {
+            const parsedLegacy = JSON.parse(legacyStored);
+            if (Array.isArray(parsedLegacy) && parsedLegacy.length > 0) {
+              const firstUser = parsedLegacy.find(m => m.role === 'user');
+              const firstUserText = firstUser ? (firstUser.content || '') : 'Legacy Conversation';
+              const legacyId = 'legacy_' + Date.now();
+              list = [{
+                id: legacyId,
+                title: firstUserText.length > 28 ? firstUserText.substring(0, 28) + '...' : firstUserText || 'Legacy Conversation',
+                messages: parsedLegacy,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              }];
+              localStorage.setItem('sally_active_conversation_id_v1', legacyId);
+              localStorage.setItem('sally_conversations_list_v1', JSON.stringify(list));
+              localStorage.removeItem(STORAGE_KEY);
+            }
+          } catch {}
+        }
+      }
+
+      if (list.length === 0) {
+        // Create initial default new conversation
+        const newId = 'chat_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+        const newConv: Conversation = {
+          id: newId,
+          title: 'New Conversation',
+          messages: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+        list = [newConv];
+        setActiveConversationId(newId);
+        localStorage.setItem('sally_active_conversation_id_v1', newId);
+      } else {
+        const activeId = storedActiveId && list.some(c => c.id === storedActiveId)
+          ? storedActiveId
+          : list[0].id;
+        setActiveConversationId(activeId);
+        
+        // Restore active conversation messages
+        const activeConv = list.find(c => c.id === activeId);
+        if (activeConv && activeConv.messages.length > 0) {
+          const historical = activeConv.messages.map((m: any) => ({ ...m, isHistorical: true }));
           setMessages(historical);
         }
       }
-    } catch { /* corrupt data — silent fail */ }
+      setConversations(list);
+      localStorage.setItem('sally_conversations_list_v1', JSON.stringify(list));
+    } catch (err) {
+      console.error('Failed to restore chat conversations:', err);
+    }
     setHasAttemptedRestore(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // ── Conversation Memory: Persist messages to active conversation ──
+  useEffect(() => {
+    if (!hasAttemptedRestore || !activeConversationId) return;
+    
+    setConversations(prev => {
+      const idx = prev.findIndex(c => c.id === activeConversationId);
+      if (idx === -1) return prev;
+      
+      const current = prev[idx];
+      // Generate a title from the first user message if it is still a generic default
+      let title = current.title;
+      if (title === 'New Conversation' || title.trim() === '') {
+        const firstUser = messages.find(m => m.role === 'user' && !getMessageText(m).includes('[SYSTEM_INIT_'));
+        if (firstUser) {
+          const text = getMessageText(firstUser);
+          title = text.length > 28 ? text.substring(0, 28) + '...' : text || 'New Conversation';
+        }
+      }
+      
+      const updated = {
+        ...current,
+        title,
+        messages,
+        updatedAt: new Date().toISOString()
+      };
+      
+      const next = [...prev];
+      next[idx] = updated;
+      
+      localStorage.setItem('sally_conversations_list_v1', JSON.stringify(next));
+      return next;
+    });
+  }, [messages, activeConversationId, hasAttemptedRestore]);
+
+  const startNewConversation = useCallback(() => {
+    const newId = 'chat_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+    const newConv: Conversation = {
+      id: newId,
+      title: 'New Conversation',
+      messages: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    
+    setConversations(prev => {
+      const next = [newConv, ...prev];
+      localStorage.setItem('sally_conversations_list_v1', JSON.stringify(next));
+      return next;
+    });
+    
+    setActiveConversationId(newId);
+    localStorage.setItem('sally_active_conversation_id_v1', newId);
+    setMessages([]);
+    setShowHistoryList(false);
+  }, [setMessages]);
+
+  const loadConversation = useCallback((id: string) => {
+    const target = conversations.find(c => c.id === id);
+    if (!target) return;
+    
+    setActiveConversationId(id);
+    localStorage.setItem('sally_active_conversation_id_v1', id);
+    
+    const historical = target.messages.map((m: any) => ({ ...m, isHistorical: true }));
+    setMessages(historical);
+    setShowHistoryList(false);
+  }, [conversations, setMessages]);
+
+  const deleteConversation = useCallback((id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    setConversations(prev => {
+      const next = prev.filter(c => c.id !== id);
+      
+      if (id === activeConversationId) {
+        if (next.length > 0) {
+          const fallbackId = next[0].id;
+          setActiveConversationId(fallbackId);
+          localStorage.setItem('sally_active_conversation_id_v1', fallbackId);
+          const target = next[0];
+          const historical = target.messages.map((m: any) => ({ ...m, isHistorical: true }));
+          setMessages(historical);
+        } else {
+          const newId = 'chat_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+          const newConv: Conversation = {
+            id: newId,
+            title: 'New Conversation',
+            messages: [],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+          next.push(newConv);
+          setActiveConversationId(newId);
+          localStorage.setItem('sally_active_conversation_id_v1', newId);
+          setMessages([]);
+        }
+      }
+      
+      localStorage.setItem('sally_conversations_list_v1', JSON.stringify(next));
+      return next;
+    });
+  }, [activeConversationId, setMessages]);
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!panelRef.current) return;
@@ -642,8 +795,19 @@ export function SallyChat({ currentView }: { currentView?: string }) {
 
   const clearChat = useCallback(() => {
     setMessages([]);
-    localStorage.removeItem(STORAGE_KEY);
-  }, [setMessages]);
+    setConversations(prev => {
+      const idx = prev.findIndex(c => c.id === activeConversationId);
+      if (idx === -1) return prev;
+      const next = [...prev];
+      next[idx] = {
+        ...next[idx],
+        messages: [],
+        updatedAt: new Date().toISOString()
+      };
+      localStorage.setItem('sally_conversations_list_v1', JSON.stringify(next));
+      return next;
+    });
+  }, [activeConversationId, setMessages]);
 
   const handleChipClick = useCallback((promptText: string) => {
     setLastUserMessage(promptText);
@@ -1683,17 +1847,18 @@ export function SallyChat({ currentView }: { currentView?: string }) {
                   {speechEnabled ? <Volume2 className="w-4 h-4 text-emerald-400" /> : <VolumeX className="w-4 h-4" />}
                 </button>
 
-                {/* Clear Chat Button */}
-                {messages.length > 0 && (
-                  <button 
-                    onClick={clearChat}
-                    className="text-slate-400 hover:text-red-400 transition p-1.5 rounded-xl hover:bg-slate-800 flex items-center justify-center"
-                    title="Clear Chat History"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                )}
-                
+                {/* Chat History List Toggle Button */}
+                <button 
+                  onClick={() => setShowHistoryList(!showHistoryList)} 
+                  className={clsx(
+                    "text-slate-400 hover:text-white transition p-1.5 rounded-xl flex items-center justify-center",
+                    showHistoryList ? "bg-indigo-500/20 text-indigo-400 border border-indigo-500/30" : "hover:bg-slate-800 border border-transparent"
+                  )}
+                  title="Saved Chats"
+                >
+                  <History className="w-4 h-4" />
+                </button>
+
                 {/* Close Button */}
                 <button 
                   onClick={() => setIsOpen(false)} 
@@ -1705,321 +1870,372 @@ export function SallyChat({ currentView }: { currentView?: string }) {
               </div>
             </div>
 
-            {/* Chat History Panel */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-5 custom-scrollbar">
-              {/* Initial State / Suggested Prompts Grid */}
-              {messages.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-6 text-center h-full">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-500/10 to-teal-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-4 animate-float">
-                    <Sparkles className="w-6 h-6" />
-                  </div>
-                  <h4 className="font-bold text-slate-200 text-sm mb-0.5 font-space">{getTimeGreeting()}!</h4>
-                  {commsContext ? (
-                    <>
-                      <p className="text-[10px] text-indigo-400 font-bold font-mono uppercase tracking-wider mb-1 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-pulse" />
-                        #{commsContext.channelName} Communication Copilot
-                      </p>
-                      <p className="text-xs text-slate-400 max-w-[260px] leading-relaxed mb-6">
-                        I am acting as your communication copilot for this channel. I can help summarize messages, extract action items, draft broadcasts, or optimize your message tone.
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-[10px] text-emerald-400/80 font-mono uppercase tracking-wider mb-1">Sally · {getInstitutionLabel(instType)}</p>
-                      <p className="text-xs text-slate-400 max-w-[260px] leading-relaxed mb-6">
-                        {copilotDescription}
-                      </p>
-                    </>
-                  )}
-                  
-                  {/* Suggested Prompts Cards Grid */}
-                  <div className="grid grid-cols-1 gap-2.5 w-full max-w-sm">
-                    {suggestedPrompts.map((item, idx) => (
-                      <motion.button
-                        key={idx}
-                        whileHover={{ scale: 1.02, x: 2 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => { setLastUserMessage(item.prompt); sendMessage({ text: item.prompt }); }}
-                        className="flex items-start text-left p-3 rounded-2xl bg-slate-900/35 border border-white/5 hover:border-slate-800 hover:bg-slate-900/60 transition-all group"
-                      >
-                        <div className={clsx(
-                          "p-2 rounded-xl border mr-3 flex-shrink-0",
-                          item.color === "emerald" && "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
-                          item.color === "indigo" && "bg-indigo-500/10 border-indigo-500/20 text-indigo-400",
-                          item.color === "amber" && "bg-amber-500/10 border-amber-500/20 text-amber-400",
-                          item.color === "violet" && "bg-violet-500/10 border-violet-500/20 text-violet-400"
-                        )}>
-                          <item.icon className="w-4 h-4" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-1">
-                            <p className="text-xs font-bold text-slate-200 truncate group-hover:text-white transition-colors">{item.label}</p>
-                            <ArrowUpRight className="w-3 h-3 text-slate-500 group-hover:text-slate-300 opacity-0 group-hover:opacity-100 transition-all" />
-                          </div>
-                          <p className="text-[10px] text-slate-400 truncate">{item.subtext}</p>
-                        </div>
-                      </motion.button>
-                    ))}
-                  </div>
+            {showHistoryList ? (
+              <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-950/20 backdrop-blur-md z-20 flex flex-col">
+                <div className="flex items-center justify-between border-b border-white/5 pb-3 flex-shrink-0">
+                  <h4 className="font-bold text-[10px] uppercase tracking-wider font-space text-slate-400">Saved Conversations</h4>
+                  <button
+                    onClick={startNewConversation}
+                    className="px-2.5 py-1.5 rounded-xl text-[9px] font-bold bg-indigo-600 hover:bg-indigo-500 transition-all text-white flex items-center gap-1 shadow-md shadow-indigo-500/20"
+                  >
+                    <Plus className="w-3 h-3" /> New Chat
+                  </button>
                 </div>
-              )}
+                
+                <div className="flex-1 space-y-2 overflow-y-auto custom-scrollbar pr-0.5">
+                  {conversations.length === 0 ? (
+                    <div className="text-center py-12 text-xs text-slate-500 italic">No saved chats.</div>
+                  ) : (
+                    conversations.map((conv) => (
+                      <div
+                        key={conv.id}
+                        onClick={() => loadConversation(conv.id)}
+                        className={clsx(
+                          "group flex items-center justify-between p-3 rounded-2xl border text-left cursor-pointer transition-all",
+                          conv.id === activeConversationId
+                            ? "bg-indigo-500/10 border-indigo-500/35 hover:bg-indigo-500/15"
+                            : "bg-slate-900/35 border-white/5 hover:border-slate-800 hover:bg-slate-900/60"
+                        )}
+                      >
+                        <div className="min-w-0 flex-1 pr-2">
+                          <p className="text-xs font-semibold text-slate-200 truncate group-hover:text-white transition-colors">
+                            {conv.title || 'New Conversation'}
+                          </p>
+                          <p className="text-[9px] text-slate-500 font-mono mt-0.5">
+                            {new Date(conv.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · {new Date(conv.updatedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                          </p>
+                        </div>
+                        <button
+                          onClick={(e) => deleteConversation(conv.id, e)}
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-white/5 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center flex-shrink-0"
+                          title="Delete Chat"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Chat History Panel */}
+                <div className="flex-1 overflow-y-auto p-4 space-y-5 custom-scrollbar">
+                  {/* Initial State / Suggested Prompts Grid */}
+                  {messages.length === 0 && (
+                    <div className="flex flex-col items-center justify-center py-6 text-center h-full">
+                      <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-500/10 to-teal-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-4 animate-float">
+                        <Sparkles className="w-6 h-6" />
+                      </div>
+                      <h4 className="font-bold text-slate-200 text-sm mb-0.5 font-space">{getTimeGreeting()}!</h4>
+                      {commsContext ? (
+                        <>
+                          <p className="text-[10px] text-indigo-400 font-bold font-mono uppercase tracking-wider mb-1 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 bg-indigo-400 rounded-full animate-pulse" />
+                            #{commsContext.channelName} Communication Copilot
+                          </p>
+                          <p className="text-xs text-slate-400 max-w-[260px] leading-relaxed mb-6">
+                            I am acting as your communication copilot for this channel. I can help summarize messages, extract action items, draft broadcasts, or optimize your message tone.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-[10px] text-emerald-400/80 font-mono uppercase tracking-wider mb-1">Sally · {getInstitutionLabel(instType)}</p>
+                          <p className="text-xs text-slate-400 max-w-[260px] leading-relaxed mb-6">
+                            {copilotDescription}
+                          </p>
+                        </>
+                      )}
+                      
+                      {/* Suggested Prompts Cards Grid */}
+                      <div className="grid grid-cols-1 gap-2.5 w-full max-w-sm">
+                        {suggestedPrompts.map((item, idx) => (
+                          <motion.button
+                            key={idx}
+                            whileHover={{ scale: 1.02, x: 2 }}
+                            whileTap={{ scale: 0.98 }}
+                            onClick={() => { setLastUserMessage(item.prompt); sendMessage({ text: item.prompt }); }}
+                            className="flex items-start text-left p-3 rounded-2xl bg-slate-900/35 border border-white/5 hover:border-slate-800 hover:bg-slate-900/60 transition-all group"
+                          >
+                            <div className={clsx(
+                              "p-2 rounded-xl border mr-3 flex-shrink-0",
+                              item.color === "emerald" && "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
+                              item.color === "indigo" && "bg-indigo-500/10 border-indigo-500/20 text-indigo-400",
+                              item.color === "amber" && "bg-amber-500/10 border-amber-500/20 text-amber-400",
+                              item.color === "violet" && "bg-violet-500/10 border-violet-500/20 text-violet-400"
+                            )}>
+                              <item.icon className="w-4 h-4" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1">
+                                <p className="text-xs font-bold text-slate-200 truncate group-hover:text-white transition-colors">{item.label}</p>
+                                <ArrowUpRight className="w-3 h-3 text-slate-500 group-hover:text-slate-300 opacity-0 group-hover:opacity-100 transition-all" />
+                              </div>
+                              <p className="text-[10px] text-slate-400 truncate">{item.subtext}</p>
+                            </div>
+                          </motion.button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
-              {/* Chat Message Bubble Rendering */}
-              {messages.map((m) => {
-                const isUser = m.role === 'user';
-                const messageText = getMessageText(m);
-                const toolInvocations = getToolInvocations(m);
-                const hasTools = toolInvocations.length > 0;
-                
-                // Skip rendering trigger messages used for initial welcome briefings
-                if (isUser && messageText.includes('[SYSTEM_INIT_')) {
-                  return null;
-                }
-                
-                return (
-                  <div key={m.id} className="space-y-3">
-                    {/* Render Text message content */}
-                    {messageText && (
-                      <div className={clsx("flex", isUser ? 'justify-end' : 'justify-start')}>
-                        {(m as any).isHistorical ? (
-                          <div className={clsx(
-                            "max-w-[85%] rounded-2xl p-3.5 text-xs md:text-sm shadow-md transition-all flex flex-col items-start gap-2",
-                            isUser 
-                              ? "bg-gradient-to-tr from-indigo-600 to-violet-600 text-white rounded-tr-none border border-white/10 shadow-indigo-500/5" 
-                              : "sally-glass-bubble text-slate-100 rounded-tl-none border-l-2 border-l-emerald-400"
-                          )}>
-                            <p className="leading-relaxed whitespace-pre-wrap">{messageText}</p>
-                            {!isUser && commsContext && (
-                              <button 
-                                onClick={() => handleInsertDraft(messageText)}
-                                className="mt-1 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold transition-all active:scale-95 hover:scale-105"
-                                title="Insert this draft into the chat input box"
+                  {/* Chat Message Bubble Rendering */}
+                  {messages.map((m) => {
+                    const isUser = m.role === 'user';
+                    const messageText = getMessageText(m);
+                    const toolInvocations = getToolInvocations(m);
+                    const hasTools = toolInvocations.length > 0;
+                    
+                    // Skip rendering trigger messages used for initial welcome briefings
+                    if (isUser && messageText.includes('[SYSTEM_INIT_')) {
+                      return null;
+                    }
+                    
+                    return (
+                      <div key={m.id} className="space-y-3">
+                        {/* Render Text message content */}
+                        {messageText && (
+                          <div className={clsx("flex", isUser ? 'justify-end' : 'justify-start')}>
+                            {(m as any).isHistorical ? (
+                              <div className={clsx(
+                                "max-w-[85%] rounded-2xl p-3.5 text-xs md:text-sm shadow-md transition-all flex flex-col items-start gap-2",
+                                isUser 
+                                  ? "bg-gradient-to-tr from-indigo-600 to-violet-600 text-white rounded-tr-none border border-white/10 shadow-indigo-500/5" 
+                                  : "sally-glass-bubble text-slate-100 rounded-tl-none border-l-2 border-l-emerald-400"
+                              )}>
+                                <p className="leading-relaxed whitespace-pre-wrap">{messageText}</p>
+                                {!isUser && commsContext && (
+                                  <button 
+                                    onClick={() => handleInsertDraft(messageText)}
+                                    className="mt-1 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold transition-all active:scale-95 hover:scale-105"
+                                    title="Insert this draft into the chat input box"
+                                  >
+                                    <ArrowUpRight className="w-3.5 h-3.5" />
+                                    Insert into Chat
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              <motion.div 
+                                initial={{ opacity: 0, y: 12, scale: 0.96 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                transition={{ type: 'spring', stiffness: 450, damping: 28 }}
+                                className={clsx(
+                                  "max-w-[85%] rounded-2xl p-3.5 text-xs md:text-sm shadow-md transition-all flex flex-col items-start gap-2",
+                                  isUser 
+                                    ? "bg-gradient-to-tr from-indigo-600 to-violet-600 text-white rounded-tr-none border border-white/10 shadow-indigo-500/5" 
+                                    : "sally-glass-bubble text-slate-100 rounded-tl-none border-l-2 border-l-emerald-400"
+                                )}
                               >
-                                <ArrowUpRight className="w-3.5 h-3.5" />
-                                Insert into Chat
-                              </button>
+                                <p className="leading-relaxed whitespace-pre-wrap">{messageText}</p>
+                                {!isUser && commsContext && (
+                                  <button 
+                                    onClick={() => handleInsertDraft(messageText)}
+                                    className="mt-1 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold transition-all active:scale-95 hover:scale-105"
+                                    title="Insert this draft into the chat input box"
+                                  >
+                                    <ArrowUpRight className="w-3.5 h-3.5" />
+                                    Insert into Chat
+                                  </button>
+                                )}
+                              </motion.div>
                             )}
                           </div>
-                        ) : (
-                          <motion.div 
-                            initial={{ opacity: 0, y: 12, scale: 0.96 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            transition={{ type: 'spring', stiffness: 450, damping: 28 }}
-                            className={clsx(
-                              "max-w-[85%] rounded-2xl p-3.5 text-xs md:text-sm shadow-md transition-all flex flex-col items-start gap-2",
-                              isUser 
-                                ? "bg-gradient-to-tr from-indigo-600 to-violet-600 text-white rounded-tr-none border border-white/10 shadow-indigo-500/5" 
-                                : "sally-glass-bubble text-slate-100 rounded-tl-none border-l-2 border-l-emerald-400"
-                            )}
-                          >
-                            <p className="leading-relaxed whitespace-pre-wrap">{messageText}</p>
-                            {!isUser && commsContext && (
-                              <button 
-                                onClick={() => handleInsertDraft(messageText)}
-                                className="mt-1 flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 text-[10px] font-bold transition-all active:scale-95 hover:scale-105"
-                                title="Insert this draft into the chat input box"
+                        )}
+                        
+                        {/* Render Interactive Tool Output Cards */}
+                        {hasTools && toolInvocations.map((toolInvocation: any) => {
+                          const { toolName, toolCallId, state, args, result, errorText } = toolInvocation;
+                          const isResultState = state === 'result' || state === 'output-available';
+                          const isErrorState = state === 'output-error' || state === 'error';
+                          const isLoadingState = state === 'call' || state === 'partial-call' || state === 'input-streaming' || state === 'input-available' || state === 'approval-requested';
+                          
+                          if (isResultState && result !== undefined) {
+                            return (m as any).isHistorical ? (
+                              <div key={toolCallId} className="flex flex-col items-start w-full gap-1">
+                                {isWriteTool(toolName) && (
+                                  <div className="flex items-center gap-1.5 ml-1">
+                                    <WriteActionBadge />
+                                  </div>
+                                )}
+                                {renderToolResult(toolName, result, args)}
+                              </div>
+                            ) : (
+                              <motion.div
+                                key={toolCallId}
+                                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                className="flex flex-col items-start w-full gap-1"
                               >
-                                <ArrowUpRight className="w-3.5 h-3.5" />
-                                Insert into Chat
-                              </button>
-                            )}
-                          </motion.div>
+                                {isWriteTool(toolName) && (
+                                  <div className="flex items-center gap-1.5 ml-1">
+                                    <WriteActionBadge />
+                                  </div>
+                                )}
+                                {renderToolResult(toolName, result, args)}
+                              </motion.div>
+                            );
+                          }
+
+                          if (isErrorState) {
+                            return (m as any).isHistorical ? (
+                              <div key={toolCallId} className="flex justify-start w-full">
+                                {renderToolResult(toolName, { error: errorText || 'Tool request failed' }, args)}
+                              </div>
+                            ) : (
+                              <motion.div
+                                key={toolCallId}
+                                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                className="flex justify-start w-full"
+                              >
+                                {renderToolResult(toolName, { error: errorText || 'Tool request failed' }, args)}
+                              </motion.div>
+                            );
+                          }
+                          
+                          // Show loading state for in-progress tool calls
+                          if (isLoadingState) {
+                            return (
+                              <motion.div 
+                                key={toolCallId}
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                className="flex justify-start w-full"
+                              >
+                                <div className="w-[85%] bg-slate-900/40 border border-white/5 rounded-2xl p-3 text-xs">
+                                  <div className="flex items-center gap-2 text-slate-400">
+                                    <Zap className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
+                                    <span>Querying {toolName.replace(/([A-Z])/g, ' $1').toLowerCase()}...</span>
+                                  </div>
+                                </div>
+                              </motion.div>
+                            );
+                          }
+
+                          return null;
+                        })}
+                      </div>
+                    );
+                  })}
+
+                  {/* Streaming/Thinking Loader Shimmer Card */}
+                  {isLoading && (
+                    <div className="flex justify-start">
+                      <div className="sally-glass-bubble rounded-2xl rounded-tl-none p-4 text-slate-300 text-xs w-[82%] space-y-3.5 border-l-2 border-l-indigo-500 shadow-lg">
+                        <div className="flex items-center gap-2">
+                          <div className="relative w-4 h-4 flex items-center justify-center">
+                            <Sparkles className="w-3.5 h-3.5 text-indigo-400 absolute animate-spin" style={{ animationDuration: '6s' }} />
+                            <Sparkles className="w-2.5 h-2.5 text-pink-400 absolute animate-pulse" />
+                          </div>
+                          <span className="font-semibold text-[10px] tracking-wide text-indigo-300/90 font-space uppercase">Thinking...</span>
+                        </div>
+
+                        {/* Gemini-Style pulsing gradient slider */}
+                        <div className="h-1 w-full rounded-full overflow-hidden relative bg-slate-900/60 border border-white/5 shadow-inner">
+                          <div className="absolute inset-0 gemini-thinking-bar rounded-full" />
+                        </div>
+
+                        {/* Three colored bouncing gradient dots with shadow glow */}
+                        <div className="flex items-center gap-2 px-1 py-1">
+                          <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-blue-400 to-indigo-500 animate-bounce shadow-[0_0_8px_rgba(99,102,241,0.6)]" style={{ animationDelay: '0s', animationDuration: '0.8s' }} />
+                          <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-violet-400 to-pink-500 animate-bounce shadow-[0_0_8px_rgba(139,92,246,0.6)]" style={{ animationDelay: '0.15s', animationDuration: '0.8s' }} />
+                          <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-pink-400 to-emerald-500 animate-bounce shadow-[0_0_8px_rgba(16,185,129,0.6)]" style={{ animationDelay: '0.3s', animationDuration: '0.8s' }} />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Error Banner with Retry */}
+                  {error && (
+                    <div className="flex justify-start">
+                      <div className="bg-red-950/30 border border-red-800/40 rounded-2xl rounded-tl-none p-3.5 text-red-300 text-xs space-y-2">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
+                          <span>{getSallyErrorMessage(error)}</span>
+                        </div>
+                        {lastUserMessage && (
+                          <button
+                            onClick={handleRetry}
+                            disabled={isLoading}
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 hover:bg-red-500/20 hover:text-red-200 transition-all text-[11px] font-medium disabled:opacity-50"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            Retry last message
+                          </button>
                         )}
                       </div>
-                    )}
-                    
-                    {/* Render Interactive Tool Output Cards */}
-                    {hasTools && toolInvocations.map((toolInvocation: any) => {
-                      const { toolName, toolCallId, state, args, result, errorText } = toolInvocation;
-                      const isResultState = state === 'result' || state === 'output-available';
-                      const isErrorState = state === 'output-error' || state === 'error';
-                      const isLoadingState = state === 'call' || state === 'partial-call' || state === 'input-streaming' || state === 'input-available' || state === 'approval-requested';
-                      
-                      if (isResultState && result !== undefined) {
-                        return (m as any).isHistorical ? (
-                          <div key={toolCallId} className="flex flex-col items-start w-full gap-1">
-                            {isWriteTool(toolName) && (
-                              <div className="flex items-center gap-1.5 ml-1">
-                                <WriteActionBadge />
-                              </div>
-                            )}
-                            {renderToolResult(toolName, result, args)}
-                          </div>
-                        ) : (
-                          <motion.div
-                            key={toolCallId}
-                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            className="flex flex-col items-start w-full gap-1"
-                          >
-                            {isWriteTool(toolName) && (
-                              <div className="flex items-center gap-1.5 ml-1">
-                                <WriteActionBadge />
-                              </div>
-                            )}
-                            {renderToolResult(toolName, result, args)}
-                          </motion.div>
-                        );
-                      }
-
-                      if (isErrorState) {
-                        return (m as any).isHistorical ? (
-                          <div key={toolCallId} className="flex justify-start w-full">
-                            {renderToolResult(toolName, { error: errorText || 'Tool request failed' }, args)}
-                          </div>
-                        ) : (
-                          <motion.div
-                            key={toolCallId}
-                            initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            className="flex justify-start w-full"
-                          >
-                            {renderToolResult(toolName, { error: errorText || 'Tool request failed' }, args)}
-                          </motion.div>
-                        );
-                      }
-                      
-                      // Show loading state for in-progress tool calls
-                      if (isLoadingState) {
-                        return (
-                          <motion.div 
-                            key={toolCallId}
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            className="flex justify-start w-full"
-                          >
-                            <div className="w-[85%] bg-slate-900/40 border border-white/5 rounded-2xl p-3 text-xs">
-                              <div className="flex items-center gap-2 text-slate-400">
-                                <Zap className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
-                                <span>Querying {toolName.replace(/([A-Z])/g, ' $1').toLowerCase()}...</span>
-                              </div>
-                            </div>
-                          </motion.div>
-                        );
-                      }
-
-                      return null;
-                    })}
-                  </div>
-                );
-              })}
-
-              {/* Streaming/Thinking Loader Shimmer Card */}
-              {isLoading && (
-                <div className="flex justify-start">
-                  <div className="sally-glass-bubble rounded-2xl rounded-tl-none p-4 text-slate-300 text-xs w-[82%] space-y-3.5 border-l-2 border-l-indigo-500 shadow-lg">
-                    <div className="flex items-center gap-2">
-                      <div className="relative w-4 h-4 flex items-center justify-center">
-                        <Sparkles className="w-3.5 h-3.5 text-indigo-400 absolute animate-spin" style={{ animationDuration: '6s' }} />
-                        <Sparkles className="w-2.5 h-2.5 text-pink-400 absolute animate-pulse" />
-                      </div>
-                      <span className="font-semibold text-[10px] tracking-wide text-indigo-300/90 font-space uppercase">Thinking...</span>
                     </div>
-
-                    {/* Gemini-Style pulsing gradient slider */}
-                    <div className="h-1 w-full rounded-full overflow-hidden relative bg-slate-900/60 border border-white/5 shadow-inner">
-                      <div className="absolute inset-0 gemini-thinking-bar rounded-full" />
-                    </div>
-
-                    {/* Three colored bouncing gradient dots with shadow glow */}
-                    <div className="flex items-center gap-2 px-1 py-1">
-                      <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-blue-400 to-indigo-500 animate-bounce shadow-[0_0_8px_rgba(99,102,241,0.6)]" style={{ animationDelay: '0s', animationDuration: '0.8s' }} />
-                      <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-violet-400 to-pink-500 animate-bounce shadow-[0_0_8px_rgba(139,92,246,0.6)]" style={{ animationDelay: '0.15s', animationDuration: '0.8s' }} />
-                      <div className="w-2.5 h-2.5 rounded-full bg-gradient-to-tr from-pink-400 to-emerald-500 animate-bounce shadow-[0_0_8px_rgba(16,185,129,0.6)]" style={{ animationDelay: '0.3s', animationDuration: '0.8s' }} />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Error Banner with Retry */}
-              {error && (
-                <div className="flex justify-start">
-                  <div className="bg-red-950/30 border border-red-800/40 rounded-2xl rounded-tl-none p-3.5 text-red-300 text-xs space-y-2">
-                    <div className="flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0" />
-                      <span>{getSallyErrorMessage(error)}</span>
-                    </div>
-                    {lastUserMessage && (
-                      <button
-                        onClick={handleRetry}
-                        disabled={isLoading}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-300 hover:bg-red-500/20 hover:text-red-200 transition-all text-[11px] font-medium disabled:opacity-50"
-                      >
-                        <RotateCcw className="w-3 h-3" />
-                        Retry last message
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-              <div ref={messageEndRef} />
-            </div>
-
-            {/* Floating Pill Input Box */}
-            <div className="p-4 bg-transparent flex-shrink-0 space-y-3 relative z-10">
-              {/* Particle Explosion Layer */}
-              <div className="absolute inset-x-0 bottom-16 flex items-center justify-center pointer-events-none overflow-visible">
-                <AnimatePresence>
-                  {particles.map((p) => (
-                    <motion.div
-                      key={p.id}
-                      initial={{ opacity: 1, scale: p.scale, x: 0, y: 0, rotate: 0 }}
-                      animate={{ opacity: 0, scale: 0, x: p.x, y: p.y, rotate: p.rotation }}
-                      exit={{ opacity: 0 }}
-                      transition={{ duration: 0.8, ease: "easeOut" }}
-                      className="absolute w-1.5 h-1.5 rounded-full"
-                      style={{ backgroundColor: p.color, boxShadow: `0 0 8px ${p.color}` }}
-                    />
-                  ))}
-                </AnimatePresence>
-              </div>
-
-              {/* Proactive suggestion chips */}
-              <div className="flex gap-1.5 overflow-x-auto pb-1 px-0.5 scrollbar-hide no-scrollbar -mx-2 max-w-[calc(100%+16px)]">
-                {getProactiveChips().map((chip, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => handleChipClick(chip.prompt)}
-                    className="flex-shrink-0 px-2.5 py-1 rounded-full text-[9px] font-semibold border sally-glass-bubble hover:bg-white/10 text-slate-300 hover:text-white border-white/5 hover:border-white/10 transition-all cursor-pointer shadow-sm uppercase tracking-wider font-space"
-                  >
-                    {chip.label}
-                  </button>
-                ))}
-              </div>
-              <form onSubmit={handleSubmit} className="relative flex items-center bg-slate-950/60 border border-white/10 focus-within:border-indigo-500/50 rounded-2xl p-1 transition-all shadow-xl backdrop-blur-md">
-                <input
-                  value={input}
-                  onChange={handleInputChange}
-                  placeholder="Ask Sally..."
-                  className="flex-1 bg-transparent text-white rounded-xl px-3 py-2 text-xs md:text-sm outline-none placeholder:text-slate-500 font-sans"
-                />
-                
-                {/* Voice Input Button */}
-                <button
-                  type="button"
-                  onClick={startListening}
-                  className={clsx(
-                    "p-2 mr-1 rounded-xl transition-all flex items-center justify-center border",
-                    isListening 
-                      ? "bg-red-500/20 border-red-500/40 text-red-400 animate-pulse" 
-                      : "text-slate-400 hover:text-white border-transparent hover:bg-slate-800"
                   )}
-                  title={isListening ? "Listening... Click to stop" : "Voice input (Hands-free)"}
-                >
-                  {isListening ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
-                </button>
+                  <div ref={messageEndRef} />
+                </div>
 
-                <button
-                  type="submit"
-                  disabled={isLoading || !input.trim()}
-                  className="p-2 rounded-xl bg-gradient-to-tr from-indigo-500 via-violet-600 to-purple-600 disabled:from-slate-900/80 disabled:to-slate-900/80 text-white disabled:text-slate-600 hover:scale-[1.03] active:scale-[0.97] transition-all flex items-center justify-center shadow-lg border border-white/10 disabled:border-transparent"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                </button>
-              </form>
-            </div>
+                {/* Floating Pill Input Box */}
+                <div className="p-4 bg-transparent flex-shrink-0 space-y-3 relative z-10">
+                  {/* Particle Explosion Layer */}
+                  <div className="absolute inset-x-0 bottom-16 flex items-center justify-center pointer-events-none overflow-visible">
+                    <AnimatePresence>
+                      {particles.map((p) => (
+                        <motion.div
+                          key={p.id}
+                          initial={{ opacity: 1, scale: p.scale, x: 0, y: 0, rotate: 0 }}
+                          animate={{ opacity: 0, scale: 0, x: p.x, y: p.y, rotate: p.rotation }}
+                          exit={{ opacity: 0 }}
+                          transition={{ duration: 0.8, ease: "easeOut" }}
+                          className="absolute w-1.5 h-1.5 rounded-full"
+                          style={{ backgroundColor: p.color, boxShadow: `0 0 8px ${p.color}` }}
+                        />
+                      ))}
+                    </AnimatePresence>
+                  </div>
+
+                  {/* Proactive suggestion chips */}
+                  <div className="flex gap-1.5 overflow-x-auto pb-1 px-0.5 scrollbar-hide no-scrollbar -mx-2 max-w-[calc(100%+16px)]">
+                    {getProactiveChips().map((chip, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => handleChipClick(chip.prompt)}
+                        className="flex-shrink-0 px-2.5 py-1 rounded-full text-[9px] font-semibold border sally-glass-bubble hover:bg-white/10 text-slate-300 hover:text-white border-white/5 hover:border-white/10 transition-all cursor-pointer shadow-sm uppercase tracking-wider font-space"
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                  </div>
+                  <form onSubmit={handleSubmit} className="relative flex items-center bg-slate-950/60 border border-white/10 focus-within:border-indigo-500/50 rounded-2xl p-1 transition-all shadow-xl backdrop-blur-md">
+                    <input
+                      value={input}
+                      onChange={handleInputChange}
+                      placeholder="Ask Sally..."
+                      className="flex-1 bg-transparent text-white rounded-xl px-3 py-2 text-xs md:text-sm outline-none placeholder:text-slate-500 font-sans"
+                    />
+                    
+                    {/* Voice Input Button */}
+                    <button
+                      type="button"
+                      onClick={startListening}
+                      className={clsx(
+                        "p-2 mr-1 rounded-xl transition-all flex items-center justify-center border",
+                        isListening 
+                          ? "bg-red-500/20 border-red-500/40 text-red-400 animate-pulse" 
+                          : "text-slate-400 hover:text-white border-transparent hover:bg-slate-800"
+                      )}
+                      title={isListening ? "Listening... Click to stop" : "Voice input (Hands-free)"}
+                    >
+                      {isListening ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+                    </button>
+
+                    <button
+                      type="submit"
+                      disabled={isLoading || !input.trim()}
+                      className="p-2 rounded-xl bg-gradient-to-tr from-indigo-500 via-violet-600 to-purple-600 disabled:from-slate-900/80 disabled:to-slate-900/80 text-white disabled:text-slate-600 hover:scale-[1.03] active:scale-[0.97] transition-all flex items-center justify-center shadow-lg border border-white/10 disabled:border-transparent"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                    </button>
+                  </form>
+                </div>
+              </>
+            )}
           </motion.div>
         </>
       )}

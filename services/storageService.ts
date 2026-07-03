@@ -159,6 +159,7 @@ export const formatScheduleSlot = (dbSlot: any): ScheduleSlot => ({
   subject: dbSlot.subject || (dbSlot.type === 'ict' ? 'ICT' : 'Solar'),
   studentGroup: dbSlot.student_group || 'Academy',
   status: dbSlot.status || 'Pending',
+  resourceIds: dbSlot.resource_ids || [],
   // Pass through extended DB properties the UI may need
   ...(dbSlot.title && { title: dbSlot.title }),
   ...(dbSlot.location && { location: dbSlot.location }),
@@ -272,6 +273,7 @@ export const addScheduleSlot = async (slot: Omit<ScheduleSlot, 'id'> & { title?:
     student_group: slot.studentGroup || 'Academy',
     duration_minutes: slot.durationMinutes || 60,
     status: slot.status || 'Pending',
+    resource_ids: slot.resourceIds || []
   });
   return !error;
 };
@@ -296,6 +298,7 @@ export const updateScheduleSlot = async (slot: ScheduleSlot & { title?: string, 
     student_group: slot.studentGroup || 'Academy',
     duration_minutes: slot.durationMinutes || 60,
     status: slot.status || 'Pending',
+    resource_ids: slot.resourceIds || [],
     updated_at: new Date().toISOString()
   }).eq('id', slot.id);
   return !error;
