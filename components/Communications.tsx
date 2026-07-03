@@ -296,9 +296,9 @@ const MessageGroupRenderer = React.memo(({
             </div>
             <div className={clsx("flex-1 min-w-0 flex flex-col", first.senderId === userId ? "items-end" : "items-start")}>
                 <div className={clsx("flex items-baseline gap-2 mb-1", first.senderId === userId && "flex-row-reverse")}>
-                    <span className="font-bold text-xs font-google" style={{ color: 'var(--md-sys-color-on-surface)' }}>{first.senderName}</span>
-                    {first.senderRole === 'admin' && <span className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded font-bold uppercase" style={{ background: 'var(--md-sys-color-primary-container)', color: 'var(--md-sys-color-primary)' }}><ShieldAlert size={9} /> Admin</span>}
-                    <span className="text-[10px] font-medium" style={{ color: 'var(--md-sys-color-secondary)' }}>
+                    <span className="font-bold text-xs font-google text-slate-800 dark:text-slate-100">{first.senderName}</span>
+                    {first.senderRole === 'admin' && <span className="flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded font-black uppercase bg-indigo-500/10 text-indigo-600 dark:bg-indigo-400/20 dark:text-indigo-300"><ShieldAlert size={9} /> Admin</span>}
+                    <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
                         {new Date(first.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                 </div>
@@ -312,61 +312,32 @@ const MessageGroupRenderer = React.memo(({
                             let baseClass = "";
                             let inlineStyle: React.CSSProperties = {};
 
-                            if (chatWallpaper === 'mesh') {
-                                if (!isMyMsg) {
-                                    baseClass = `rounded-r-2xl text-slate-800 dark:text-slate-200 ${isFirst ? 'rounded-tl-2xl' : 'rounded-tl-md'} ${isLast ? 'rounded-bl-2xl' : 'rounded-bl-md'} border border-slate-200/40 dark:border-white/5 backdrop-blur-md shadow-sm`;
-                                    inlineStyle = { background: 'rgba(255, 255, 255, 0.04)' };
-                                } else {
-                                    const cornerClasses = `${isFirst ? 'rounded-tr-2xl' : 'rounded-tr-md'} ${isLast ? 'rounded-br-2xl' : 'rounded-br-md'} rounded-l-2xl backdrop-blur-md shadow-sm`;
-                                    switch (chatBubbleTheme) {
-                                        case 'lavender':
-                                            baseClass = `${cornerClasses} bg-indigo-500/10 dark:bg-indigo-500/15 border border-indigo-500/25 text-indigo-900 dark:text-indigo-200`;
-                                            break;
-                                        case 'rose':
-                                            baseClass = `${cornerClasses} bg-rose-500/10 dark:bg-rose-500/15 border border-rose-500/25 text-rose-900 dark:text-rose-200`;
-                                            break;
-                                        case 'ocean':
-                                            baseClass = `${cornerClasses} bg-sky-500/10 dark:bg-sky-500/15 border border-sky-500/25 text-sky-900 dark:text-sky-200`;
-                                            break;
-                                        case 'emerald':
-                                            baseClass = `${cornerClasses} bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/25 text-emerald-900 dark:text-emerald-200`;
-                                            break;
-                                        case 'amethyst':
-                                            baseClass = `${cornerClasses} bg-purple-500/10 dark:bg-purple-500/15 border border-purple-500/25 text-purple-900 dark:text-purple-200`;
-                                            break;
-                                        case 'default':
-                                        default:
-                                            baseClass = `${cornerClasses} bg-[var(--md-sys-color-primary)]/10 dark:bg-[var(--md-sys-color-primary)]/15 border border-[var(--md-sys-color-primary)]/25 text-[var(--md-sys-color-on-primary-container)] dark:text-indigo-200`;
-                                            break;
-                                    }
-                                }
+                            if (!isMyMsg) {
+                                // Frosted glass layout for incoming messages to ensure perfect contrast and legibility
+                                baseClass = `rounded-r-2xl text-slate-800 dark:text-slate-100 bg-white/90 dark:bg-slate-900/75 border border-slate-200/60 dark:border-white/[0.06] backdrop-blur-md shadow-[0_2px_8px_rgba(0,0,0,0.04)] ${isFirst ? 'rounded-tl-2xl' : 'rounded-tl-md'} ${isLast ? 'rounded-bl-2xl' : 'rounded-bl-md'}`;
                             } else {
-                                if (!isMyMsg) {
-                                    baseClass = `rounded-r-2xl text-[var(--md-sys-color-on-surface)] ${isFirst ? 'rounded-tl-2xl' : 'rounded-tl-md'} ${isLast ? 'rounded-bl-2xl' : 'rounded-bl-md'} border border-white/[0.04] backdrop-blur-md shadow-sm`;
-                                    inlineStyle = { background: 'rgba(255, 255, 255, 0.03)' };
-                                } else {
-                                    const cornerClasses = `${isFirst ? 'rounded-tr-2xl' : 'rounded-tr-md'} ${isLast ? 'rounded-br-2xl' : 'rounded-br-md'} rounded-l-2xl border border-white/10`;
-                                    switch (chatBubbleTheme) {
-                                        case 'lavender':
-                                            baseClass = `bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 text-white shadow-[0_3px_12px_rgba(99,102,241,0.25)] ${cornerClasses}`;
-                                            break;
-                                        case 'rose':
-                                            baseClass = `bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 text-white shadow-[0_3px_12px_rgba(244,63,94,0.25)] ${cornerClasses}`;
-                                            break;
-                                        case 'ocean':
-                                            baseClass = `bg-gradient-to-tr from-sky-600 via-sky-500 to-cyan-500 text-white shadow-[0_3px_12px_rgba(14,165,233,0.25)] ${cornerClasses}`;
-                                            break;
-                                        case 'emerald':
-                                            baseClass = `bg-gradient-to-tr from-emerald-600 via-emerald-500 to-teal-500 text-white shadow-[0_3px_12px_rgba(16,185,129,0.25)] ${cornerClasses}`;
-                                            break;
-                                        case 'amethyst':
-                                            baseClass = `bg-gradient-to-tr from-purple-600 via-purple-500 to-fuchsia-500 text-white shadow-[0_3px_12px_rgba(168,85,247,0.25)] ${cornerClasses}`;
-                                            break;
-                                        case 'default':
-                                        default:
-                                            baseClass = `bg-gradient-to-tr from-[var(--md-sys-color-primary)] to-indigo-600/90 text-white shadow-[0_3px_12px_rgba(99,102,241,0.2)] ${cornerClasses}`;
-                                            break;
-                                    }
+                                // High-contrast gradient layout for own outgoing messages
+                                const cornerClasses = `${isFirst ? 'rounded-tr-2xl' : 'rounded-tr-md'} ${isLast ? 'rounded-br-2xl' : 'rounded-br-md'} rounded-l-2xl border border-white/10`;
+                                switch (chatBubbleTheme) {
+                                    case 'lavender':
+                                        baseClass = `bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 text-white shadow-[0_3px_12px_rgba(99,102,241,0.25)] ${cornerClasses}`;
+                                        break;
+                                    case 'rose':
+                                        baseClass = `bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 text-white shadow-[0_3px_12px_rgba(244,63,94,0.25)] ${cornerClasses}`;
+                                        break;
+                                    case 'ocean':
+                                        baseClass = `bg-gradient-to-tr from-sky-600 via-sky-500 to-cyan-500 text-white shadow-[0_3px_12px_rgba(14,165,233,0.25)] ${cornerClasses}`;
+                                        break;
+                                    case 'emerald':
+                                        baseClass = `bg-gradient-to-tr from-emerald-600 via-emerald-500 to-teal-500 text-white shadow-[0_3px_12px_rgba(16,185,129,0.25)] ${cornerClasses}`;
+                                        break;
+                                    case 'amethyst':
+                                        baseClass = `bg-gradient-to-tr from-purple-600 via-purple-500 to-fuchsia-500 text-white shadow-[0_3px_12px_rgba(168,85,247,0.25)] ${cornerClasses}`;
+                                        break;
+                                    case 'default':
+                                    default:
+                                        baseClass = `bg-gradient-to-tr from-[var(--md-sys-color-primary)] to-indigo-600/90 text-white shadow-[0_3px_12px_rgba(99,102,241,0.2)] ${cornerClasses}`;
+                                        break;
                                 }
                             }
                             return { className: baseClass, style: inlineStyle };
@@ -989,7 +960,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                 };
             case 'mesh':
                 return {
-                    background: 'linear-gradient(135deg, #1e1b4b 0%, #020617 100%)',
+                    background: 'transparent',
                 };
             case 'default':
             default:
@@ -1726,9 +1697,9 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
         <div 
             className={clsx(
                 "flex h-full w-full glass-panel overflow-hidden animate-fade-in relative transition-all duration-500",
-                chatWallpaper === 'mesh' && "bg-transparent! border-white/10 dark:border-white/5 backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.15)]"
+                chatWallpaper === 'mesh' && "border-white/10 dark:border-white/5 backdrop-blur-2xl shadow-[0_8px_32px_rgba(0,0,0,0.15)]"
             )}
-            style={chatWallpaper !== 'mesh' ? getWallpaperStyle() : undefined}
+            style={getWallpaperStyle()}
         >
             {chatWallpaper === 'mesh' && (
                 <MeshBackground className="absolute inset-0 z-0" />
@@ -1797,8 +1768,8 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                         </AnimatePresence>
                         {/* Header */}
                         <div className={clsx(
-                            "h-14 px-4 flex items-center justify-between flex-shrink-0 z-10 sidebar-glass backdrop-blur-xl border-b border-slate-200 dark:border-white/[0.05] transition-colors duration-300",
-                            chatWallpaper === 'mesh' ? "bg-white/10 dark:bg-slate-950/10" : "bg-white/80 dark:bg-slate-950/20"
+                            "h-14 px-4 flex items-center justify-between flex-shrink-0 z-10 backdrop-blur-xl border-b border-slate-200/50 dark:border-white/[0.05] transition-all duration-300",
+                            chatWallpaper === 'mesh' ? "bg-white/30 dark:bg-slate-950/20" : "bg-white/80 dark:bg-slate-950/40"
                         )}>
                             <div className="flex items-center gap-2">
                                 {/* Mobile back button (returns to channel list view) */}
@@ -2089,9 +2060,9 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                 </div>
                             ) : (
                                 <div className={clsx(
-                                    "px-3 pb-safe-bottom pt-3 md:px-5 md:pb-5 transition-all duration-300",
-                                    chatWallpaper === 'mesh' ? "bg-white/5 dark:bg-slate-950/5 backdrop-blur-md border-t border-white/10 dark:border-white/5" : "border-t border-slate-200 dark:border-white/[0.05]"
-                                )} style={chatWallpaper === 'mesh' ? { paddingBottom: 'max(12px, env(safe-area-inset-bottom, 12px))' } : { background: 'var(--md-sys-color-surface)', paddingBottom: 'max(12px, env(safe-area-inset-bottom, 12px))' }}>
+                                    "px-3 pb-safe-bottom pt-3 md:px-5 md:pb-5 transition-all duration-300 border-t border-slate-200/50 dark:border-white/[0.05] backdrop-blur-xl z-20 relative",
+                                    chatWallpaper === 'mesh' ? "bg-white/30 dark:bg-slate-950/20" : "bg-white/80 dark:bg-slate-950/40"
+                                )} style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom, 12px))' }}>
                                 <AnimatePresence>
                                     {replyToMsg && (
                                         <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden max-w-4xl mx-auto">
@@ -2234,14 +2205,10 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                     </AnimatePresence>
 
                                      <div className={clsx(
-                                         "flex items-end rounded-[24px] transition-all duration-300 p-2 gap-2 backdrop-blur-xl border shadow-[0_4px_30px_rgba(0,0,0,0.04)]", 
-                                         chatWallpaper === 'mesh'
-                                             ? (isInputFocused || isRecording 
-                                                 ? "bg-white/15 dark:bg-slate-950/30 border-white/30 dark:border-white/20 shadow-[0_4px_32px_rgba(255,255,255,0.05)] scale-[1.005]" 
-                                                 : "bg-white/5 dark:bg-slate-950/10 border-white/10 dark:border-white/5 hover:bg-white/10 dark:hover:bg-slate-950/20")
-                                             : (isInputFocused || isRecording 
-                                                 ? "shadow-[0_4px_32px_rgba(99,102,241,0.12)] bg-white dark:bg-slate-900/70 scale-[1.005] border-indigo-500/30" 
-                                                 : "bg-slate-100/40 dark:bg-slate-900/25 border-slate-200 dark:border-white/[0.06] hover:bg-slate-200/50 dark:hover:bg-slate-900/40")
+                                         "flex items-end rounded-[24px] transition-all duration-300 p-2 gap-2 backdrop-blur-xl border", 
+                                         isInputFocused || isRecording 
+                                             ? "bg-white/90 dark:bg-slate-900/70 border-indigo-500/40 dark:border-indigo-400/40 shadow-[0_4px_24px_rgba(99,102,241,0.12)] scale-[1.005]" 
+                                             : "bg-white/60 dark:bg-slate-900/30 border-slate-200/80 dark:border-white/[0.06] hover:bg-white/80 dark:hover:bg-slate-900/50 shadow-[0_2px_10px_rgba(0,0,0,0.02)]"
                                      )}>
                                          <div className="flex items-center gap-1">
                                              {/* Mobile: '+' opens the attach sheet */}
