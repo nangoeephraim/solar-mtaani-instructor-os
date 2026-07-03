@@ -22,6 +22,7 @@ import { fetchAvatarMap, fetchActiveUsers, ProfileData } from '../services/profi
 import { createTypingChannel, broadcastTyping, TypingEvent } from '../services/realtimeService';
 import { playSendSound, playReceiveSound } from '../utils/audioUtils';
 import { supabase } from '../services/supabase';
+import { getAuthHeaders } from '../services/authHeaders';
 
 const Meetings = lazy(() => import('./Meetings'));
 
@@ -270,6 +271,8 @@ const MessageGroupRenderer = React.memo(({
     chatFontSize,
     triggerHaptics,
     chatBubbleTheme,
+    messageAiAssists,
+    onDismissAiAssist,
 }: any) => {
     const first = group[0];
 
@@ -389,6 +392,32 @@ const MessageGroupRenderer = React.memo(({
                                         {msg.editedAt && <span className="text-[10px] ml-1 italic opacity-70">(edited)</span>}
                                         {msg.isPinned && <Pin size={10} className="inline ml-1" style={{ color: 'var(--google-yellow)' }} />}
                                     </div>
+                                    {messageAiAssists?.[msg.id] && (
+                                        <div className="mt-2.5 p-2.5 rounded-xl border flex flex-col gap-1 text-[11px] backdrop-blur-md bg-indigo-500/5 dark:bg-indigo-500/10 border-indigo-500/25 text-slate-800 dark:text-indigo-200 shadow-sm animate-fade-in max-w-full">
+                                            <div className="flex items-center gap-1 font-bold text-indigo-600 dark:text-indigo-400">
+                                                <Sparkles className="w-3 h-3 animate-pulse" />
+                                                {messageAiAssists[msg.id].loading ? "Thinking..." : "AI Assist Result:"}
+                                                {!messageAiAssists[msg.id].loading && (
+                                                    <button 
+                                                        onClick={(e) => { e.stopPropagation(); onDismissAiAssist?.(msg.id); }} 
+                                                        className="ml-auto p-0.5 rounded hover:bg-white/10 text-slate-400 hover:text-slate-200 transition-colors"
+                                                        title="Dismiss"
+                                                    >
+                                                        <X className="w-3 h-3" />
+                                                    </button>
+                                                )}
+                                            </div>
+                                            {messageAiAssists[msg.id].loading ? (
+                                                <div className="flex items-center gap-1.5 py-1 text-slate-400 dark:text-slate-500 italic">
+                                                    <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                                                    <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                                                    <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                                                </div>
+                                            ) : (
+                                                <p className="whitespace-pre-wrap leading-relaxed select-text">{messageAiAssists[msg.id].text}</p>
+                                            )}
+                                        </div>
+                                    )}
                                     {/* Render Attachments — only for non-deleted messages */}
                                     {msg.attachments && msg.attachments.length > 0 && (
                                         <div className="mt-2 flex flex-col gap-2">
@@ -537,6 +566,156 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
     const [showSearch, setShowSearch] = useState(false);
     const [editingMsgId, setEditingMsgId] = useState<string | null>(null);
     const [editContent, setEditContent] = useState('');
+
+    const [messageAiAssists, setMessageAiAssists] = useState<Record<string, { text: string; loading: boolean }>>({});
+    const [aiAssistLoading, setAiAssistLoading] = useState(false);
+    const [showAiInputMenu, setShowAiInputMenu] = useState(false);
+    const [inlineChatSummary, setInlineChatSummary] = useState<string | null>(null);
+    const [inlineChatSummaryLoading, setInlineChatSummaryLoading] = useState(false);
+
+    // Helper to run streaming completions from Vercel AI SDK on the client
+    const runAICompletion = async (prompt: string, onChunk: (text: string) => void) => {
+        const authHeaders = await getAuthHeaders();
+        const response = await fetch('/api/ai/chat', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...authHeaders
+            },
+            body: JSON.stringify({
+                messages: [{ id: '1', role: 'user', content: prompt }],
+                institutionType: 'tvet'
+            })
+        });
+        if (!response.ok) {
+            throw new Error('AI Assist completion failed');
+        }
+        const reader = response.body?.getReader();
+        if (!reader) {
+            throw new Error('Reader is not supported');
+        }
+        const decoder = new TextDecoder();
+        let currentText = '';
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n');
+            for (const line of lines) {
+                if (line.startsWith('0:')) {
+                    try {
+                        const content = JSON.parse(line.substring(2));
+                        currentText += content;
+                        onChunk(currentText);
+                    } catch {}
+                }
+            }
+        }
+        return currentText;
+    };
+
+    // Correct phrase syntax, improve tone, or translate typed user text
+    const handleRephraseInput = async (mode: 'grammar' | 'tone' | 'translate-sw' | 'translate-en') => {
+        if (!messageInput.trim()) return;
+        setAiAssistLoading(true);
+        setShowAiInputMenu(false);
+        try {
+            let prompt = '';
+            if (mode === 'grammar') {
+                prompt = `Correct the grammar, spelling, and phrasing syntax of the following message to make it clear and correct. Return ONLY the corrected message text without quotes or explanations:\n\n${messageInput}`;
+            } else if (mode === 'tone') {
+                prompt = `Improve the professional tone of the following message to make it warm, polite, and encouraging. Return ONLY the rephrased message text without quotes or explanations:\n\n${messageInput}`;
+            } else if (mode === 'translate-sw') {
+                prompt = `Translate the following message to standard Swahili (Kiswahili). Return ONLY the Swahili translation without quotes or explanations:\n\n${messageInput}`;
+            } else if (mode === 'translate-en') {
+                prompt = `Translate the following message to clear English. Return ONLY the English translation without quotes or explanations:\n\n${messageInput}`;
+            }
+
+            let resultText = '';
+            await runAICompletion(prompt, (text) => {
+                resultText = text;
+            });
+            if (resultText) {
+                setMessageInput(resultText.trim());
+                showToast("Updated by AI Assist", "success");
+            }
+        } catch (err) {
+            showToast("Failed to rephrase statement", "error");
+        } finally {
+            setAiAssistLoading(false);
+        }
+    };
+
+    // Summarize active channel's last 20 messages inline
+    const handleSummarizeChannelInline = async () => {
+        setInlineChatSummaryLoading(true);
+        setShowAiInputMenu(false);
+        setInlineChatSummary("Generating summary...");
+        try {
+            const lastMsgs = allActiveMessages.slice(-20);
+            const chatTranscript = lastMsgs.map(m => `[${m.senderName} (${m.senderRole})]: ${m.content}`).join('\n');
+            const prompt = `Summarize the following recent messages from #${activeChannel?.name || 'this channel'} and highlight any decisions, main topics, and clear action items in a short, bulleted overview:\n\n${chatTranscript}`;
+            
+            let resultText = '';
+            await runAICompletion(prompt, (text) => {
+                resultText = text;
+                setInlineChatSummary(text);
+            });
+        } catch (err) {
+            showToast("Failed to summarize channel", "error");
+            setInlineChatSummary(null);
+        } finally {
+            setInlineChatSummaryLoading(false);
+        }
+    };
+
+    // Assist with specific message bubble (summarize, translate, explain)
+    const handleMessageBubbleAssist = async (msgId: string, msgContent: string, action: 'summarize' | 'translate-sw' | 'translate-en' | 'explain') => {
+        setMessageAiAssists(prev => ({
+            ...prev,
+            [msgId]: { text: '', loading: true }
+        }));
+        try {
+            let prompt = '';
+            if (action === 'summarize') {
+                prompt = `Summarize the following message briefly, highlighting the core points and what the user needs to know:\n\n${msgContent}`;
+            } else if (action === 'translate-sw') {
+                prompt = `Translate the following message to standard Swahili (Kiswahili):\n\n${msgContent}`;
+            } else if (action === 'translate-en') {
+                prompt = `Translate the following message to standard English:\n\n${msgContent}`;
+            } else if (action === 'explain') {
+                prompt = `Explain the following message's context, and clarify any complex or technical terms used in simple words:\n\n${msgContent}`;
+            }
+
+            let resultText = '';
+            await runAICompletion(prompt, (text) => {
+                resultText = text;
+                setMessageAiAssists(prev => ({
+                    ...prev,
+                    [msgId]: { text, loading: true }
+                }));
+            });
+            setMessageAiAssists(prev => ({
+                ...prev,
+                [msgId]: { text: resultText, loading: false }
+            }));
+        } catch (err) {
+            showToast("AI Assist action failed", "error");
+            setMessageAiAssists(prev => {
+                const next = { ...prev };
+                delete next[msgId];
+                return next;
+            });
+        }
+    };
+
+    const handleDismissAiAssist = (msgId: string) => {
+        setMessageAiAssists(prev => {
+            const next = { ...prev };
+            delete next[msgId];
+            return next;
+        });
+    };
 
     // ─── Join a meeting by switching to video tab and setting the code ───
     // This is the single entry point for ALL internal join actions.
@@ -1459,6 +1638,18 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                 "hidden md:flex opacity-0 md:group-hover/msg:opacity-100")} style={{ boxShadow: 'var(--shadow-elevation-2)' }}>
                 <button onClick={() => { setReplyToMsg(msg); textareaRef.current?.focus(); }} className="p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors" style={{ color: 'var(--md-sys-color-secondary)' }} title="Reply"><Reply size={14} /></button>
                 <button onClick={() => setShowEmojiPicker(showEmojiPicker === msg.id ? null : msg.id)} className="p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors" style={{ color: 'var(--md-sys-color-secondary)' }} title="React"><Smile size={14} /></button>
+                
+                {/* Inline AI Chat Assist Submenu */}
+                <div className="relative group/ai z-30">
+                    <button className="p-1.5 rounded-lg hover:bg-indigo-500/10 text-indigo-400 transition-colors" title="AI Chat Assist"><Sparkles size={14} /></button>
+                    <div className="absolute right-0 top-full mt-1 hidden group-hover/ai:flex flex-col rounded-xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 shadow-xl overflow-hidden min-w-[140px]">
+                        <button type="button" onClick={() => handleMessageBubbleAssist(msg.id, msg.content, 'summarize')} className="w-full text-left px-3 py-1.5 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors font-medium">Summarize</button>
+                        <button type="button" onClick={() => handleMessageBubbleAssist(msg.id, msg.content, 'explain')} className="w-full text-left px-3 py-1.5 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors font-medium">Explain Terms</button>
+                        <button type="button" onClick={() => handleMessageBubbleAssist(msg.id, msg.content, 'translate-sw')} className="w-full text-left px-3 py-1.5 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors font-medium">Translate (Swahili)</button>
+                        <button type="button" onClick={() => handleMessageBubbleAssist(msg.id, msg.content, 'translate-en')} className="w-full text-left px-3 py-1.5 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 transition-colors font-medium">Translate (English)</button>
+                    </div>
+                </div>
+
                 {showNudge && <button onClick={() => handleStartDM(msg.senderId)} className="p-1.5 rounded-lg hover:bg-[var(--md-sys-color-primary-container)] transition-colors" style={{ color: 'var(--md-sys-color-primary)' }} title={`DM ${msg.senderName}`}><UserPlus size={14} /></button>}
                 {(isOwn || isAdm) && <button onClick={() => handlePin(activeChannelId, msg.id)} className="p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors" style={{ color: msg.isPinned ? 'var(--google-yellow)' : 'var(--md-sys-color-secondary)' }} title="Pin"><Pin size={14} /></button>}
                 {isOwn && <button onClick={() => { setEditingMsgId(msg.id); setEditContent(msg.content); }} className="p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)] transition-colors" style={{ color: 'var(--md-sys-color-secondary)' }} title="Edit"><Pencil size={14} /></button>}
@@ -1608,6 +1799,36 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                         </AnimatePresence>
 
                         <div className="flex flex-1 overflow-hidden relative transition-all duration-500" style={getWallpaperStyle()}>
+                            {inlineChatSummary && (
+                                <motion.div 
+                                    initial={{ opacity: 0, y: -20 }} 
+                                    animate={{ opacity: 1, y: 0 }} 
+                                    exit={{ opacity: 0, y: -20 }}
+                                    className="absolute top-0 left-0 right-0 z-30 p-4 border-b border-indigo-500/20 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md shadow-lg flex flex-col gap-2 max-h-60 overflow-y-auto"
+                                >
+                                    <div className="flex items-center gap-1.5 font-bold text-xs text-indigo-600 dark:text-indigo-400">
+                                        <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+                                        <span>Recent Chat Summary ({activeChannel?.name ? `#${activeChannel.name}` : 'Direct Message'})</span>
+                                        <button 
+                                            onClick={() => setInlineChatSummary(null)} 
+                                            className="ml-auto p-1 rounded-xl hover:bg-slate-100 dark:hover:bg-white/5 text-slate-400 hover:text-slate-200 transition-colors"
+                                            title="Close Summary"
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                    {inlineChatSummaryLoading ? (
+                                        <div className="flex items-center gap-2 text-xs text-slate-400 italic">
+                                            <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                                            <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                                            <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                                            Analyzing chat history and composing summary...
+                                        </div>
+                                    ) : (
+                                        <p className="text-xs leading-relaxed text-slate-700 dark:text-slate-350 whitespace-pre-wrap select-text">{inlineChatSummary}</p>
+                                    )}
+                                </motion.div>
+                            )}
                             {/* Messages Feed */}
                             <div ref={scrollContainerRef} onScroll={handleScroll} className="flex-1 overflow-y-auto p-5 custom-scrollbar pb-4" style={{ minHeight: 0 }}>
                                 {/* Channel Intro */}
@@ -1739,6 +1960,8 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                                                 setEditingMsgId(msg.id);
                                                                 setEditContent(msg.content);
                                                             }}
+                                                            messageAiAssists={messageAiAssists}
+                                                            onDismissAiAssist={handleDismissAiAssist}
                                                             channelData={activeChannel}
                                                             chatFontSize={chatFontSize}
                                                             triggerHaptics={triggerHaptics}
@@ -1956,31 +2179,50 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                              {/* Desktop: paperclip opens full picker */}
                                              <button type="button" onClick={() => fileInputRef.current?.click()} className="hidden md:flex p-2 rounded-xl bg-slate-200/50 dark:bg-white/5 hover:bg-slate-200/80 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors" title="Attach file (or drag & drop / paste image)"><Paperclip size={18} /></button>
                                              {/* Dedicated Sally AI Copilot Button (resolves keyboard Send/Enter overlap layout clash) */}
-                                             <button 
-                                                 type="button" 
-                                                 onClick={() => {
-                                                     triggerHaptics('light');
-                                                     const lastMessages = allActiveMessages.slice(-20).map((m: any) => ({
-                                                         senderName: m.senderName,
-                                                         senderRole: m.senderRole,
-                                                         content: m.content,
-                                                         timestamp: m.timestamp
-                                                     }));
-                                                     window.dispatchEvent(new CustomEvent('open-sally-chat', {
-                                                         detail: {
-                                                             context: 'comms',
-                                                             channelId: activeChannel?.id,
-                                                             channelName: activeChannel?.type === 'dm' ? getDMPartnerName(activeChannel) : activeChannel?.name,
-                                                             channelType: activeChannel?.type,
-                                                             messages: lastMessages
-                                                         }
-                                                     }));
-                                                 }} 
-                                                 className="p-2 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 transition-colors flex items-center justify-center animate-pulse" 
-                                                 title="Ask Sally AI Assistant"
-                                             >
-                                                 <Sparkles size={18} />
-                                             </button>
+                                             <div className="relative">
+                                                 <button 
+                                                     type="button" 
+                                                     onClick={() => {
+                                                         triggerHaptics('light');
+                                                         setShowAiInputMenu(prev => !prev);
+                                                     }} 
+                                                     className={clsx("p-2 rounded-xl transition-all flex items-center justify-center", showAiInputMenu ? "bg-indigo-500/20 text-indigo-400 border border-indigo-500/30" : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 animate-pulse")} 
+                                                     title="AI Chat Assist Options"
+                                                 >
+                                                     {aiAssistLoading ? (
+                                                         <div className="w-[18px] h-[18px] border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                                                     ) : (
+                                                         <Sparkles size={18} />
+                                                     )}
+                                                 </button>
+                                                 
+                                                 {showAiInputMenu && (
+                                                     <>
+                                                         <div className="fixed inset-0 z-40" onClick={() => setShowAiInputMenu(false)} />
+                                                         <div className="absolute bottom-[calc(100%+8px)] left-0 z-50 p-2 rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden min-w-[210px] flex flex-col gap-0.5">
+                                                             <div className="px-2.5 py-1 text-[10px] font-bold text-indigo-500 dark:text-indigo-400 uppercase tracking-wide border-b border-slate-100 dark:border-white/5 mb-1">
+                                                                 AI Chat Assist
+                                                             </div>
+                                                             {messageInput.trim() ? (
+                                                                 <>
+                                                                     <button type="button" onClick={() => handleRephraseInput('grammar')} className="w-full text-left px-3 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-colors font-medium">Correct Statement Phrase</button>
+                                                                     <button type="button" onClick={() => handleRephraseInput('tone')} className="w-full text-left px-3 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-colors font-medium">Make Tone Professional</button>
+                                                                     <button type="button" onClick={() => handleRephraseInput('translate-sw')} className="w-full text-left px-3 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-colors font-medium">Translate to Swahili</button>
+                                                                     <button type="button" onClick={() => handleRephraseInput('translate-en')} className="w-full text-left px-3 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl transition-colors font-medium">Translate to English</button>
+                                                                 </>
+                                                             ) : (
+                                                                 <div className="px-3 py-2 text-[10px] text-slate-400 dark:text-slate-500 italic">
+                                                                     Type a message to enable phrase assist, translation, or tone corrections.
+                                                                 </div>
+                                                             )}
+                                                             <div className="border-t border-slate-100 dark:border-white/5 my-1" />
+                                                             <button type="button" onClick={handleSummarizeChannelInline} className="w-full text-left px-3 py-2 text-xs text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10 rounded-xl transition-colors font-semibold flex items-center justify-between">
+                                                                 Summarize Recent Chat
+                                                             </button>
+                                                         </div>
+                                                     </>
+                                                 )}
+                                             </div>
                                              {/* Emoji Picker Toggle Button */}
                                              <button 
                                                  type="button" 
@@ -2220,19 +2462,65 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                             <div className="px-4 py-3 space-y-1">
                                 {/* Copy Text */}
                                 {!mobileActionMsg.isDeleted && (
-                                    <button
-                                        onClick={() => {
-                                            triggerHaptics('success');
-                                            navigator.clipboard.writeText(mobileActionMsg.content);
-                                            showToast('Message copied to clipboard', 'success');
-                                            setMobileActionMsg(null);
-                                        }}
-                                        className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-colors text-left"
-                                        style={{ background: 'var(--md-sys-color-surface-variant)' }}
-                                    >
-                                        <Copy size={20} style={{ color: 'var(--md-sys-color-secondary)' }} />
-                                        <span className="font-semibold font-google" style={{ color: 'var(--md-sys-color-on-surface)' }}>Copy Text</span>
-                                    </button>
+                                     <>
+                                     <button
+                                         onClick={() => {
+                                             triggerHaptics('success');
+                                             navigator.clipboard.writeText(mobileActionMsg.content);
+                                             showToast('Message copied to clipboard', 'success');
+                                             setMobileActionMsg(null);
+                                         }}
+                                         className="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-colors text-left"
+                                         style={{ background: 'var(--md-sys-color-surface-variant)' }}
+                                     >
+                                         <Copy size={20} style={{ color: 'var(--md-sys-color-secondary)' }} />
+                                         <span className="font-semibold font-google" style={{ color: 'var(--md-sys-color-on-surface)' }}>Copy Text</span>
+                                     </button>
+                                     <div className="p-2.5 rounded-2xl border border-slate-200 dark:border-white/5 bg-slate-900/10 space-y-1.5">
+                                         <div className="flex items-center gap-1.5 px-3 py-1 text-[10px] uppercase font-bold text-indigo-500 dark:text-indigo-400">
+                                             <Sparkles className="w-3 h-3 animate-pulse" />
+                                             AI Chat Assist
+                                         </div>
+                                         <div className="grid grid-cols-2 gap-1.5">
+                                             <button 
+                                                 onClick={() => {
+                                                     handleMessageBubbleAssist(mobileActionMsg.id, mobileActionMsg.content, 'summarize');
+                                                     setMobileActionMsg(null);
+                                                 }}
+                                                 className="px-3 py-2 text-xs font-semibold rounded-xl text-center bg-white/5 hover:bg-white/10 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/5"
+                                             >
+                                                 Summarize
+                                             </button>
+                                             <button 
+                                                 onClick={() => {
+                                                     handleMessageBubbleAssist(mobileActionMsg.id, mobileActionMsg.content, 'explain');
+                                                     setMobileActionMsg(null);
+                                                 }}
+                                                 className="px-3 py-2 text-xs font-semibold rounded-xl text-center bg-white/5 hover:bg-white/10 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/5"
+                                             >
+                                                 Explain Terms
+                                             </button>
+                                             <button 
+                                                 onClick={() => {
+                                                     handleMessageBubbleAssist(mobileActionMsg.id, mobileActionMsg.content, 'translate-sw');
+                                                     setMobileActionMsg(null);
+                                                 }}
+                                                 className="px-3 py-2 text-xs font-semibold rounded-xl text-center bg-white/5 hover:bg-white/10 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/5"
+                                             >
+                                                 Translate (SW)
+                                             </button>
+                                             <button 
+                                                 onClick={() => {
+                                                     handleMessageBubbleAssist(mobileActionMsg.id, mobileActionMsg.content, 'translate-en');
+                                                     setMobileActionMsg(null);
+                                                 }}
+                                                 className="px-3 py-2 text-xs font-semibold rounded-xl text-center bg-white/5 hover:bg-white/10 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-white/5"
+                                             >
+                                                 Translate (EN)
+                                             </button>
+                                         </div>
+                                     </div>
+                                     </>
                                 )}
 
                                 {/* Reply */}

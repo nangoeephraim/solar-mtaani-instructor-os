@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { AppData, Resource, ResourceUsageLog, ScheduleSlot, LibraryResource } from '../types';
 import PageHeader from './PageHeader';
+import { createPortal } from 'react-dom';
 import { 
     Box, Trash2, Plus, Monitor, Layout, MapPin, Users, CheckCircle, 
     AlertCircle, Wrench, Filter, X, Edit3, Calendar, History, 
@@ -725,7 +726,7 @@ export default function Resources({
 
                     {/* PHYSICAL DETAILS DRAWER */}
                     <AnimatePresence>
-                        {selectedResource && (
+                        {selectedResource && typeof document !== 'undefined' && createPortal(
                             <>
                                 <motion.div
                                     initial={{ opacity: 0 }}
@@ -1012,13 +1013,14 @@ export default function Resources({
                                         )}
                                     </div>
                                 </motion.div>
-                            </>
+                            </>,
+                            document.body
                         )}
                     </AnimatePresence>
 
                     {/* SMART ASSIGN MODAL */}
                     <AnimatePresence>
-                        {showAssignModal && selectedResource && (
+                        {showAssignModal && selectedResource && typeof document !== 'undefined' && createPortal(
                             <motion.div
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
@@ -1131,13 +1133,14 @@ export default function Resources({
                                         )}
                                     </div>
                                 </motion.div>
-                            </motion.div>
+                            </motion.div>,
+                            document.body
                         )}
                     </AnimatePresence>
 
                     {/* Add Resource Modal */}
                     <AnimatePresence>
-                        {showAddModal && (
+                        {showAddModal && typeof document !== 'undefined' && createPortal(
                             <motion.div
                                 initial={{ opacity: 0 }}
                                 animate={{ opacity: 1 }}
@@ -1285,7 +1288,8 @@ export default function Resources({
                                         </div>
                                     </form>
                                 </motion.div>
-                            </motion.div>
+                            </motion.div>,
+                            document.body
                         )}
                     </AnimatePresence>
                 </>

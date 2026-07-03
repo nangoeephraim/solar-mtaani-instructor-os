@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { AppData, LibraryResource } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
+import { createPortal } from 'react-dom';
 import { 
     FileText, Download, Trash2, CheckCircle, Clock, Upload, X, 
     ShieldAlert, File, Search, Filter, AlertCircle, BookOpen, 
@@ -760,7 +761,7 @@ export default function LibraryTab({ data, onAddLibraryResource, onDeleteLibrary
 
             {/* DETAIL SLIDING DRAWER PANEL */}
             <AnimatePresence>
-                {selectedResource && (
+                {selectedResource && typeof document !== 'undefined' && createPortal(
                     <>
                         {/* Drawer Backdrop */}
                         <motion.div
@@ -1036,13 +1037,14 @@ export default function LibraryTab({ data, onAddLibraryResource, onDeleteLibrary
                                 )}
                             </div>
                         </motion.div>
-                    </>
+                    </>,
+                    document.body
                 )}
             </AnimatePresence>
 
             {/* UPLOAD MODAL ENHANCED */}
             <AnimatePresence>
-                {showUploadModal && (
+                {showUploadModal && typeof document !== 'undefined' && createPortal(
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
@@ -1210,7 +1212,8 @@ export default function LibraryTab({ data, onAddLibraryResource, onDeleteLibrary
                                 </div>
                             </form>
                         </motion.div>
-                    </motion.div>
+                    </motion.div>,
+                    document.body
                 )}
             </AnimatePresence>
         </div>
