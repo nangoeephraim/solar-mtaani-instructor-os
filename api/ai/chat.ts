@@ -107,7 +107,7 @@ function shouldUseLiveContext(userText: string): boolean {
   const text = userText.toLowerCase();
   if (!text) return false;
 
-  const liveDataPattern = /\b(student|students|attendance|absent|present|fee|fees|payment|payments|receipt|mpesa|balance|balances|schedule|timetable|meeting|meetings|inventory|stock|library|asset|assets|document|documents|announcement|announcements|feed|message|messages|instructor|instructors|cohort|cohorts|analytics|insights|assessment|assessments)\b/;
+  const liveDataPattern = /\b(student|students|attendance|absent|present|fee|fees|payment|payments|receipt|mpesa|balance|balances|schedule|timetable|meeting|meetings|inventory|stock|library|asset|assets|document|documents|announcement|announcements|feed|message|messages|instructor|instructors|cohort|cohorts|analytics|insights|assessment|assessments|day|today|calendar|agenda|lesson|lessons|task|tasks|todo|notification|notifications|alert|alerts)\b/;
   const actionPattern = /\b(log|record|update|create|delete|send|notify|post|start|end|add|subtract|set)\b/;
 
   return liveDataPattern.test(text) || actionPattern.test(text);

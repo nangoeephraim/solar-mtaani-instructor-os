@@ -61,7 +61,7 @@ function getLatestUserText(messages) {
 function shouldUseLiveContext(userText) {
   const text = userText.toLowerCase();
   if (!text) return false;
-  const liveDataPattern = /\b(student|students|attendance|absent|present|fee|fees|payment|payments|receipt|mpesa|balance|balances|schedule|timetable|meeting|meetings|inventory|stock|library|asset|assets|document|documents|announcement|announcements|feed|message|messages|instructor|instructors|cohort|cohorts|analytics|insights|assessment|assessments)\b/;
+  const liveDataPattern = /\b(student|students|attendance|absent|present|fee|fees|payment|payments|receipt|mpesa|balance|balances|schedule|timetable|meeting|meetings|inventory|stock|library|asset|assets|document|documents|announcement|announcements|feed|message|messages|instructor|instructors|cohort|cohorts|analytics|insights|assessment|assessments|day|today|calendar|agenda|lesson|lessons|task|tasks|todo|notification|notifications|alert|alerts)\b/;
   const actionPattern = /\b(log|record|update|create|delete|send|notify|post|start|end|add|subtract|set)\b/;
   return liveDataPattern.test(text) || actionPattern.test(text);
 }
@@ -180,6 +180,14 @@ test('Empty string routes to simple-chat', () => {
 
 test('"Run analytics" routes to live-context', () => {
   assertEqual(shouldUseLiveContext('run analytics on the cohort'), true);
+});
+
+test('"How is my day looking" routes to live-context', () => {
+  assertEqual(shouldUseLiveContext('how is my day looking'), true);
+});
+
+test('"What do I have today" routes to live-context', () => {
+  assertEqual(shouldUseLiveContext('what do I have today'), true);
 });
 
 // ── 2. Fallback Prompt Content ──────────────────────────────────────
