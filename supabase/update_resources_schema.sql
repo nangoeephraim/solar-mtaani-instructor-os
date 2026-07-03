@@ -5,8 +5,8 @@ ADD COLUMN IF NOT EXISTS location TEXT,
 ADD COLUMN IF NOT EXISTS notes TEXT,
 ADD COLUMN IF NOT EXISTS usage_history JSONB DEFAULT '[]'::jsonb;
 
--- Setup ID default to uuid_generate_v4() cast to text
-ALTER TABLE public.resources ALTER COLUMN id SET DEFAULT public.uuid_generate_v4()::text;
+-- Setup ID default to gen_random_uuid() cast to text
+ALTER TABLE public.resources ALTER COLUMN id SET DEFAULT gen_random_uuid()::text;
 
 -- Update constraints for type column
 DO $$ 
@@ -18,7 +18,7 @@ BEGIN
         FROM pg_constraint 
         WHERE conrelid = 'public.resources'::regclass 
           AND contype = 'c' 
-          AND consrc LIKE '%type%'
+          AND pg_get_constraintdef(oid) LIKE '%type%'
     LOOP
         EXECUTE 'ALTER TABLE public.resources DROP CONSTRAINT ' || quote_ident(r.conname);
     END LOOP;

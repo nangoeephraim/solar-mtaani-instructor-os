@@ -90,7 +90,16 @@ export const fetchAppData = async (): Promise<AppData> => {
       students: (students || []).map(formatStudentFromDB),
       schedule: (schedule || []).map(formatScheduleSlot),
       holidays: [], // Keeping empty for now as requested
-      resources: resources || [],
+      resources: (resources || []).map((item: any) => ({
+        id: item.id,
+        name: item.name,
+        type: item.type,
+        status: item.status,
+        capacity: item.capacity,
+        location: item.location,
+        notes: item.notes,
+        usageHistory: item.usage_history || []
+      })),
       library: (libraryItems || []).map((item: any) => ({
         id: item.id,
         title: item.title,
@@ -761,9 +770,60 @@ export const resetData = async (): Promise<boolean> => {
 };
 
 // --- RESOURCES & LIBRARY ---
-export const addResource = async (resource: Omit<Resource, 'id'>): Promise<Resource | null> => null;
-export const updateResource = async (resource: Resource): Promise<boolean> => false;
-export const deleteResource = async (id: string): Promise<boolean> => false;
+export const addResource = async (resource: Omit<Resource, 'id'>): Promise<Resource | null> => {
+  const { error, data } = await supabase.from('resources').insert({
+    name: resource.name,
+    type: resource.type,
+    status: resource.status || 'available',
+    capacity: resource.capacity,
+    location: resource.location,
+    notes: resource.notes,
+    usage_history: resource.usageHistory || []
+  }).select().single();
+
+  if (error) {
+    console.error("Error adding resource:", error);
+    return null;
+  }
+
+  return {
+    id: data.id,
+    name: data.name,
+    type: data.type,
+    status: data.status,
+    capacity: data.capacity,
+    location: data.location,
+    notes: data.notes,
+    usageHistory: data.usage_history || []
+  };
+};
+
+export const updateResource = async (resource: Resource): Promise<boolean> => {
+  const { error } = await supabase.from('resources').update({
+    name: resource.name,
+    type: resource.type,
+    status: resource.status,
+    capacity: resource.capacity,
+    location: resource.location,
+    notes: resource.notes,
+    usage_history: resource.usageHistory || []
+  }).eq('id', resource.id);
+
+  if (error) {
+    console.error("Error updating resource:", error);
+    return false;
+  }
+  return true;
+};
+
+export const deleteResource = async (id: string): Promise<boolean> => {
+  const { error } = await supabase.from('resources').delete().eq('id', id);
+  if (error) {
+    console.error("Error deleting resource:", error);
+    return false;
+  }
+  return true;
+};
 
 export const addLibraryResource = async (resource: Omit<LibraryResource, 'id'>): Promise<LibraryResource | null> => {
   const { error, data } = await supabase.from('library_resources').insert({

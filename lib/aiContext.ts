@@ -110,7 +110,10 @@ export async function buildPrismAIContext(client?: SupabaseClient): Promise<Pris
     // Supabase JS client doesn't support column-to-column comparisons.
     // Instead, fetch all inventory and filter client-side.
     safeQuery<any[]>(
-      async () => await supabase.from('equipment_inventory').select('*').abortSignal((globalThis as any).reqAbortSignal),
+      async () => await supabase
+        .from('equipment_inventory')
+        .select('item_name, category, location, available_qty, quantity, low_stock_threshold')
+        .abortSignal((globalThis as any).reqAbortSignal),
       'inventory'
     ),
 
@@ -128,18 +131,36 @@ export async function buildPrismAIContext(client?: SupabaseClient): Promise<Pris
       'assessments'
     ),
 
-    safeQuery<any[]>(
-      async () => await supabase.from('students').select('id').abortSignal((globalThis as any).reqAbortSignal),
+    safeQuery<number>(
+      async () => {
+        const { count, error } = await supabase
+          .from('students')
+          .select('*', { count: 'exact', head: true })
+          .abortSignal((globalThis as any).reqAbortSignal);
+        return { data: count, error };
+      },
       'students_count'
     ),
 
-    safeQuery<any[]>(
-      async () => await supabase.from('instructors').select('id').abortSignal((globalThis as any).reqAbortSignal),
+    safeQuery<number>(
+      async () => {
+        const { count, error } = await supabase
+          .from('instructors')
+          .select('*', { count: 'exact', head: true })
+          .abortSignal((globalThis as any).reqAbortSignal);
+        return { data: count, error };
+      },
       'instructors_count'
     ),
 
-    safeQuery<any[]>(
-      async () => await supabase.from('library_resources').select('id').abortSignal((globalThis as any).reqAbortSignal),
+    safeQuery<number>(
+      async () => {
+        const { count, error } = await supabase
+          .from('library_resources')
+          .select('*', { count: 'exact', head: true })
+          .abortSignal((globalThis as any).reqAbortSignal);
+        return { data: count, error };
+      },
       'library_count'
     ),
 
@@ -148,8 +169,15 @@ export async function buildPrismAIContext(client?: SupabaseClient): Promise<Pris
       'payments_stats'
     ),
 
-    safeQuery<any[]>(
-      async () => await supabase.from('meetings').select('id').eq('status', 'active').abortSignal((globalThis as any).reqAbortSignal),
+    safeQuery<number>(
+      async () => {
+        const { count, error } = await supabase
+          .from('meetings')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'active')
+          .abortSignal((globalThis as any).reqAbortSignal);
+        return { data: count, error };
+      },
       'active_meetings_count'
     ),
   ]);
@@ -227,10 +255,10 @@ export async function buildPrismAIContext(client?: SupabaseClient): Promise<Pris
   });
 
   // Compute statistical aggregates safely
-  const totalStudents = studentsCountRes ? studentsCountRes.length : 0;
-  const totalInstructors = instructorsCountRes ? instructorsCountRes.length : 0;
-  const totalAssets = assetsCountRes ? assetsCountRes.length : 0;
-  const activeMeetingsCount = activeMeetingsRes ? activeMeetingsRes.length : 0;
+  const totalStudents = typeof studentsCountRes === 'number' ? studentsCountRes : 0;
+  const totalInstructors = typeof instructorsCountRes === 'number' ? instructorsCountRes : 0;
+  const totalAssets = typeof assetsCountRes === 'number' ? assetsCountRes : 0;
+  const activeMeetingsCount = typeof activeMeetingsRes === 'number' ? activeMeetingsRes : 0;
   
   const totalFeePayments = paymentsRes ? paymentsRes.length : 0;
   const totalCollectedAmount = paymentsRes 

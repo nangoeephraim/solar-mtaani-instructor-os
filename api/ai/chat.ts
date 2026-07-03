@@ -297,7 +297,22 @@ export default async function handler(req: Request) {
       return { ...msg, parts };
     };
 
-    const sanitizedMessages = (messages || [])
+    const rawMessages = messages || [];
+    
+    // Always preserve welcome briefing / initialization instructions to maintain system state
+    const initMessage = rawMessages.find((msg: any) => 
+      msg && msg.role === 'user' && typeof msg.content === 'string' && msg.content.includes('[SYSTEM_INIT_')
+    );
+
+    let messagesToProcess = rawMessages;
+    if (rawMessages.length > 12) {
+      messagesToProcess = rawMessages.slice(-12);
+      if (initMessage && !messagesToProcess.some((msg: any) => msg === initMessage)) {
+        messagesToProcess = [initMessage, ...messagesToProcess];
+      }
+    }
+
+    const sanitizedMessages = messagesToProcess
       .filter((msg: any) => msg && (msg.role === 'user' || msg.role === 'assistant' || msg.role === 'system'))
       .map(sanitizeMessage);
 

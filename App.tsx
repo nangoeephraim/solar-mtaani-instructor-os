@@ -17,6 +17,9 @@ import {
   addLibraryResource,
   deleteLibraryResource,
   updateLibraryResource,
+  addResource,
+  updateResource,
+  deleteResource,
   formatFeePaymentFromDB,
   formatStudentFromDB,
   formatScheduleSlot,
@@ -48,12 +51,11 @@ import {
   subscribeToSchedule,
   subscribeToLibrary,
   subscribeToFeePayments,
+  subscribeToResources,
   startHealthMonitor,
   unsubscribeAll
 } from './services/realtimeService';
 import { getPendingMutations } from './services/offlineSyncService';
-
-
 // Lazy load components for code splitting
 const Schedule = lazy(() => import('./components/Schedule'));
 const StudentProfile = lazy(() => import('./components/StudentProfile'));
@@ -878,6 +880,57 @@ const AppContent: React.FC = () => {
           }
         });
 
+        // ─── Physical Resources (INSERT, UPDATE, DELETE) ───
+        subscribeToResources((payload) => {
+          if (payload.eventType === 'INSERT' && payload.new) {
+            const raw = payload.new as any;
+            const newRes: Resource = {
+              id: raw.id,
+              name: raw.name,
+              type: raw.type,
+              status: raw.status,
+              capacity: raw.capacity,
+              location: raw.location,
+              notes: raw.notes,
+              usageHistory: raw.usage_history || []
+            };
+            setData(prevData => {
+              if (!prevData) return prevData;
+              if (prevData.resources?.some(r => r.id === newRes.id)) return prevData;
+              return { ...prevData, resources: [newRes, ...(prevData.resources || [])] };
+            });
+          } else if (payload.eventType === 'UPDATE' && payload.new) {
+            const raw = payload.new as any;
+            const updatedRes: Resource = {
+              id: raw.id,
+              name: raw.name,
+              type: raw.type,
+              status: raw.status,
+              capacity: raw.capacity,
+              location: raw.location,
+              notes: raw.notes,
+              usageHistory: raw.usage_history || []
+            };
+            setData(prevData => {
+              if (!prevData) return prevData;
+              return {
+                ...prevData,
+                resources: prevData.resources?.map(r => r.id === updatedRes.id ? updatedRes : r) || []
+              };
+            });
+          } else if (payload.eventType === 'DELETE' && payload.old) {
+            const deletedId = payload.old?.id;
+            if (!deletedId) return;
+            setData(prevData => {
+              if (!prevData) return prevData;
+              return {
+                ...prevData,
+                resources: prevData.resources?.filter(r => r.id !== deletedId) || []
+              };
+            });
+          }
+        });
+
         // Start the health monitor for auto-recovery of dropped connections
         startHealthMonitor();
       }
@@ -1020,17 +1073,44 @@ const AppContent: React.FC = () => {
 
   const handleAddResource = async (resourceData: Omit<Resource, 'id'>) => {
     if (!data) return;
-    showToast('Resource added (pending DB)', 'info');
+    const newRes = await addResource(resourceData);
+    if (newRes) {
+      const newData = {
+        ...data,
+        resources: [newRes, ...(data.resources || [])]
+      };
+      saveDataToState(newData);
+    } else {
+      showToast('Failed to create resource', 'error');
+    }
   };
 
   const handleDeleteResource = async (resourceId: string) => {
     if (!data) return;
-    showToast('Resource deleted (pending DB)', 'info');
+    const success = await deleteResource(resourceId);
+    if (success) {
+      const newData = {
+        ...data,
+        resources: data.resources?.filter(r => r.id !== resourceId) || []
+      };
+      saveDataToState(newData);
+    } else {
+      showToast('Failed to delete resource', 'error');
+    }
   };
 
   const handleUpdateResource = async (updatedResource: Resource) => {
     if (!data) return;
-    showToast('Resource updated (pending DB)', 'info');
+    const success = await updateResource(updatedResource);
+    if (success) {
+      const newData = {
+        ...data,
+        resources: data.resources?.map(r => r.id === updatedResource.id ? updatedResource : r) || []
+      };
+      saveDataToState(newData);
+    } else {
+      showToast('Failed to update resource', 'error');
+    }
   };
 
   const handleAddLibraryResource = async (resourceData: Omit<LibraryResource, 'id'>) => {

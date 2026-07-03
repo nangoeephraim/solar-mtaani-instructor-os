@@ -187,6 +187,10 @@ export const subscribeToFeePayments = (callback: (payload: RealtimePayload<any>)
     return subscribeToTable('fee_payments', callback);
 };
 
+export const subscribeToResources = (callback: (payload: RealtimePayload<any>) => void) => {
+    return subscribeToTable('resources', callback);
+};
+
 // ==========================================
 // TYPING INDICATOR (Broadcast Channel)
 // ==========================================
