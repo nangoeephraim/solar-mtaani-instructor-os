@@ -1422,6 +1422,57 @@ export default async function handler(req: Request) {
         });
 
         const uiStream = result.toUIMessageStream();
+        
+        // Probe stream to ensure connection/API keys/rate limits are functional before sending 200 headers
+        const reader = uiStream.getReader();
+        let firstChunk: any = null;
+        let firstChunkDone = false;
+        
+        try {
+          const firstRead = await Promise.race([
+            reader.read(),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error('Connection handshake timed out after 5s')), 5000)
+            )
+          ]);
+          firstChunk = firstRead.value;
+          firstChunkDone = firstRead.done;
+        } catch (streamErr: any) {
+          reader.releaseLock();
+          throw streamErr;
+        }
+
+        // Reconstruct the stream using the probed first chunk
+        const customStream = new ReadableStream({
+          async start(controller) {
+            if (firstChunk !== null && firstChunk !== undefined) {
+              controller.enqueue(firstChunk);
+            }
+            if (firstChunkDone) {
+              controller.close();
+              return;
+            }
+            try {
+              while (true) {
+                const { value, done } = await reader.read();
+                if (done) {
+                  controller.close();
+                  break;
+                }
+                controller.enqueue(value);
+              }
+            } catch (err) {
+              controller.error(err);
+            } finally {
+              reader.releaseLock();
+            }
+          },
+          cancel() {
+            reader.cancel().catch(() => {});
+            reader.releaseLock();
+          }
+        });
+
         const startupLatencyMs = Date.now() - providerStart;
         markProviderSuccess(config.provider, startupLatencyMs);
         logSallyEvent(requestId, 'provider_stream_ready', `Provider ${config.provider} stream ready`, {
@@ -1431,7 +1482,7 @@ export default async function handler(req: Request) {
         });
 
         return createUIMessageStreamResponse({
-          stream: uiStream,
+          stream: customStream,
           headers: {
             'X-Provider-Used': config.provider,
             'X-Sally-Mode': routeMode,
