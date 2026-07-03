@@ -237,14 +237,22 @@ export default async function handler(req: Request) {
   }
 
   const auth = await requireApiUser(req);
+  let apiContext: any = null;
+  let supabase: any = null;
+  let isGuestMode = false;
+
   if ('response' in auth) {
-    clearTimeout(reqTimeout);
-    return auth.response;
+    isGuestMode = true;
+    logSallyEvent(requestId, 'auth_failed_guest_mode', 'Authentication failed, falling back to restricted guest mode', {
+      status: (auth as any).response?.status || 401,
+    });
+  } else {
+    apiContext = auth.context;
+    supabase = apiContext.supabase;
   }
 
-  const apiContext = auth.context;
-  const supabase = apiContext.supabase;
   const requireToolRole = (roles: Array<'admin' | 'instructor' | 'viewer'>) => {
+    if (isGuestMode) return { error: 'Authentication required' };
     const allowed = requireRole(apiContext, roles);
     return 'error' in allowed ? { error: allowed.error } : null;
   };
@@ -317,7 +325,10 @@ export default async function handler(req: Request) {
       .map(sanitizeMessage);
 
     const latestUserText = getLatestUserText(sanitizedMessages);
-    const routeMode: SallyRouteMode = shouldUseLiveContext(latestUserText) ? 'live-context' : 'simple-chat';
+    let routeMode: SallyRouteMode = shouldUseLiveContext(latestUserText) ? 'live-context' : 'simple-chat';
+    if (isGuestMode) {
+      routeMode = 'simple-chat';
+    }
     logSallyEvent(requestId, 'route_selected', `Using ${routeMode}`, {
       routeMode,
       latestUserChars: latestUserText.length,
@@ -327,6 +338,9 @@ export default async function handler(req: Request) {
 
     // ── 2. Build live database context (with 5s fallback) ───────────
     let systemPrompt = getFallbackSystemPrompt(institutionType);
+    if (isGuestMode) {
+      systemPrompt += `\n\n[GUEST MODE] You are currently operating in restricted guest/offline mode because the user's authentication token could not be verified (possibly due to a temporary database connection drop or stale session). You do NOT have access to live database records (students, attendance, schedules, fees, inventory) and CANNOT invoke database tools. If the user asks about database lookups, updates, assessments, schedule changes, or inventory stock, politely and supportively explain that you are running in guest/offline mode and they should refresh their page or log in.`;
+    }
     if (routeMode === 'live-context') {
       try {
         const ctx = await Promise.race([
