@@ -114,24 +114,68 @@ function shouldUseLiveContext(userText: string): boolean {
 }
 
 function isStreamErrorChunk(chunk: any): boolean {
-  if (typeof chunk !== 'string') return false;
-  const trimmed = chunk.trim();
-  
-  // 1. Data Stream Protocol Error Code 3
-  if (trimmed.startsWith('3:')) return true;
-  
-  // 2. Finish event indicating error
-  if (trimmed.startsWith('e:') && (trimmed.includes('"error"') || trimmed.includes('"finishReason":"error"'))) return true;
-  
-  // 3. Raw JSON errors or raw error strings that are not valid content (not starting with 0:, 1:, 2:, etc.)
-  const isContentProtocol = /^[012456789a-z]:/.test(trimmed);
-  if (!isContentProtocol) {
-    const lower = trimmed.toLowerCase();
-    if (lower.includes('error') || lower.includes('rate limit') || lower.includes('quota') || lower.includes('forbidden') || lower.includes('unauthorized') || lower.includes('insufficient')) {
-      return true;
+  if (!chunk) return false;
+
+  if (typeof chunk === 'string') {
+    const trimmed = chunk.trim();
+    if (trimmed.startsWith('3:')) return true;
+    if (trimmed.startsWith('e:') && (trimmed.includes('"error"') || trimmed.includes('"finishReason":"error"'))) return true;
+    const isContentProtocol = /^[012456789a-z]:/.test(trimmed);
+    if (!isContentProtocol) {
+      const lower = trimmed.toLowerCase();
+      if (lower.includes('error') || lower.includes('rate limit') || lower.includes('quota') || lower.includes('forbidden') || lower.includes('unauthorized') || lower.includes('insufficient') || lower.includes('limit reached')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // If it is an array of messages or other objects (UIMessage[] format from toUIMessageStream)
+  if (Array.isArray(chunk)) {
+    return chunk.some(item => {
+      if (!item) return false;
+      // Check if it represents a data error
+      if (item.role === 'data' && item.data && (item.data.error || String(item.data.message || '').toLowerCase().includes('error'))) return true;
+      // Or if the content contains a raw rate limit error string
+      if (typeof item.content === 'string') {
+        const lower = item.content.toLowerCase();
+        if (lower.includes('rate limit') || lower.includes('tpd') || lower.includes('limit reached') || lower.includes('quota exceeded')) return true;
+      }
+      return false;
+    });
+  }
+
+  // If it is a raw JSON error object
+  if (typeof chunk === 'object') {
+    try {
+      const str = JSON.stringify(chunk).toLowerCase();
+      if (str.includes('error') || str.includes('rate limit') || str.includes('quota') || str.includes('insufficient') || str.includes('limit reached')) return true;
+    } catch {
+      // Ignore serialization errors
     }
   }
-  
+
+  return false;
+}
+
+function hasTextOrToolContent(chunk: any): boolean {
+  if (!chunk) return false;
+
+  if (typeof chunk === 'string') {
+    return chunk.includes('0:"') || chunk.includes('1:') || chunk.includes('9:');
+  }
+
+  if (Array.isArray(chunk)) {
+    return chunk.some(msg => {
+      if (!msg) return false;
+      if (msg.role === 'assistant') {
+        if (typeof msg.content === 'string' && msg.content.trim().length > 0) return true;
+        if (msg.toolInvocations && msg.toolInvocations.length > 0) return true;
+      }
+      return false;
+    });
+  }
+
   return false;
 }
 
@@ -1490,12 +1534,18 @@ export default async function handler(req: Request) {
               
               // Inspect the chunk for streamed protocol or API errors
               if (isStreamErrorChunk(value)) {
-                throw new Error(`Stream error chunk received: ${value}`);
+                throw new Error(`Stream error chunk received: ${typeof value === 'object' ? JSON.stringify(value) : value}`);
               }
 
               bufferedChunks.push(value);
-              // Read up to 2 chunks to bypass initial setup/metadata frames and verify API request resolution
-              if (bufferedChunks.length >= 2) {
+
+              // If we have verified actual assistant content (text or tool call), connection is confirmed healthy
+              if (hasTextOrToolContent(value)) {
+                break;
+              }
+
+              // Safety limit to avoid infinite buffering in case of strange chunk patterns
+              if (bufferedChunks.length >= 10) {
                 break;
               }
             }
