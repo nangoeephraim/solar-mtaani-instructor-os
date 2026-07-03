@@ -4,8 +4,6 @@ import { requireApiUser } from '../../lib/supabase-server.js';
 export const config = { runtime: 'edge' };
 
 export default async function handler(req: Request) {
-  const auth = await requireApiUser(req);
-  if ('response' in auth) return auth.response;
 
   if (req.method === 'GET') {
     const providers: any[] = [];
