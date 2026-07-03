@@ -59,8 +59,8 @@ interface ProviderConfig {
 export let cachedHealthyProvider: AIProviderType | null = null;
 export let cachedHealthyProviderExpiresAt = 0;
 
-const REQUEST_TIMEOUT_MS = 25000;
-const LIVE_CONTEXT_TIMEOUT_MS = 1800;
+const REQUEST_TIMEOUT_MS = 50000;
+const LIVE_CONTEXT_TIMEOUT_MS = 4500;
 const HEALTHY_PROVIDER_TTL_MS = 5 * 60 * 1000;
 
 type SallyRouteMode = 'simple-chat' | 'live-context';
@@ -107,7 +107,7 @@ function shouldUseLiveContext(userText: string): boolean {
   const text = userText.toLowerCase();
   if (!text) return false;
 
-  const liveDataPattern = /\b(student|students|attendance|absent|present|fee|fees|payment|payments|receipt|mpesa|balance|balances|schedule|timetable|meeting|meetings|inventory|stock|library|asset|assets|document|documents|announcement|announcements|feed|message|messages|instructor|instructors|cohort|cohorts|analytics|insights|assessment|assessments|day|today|calendar|agenda|lesson|lessons|task|tasks|todo|notification|notifications|alert|alerts)\b/;
+  const liveDataPattern = /\b(student|students|attendance|absent|present|fee|fees|payment|payments|receipt|mpesa|balance|balances|schedule|timetable|meeting|meetings|inventory|stock|library|asset|assets|document|documents|announcement|announcements|feed|message|messages|instructor|instructors|cohort|cohorts|analytics|insights|assessment|assessments|day|today|calendar|agenda|lesson|lessons|task|tasks|todo|notification|notifications|alert|alerts|performance|summary|summaries|report|reports|grade|grades|score|scores|mark|marks|average|averages|visual|visuals|chart|charts|graph|graphs|status|stat|stats|statistics|overview|metric|metrics|trend|trends|progress)\b/;
   const actionPattern = /\b(log|record|update|create|delete|send|notify|post|start|end|add|subtract|set)\b/;
 
   return liveDataPattern.test(text) || actionPattern.test(text);
@@ -276,7 +276,6 @@ export default async function handler(req: Request) {
   // Enforce an absolute hard stop to prevent Vercel container hangs.
   const reqAbortController = new AbortController();
   const reqTimeout = setTimeout(() => reqAbortController.abort(), REQUEST_TIMEOUT_MS);
-  (globalThis as any).reqAbortSignal = reqAbortController.signal;
 
   if (req.method !== 'POST') {
     clearTimeout(reqTimeout);
@@ -391,7 +390,7 @@ export default async function handler(req: Request) {
     if (routeMode === 'live-context') {
       try {
         const ctx = await Promise.race([
-          buildPrismAIContext(supabase),
+          buildPrismAIContext(supabase, reqAbortController.signal),
           new Promise<never>((_, reject) =>
             setTimeout(() => reject(new Error('Context build exceeded timeout')), LIVE_CONTEXT_TIMEOUT_MS)
           ),
@@ -433,7 +432,7 @@ export default async function handler(req: Request) {
               return { error: 'Location name is required' };
             }
             const supabase = apiContext.supabase;
-            let query = supabase.from('equipment_inventory').select('*').ilike('location', `%${locationName}%`).abortSignal((globalThis as any).reqAbortSignal);
+            let query = supabase.from('equipment_inventory').select('*').ilike('location', `%${locationName}%`).abortSignal(reqAbortController.signal);
             if (itemName) query = query.ilike('item_name', `%${itemName}%`);
             const { data, error } = await query;
             if (error) return { error: error.message };
@@ -471,7 +470,7 @@ export default async function handler(req: Request) {
               .from('students')
               .select('id, name')
               .ilike('name', `%${studentName}%`)
-              .abortSignal((globalThis as any).reqAbortSignal);
+              .abortSignal(reqAbortController.signal);
             if (stdErr || !students?.length) return { error: `Could not find student "${studentName}"` };
             const targetStudent = students[0];
             const { error: insErr } = await supabase
@@ -497,7 +496,7 @@ export default async function handler(req: Request) {
             const supabase = apiContext.supabase;
             
             if (getStats) {
-              const { data, error } = await supabase.from('students').select('id, attendance_rate, average_score').abortSignal((globalThis as any).reqAbortSignal);
+              const { data, error } = await supabase.from('students').select('id, attendance_rate, average_score').abortSignal(reqAbortController.signal);
               if (error) return { error: error.message };
               const count = data?.length || 0;
               const avgScore = count > 0 ? (data.reduce((sum, s) => sum + Number(s.average_score || 0), 0) / count) : 0;
@@ -509,7 +508,7 @@ export default async function handler(req: Request) {
               };
             }
             
-            let query = supabase.from('students').select('*').abortSignal((globalThis as any).reqAbortSignal);
+            let query = supabase.from('students').select('*').abortSignal(reqAbortController.signal);
             if (studentName) {
               query = query.ilike('name', `%${studentName}%`);
             }
@@ -538,7 +537,7 @@ export default async function handler(req: Request) {
             const supabase = apiContext.supabase;
             
             if (getStats) {
-              const { data, error } = await supabase.from('fee_payments').select('amount, status').abortSignal((globalThis as any).reqAbortSignal);
+              const { data, error } = await supabase.from('fee_payments').select('amount, status').abortSignal(reqAbortController.signal);
               if (error) return { error: error.message };
               const completed = data?.filter(p => p.status === 'completed') || [];
               const totalCollected = completed.reduce((sum, p) => sum + Number(p.amount || 0), 0);
@@ -549,7 +548,7 @@ export default async function handler(req: Request) {
               };
             }
             
-            let query = supabase.from('fee_payments').select('*').order('created_at', { ascending: false }).abortSignal((globalThis as any).reqAbortSignal);
+            let query = supabase.from('fee_payments').select('*').order('created_at', { ascending: false }).abortSignal(reqAbortController.signal);
             if (studentName) {
               query = query.ilike('student_name', `%${studentName}%`);
             }
@@ -581,7 +580,7 @@ export default async function handler(req: Request) {
             const category = args.category;
             const supabase = apiContext.supabase;
             
-            let query = supabase.from('library_resources').select('*').order('uploaded_at', { ascending: false }).abortSignal((globalThis as any).reqAbortSignal);
+            let query = supabase.from('library_resources').select('*').order('uploaded_at', { ascending: false }).abortSignal(reqAbortController.signal);
             if (category) {
               query = query.eq('category', category.toLowerCase());
             }
@@ -624,7 +623,7 @@ export default async function handler(req: Request) {
             const { data: channels, error: chErr } = await supabase
               .from('chat_channels')
               .select('id, name')
-              .abortSignal((globalThis as any).reqAbortSignal);
+              .abortSignal(reqAbortController.signal);
             
             if (chErr) return { error: chErr.message };
             const lowerName = channelName.toLowerCase();
@@ -644,7 +643,7 @@ export default async function handler(req: Request) {
               .eq('channel_id', targetChannel.id)
               .eq('is_deleted', false)
               .order('created_at', { ascending: false })
-              .abortSignal((globalThis as any).reqAbortSignal);
+              .abortSignal(reqAbortController.signal);
             
             if (searchTerm) {
               query = query.ilike('content', `%${searchTerm}%`);
@@ -706,7 +705,7 @@ export default async function handler(req: Request) {
             const type = args.type;
             
             const supabase = apiContext.supabase;
-            let query = supabase.from('schedule_slots').select('*').abortSignal((globalThis as any).reqAbortSignal);
+            let query = supabase.from('schedule_slots').select('*').abortSignal(reqAbortController.signal);
             
             if (rawDay !== undefined) {
               const dayVal = typeof rawDay === 'number' ? rawDay : parseInt(rawDay);
@@ -817,7 +816,7 @@ export default async function handler(req: Request) {
             const status = args.status;
             const hostName = args.hostName ?? args.host_name;
             const supabase = apiContext.supabase;
-            let query = supabase.from('meetings').select('*').order('created_at', { ascending: false }).abortSignal((globalThis as any).reqAbortSignal);
+            let query = supabase.from('meetings').select('*').order('created_at', { ascending: false }).abortSignal(reqAbortController.signal);
             
             if (status) {
               query = query.eq('status', status);
@@ -900,7 +899,7 @@ export default async function handler(req: Request) {
             const subject = args.subject;
             const supabase = apiContext.supabase;
             
-            let query = supabase.from('instructor_profiles').select('*').abortSignal((globalThis as any).reqAbortSignal);
+            let query = supabase.from('instructor_profiles').select('*').abortSignal(reqAbortController.signal);
             if (instructorName) {
               query = query.ilike('full_name', `%${instructorName}%`);
             }
@@ -914,7 +913,7 @@ export default async function handler(req: Request) {
             const { data: assignments, error: assignErr } = await supabase
               .from('class_assignments')
               .select('*')
-              .abortSignal((globalThis as any).reqAbortSignal);
+              .abortSignal(reqAbortController.signal);
             
             const mappedProfiles = (profiles || []).map((p: any) => {
               const myAssignments = (assignments || []).filter((a: any) => a.instructor_id === p.id);
@@ -1018,7 +1017,7 @@ export default async function handler(req: Request) {
               .select('*')
               .ilike('location', `%${location}%`)
               .ilike('item_name', `%${itemName}%`)
-              .abortSignal((globalThis as any).reqAbortSignal);
+              .abortSignal(reqAbortController.signal);
             
             if (findErr) return { error: findErr.message };
             
@@ -1081,7 +1080,7 @@ export default async function handler(req: Request) {
             const studentGroup = args.studentGroup ?? args.student_group;
             const supabase = apiContext.supabase;
             
-            let query = supabase.from('fee_structures').select('*').abortSignal((globalThis as any).reqAbortSignal);
+            let query = supabase.from('fee_structures').select('*').abortSignal(reqAbortController.signal);
             if (name) {
               query = query.ilike('name', `%${name}%`);
             }
@@ -1109,7 +1108,7 @@ export default async function handler(req: Request) {
             const studentName = args.studentName ?? args.student_name ?? args.student;
             const supabase = apiContext.supabase;
             
-            let query = supabase.from('student_fee_balances').select('*').abortSignal((globalThis as any).reqAbortSignal);
+            let query = supabase.from('student_fee_balances').select('*').abortSignal(reqAbortController.signal);
             if (studentName) {
               query = query.ilike('student_name', `%${studentName}%`);
             }
@@ -1150,7 +1149,7 @@ export default async function handler(req: Request) {
             const { data: channels, error: chErr } = await supabase
               .from('chat_channels')
               .select('id, name')
-              .abortSignal((globalThis as any).reqAbortSignal);
+              .abortSignal(reqAbortController.signal);
               
             if (chErr) return { error: chErr.message };
             const lowerChan = channelName.toLowerCase();
@@ -1196,7 +1195,7 @@ export default async function handler(req: Request) {
               const { data, error } = await supabase
                 .from('students')
                 .select('name, attendance_pct, attendance_history')
-                .abortSignal((globalThis as any).reqAbortSignal);
+                .abortSignal(reqAbortController.signal);
               if (error) return { error: error.message };
               const students = data || [];
               const totalStudents = students.length;
@@ -1220,7 +1219,7 @@ export default async function handler(req: Request) {
               .from('students')
               .select('name, attendance_pct, attendance_history')
               .ilike('name', `%${studentName}%`)
-              .abortSignal((globalThis as any).reqAbortSignal);
+              .abortSignal(reqAbortController.signal);
             if (error) return { error: error.message };
             if (!data?.length) return { error: `No student found matching "${studentName}"` };
 
@@ -1265,8 +1264,8 @@ export default async function handler(req: Request) {
 
             // Fetch students and schedule for the intelligence engine
             const [studentsRes, scheduleRes] = await Promise.all([
-              supabase.from('students').select('*').abortSignal((globalThis as any).reqAbortSignal),
-              supabase.from('schedule_slots').select('*').abortSignal((globalThis as any).reqAbortSignal),
+              supabase.from('students').select('*').abortSignal(reqAbortController.signal),
+              supabase.from('schedule_slots').select('*').abortSignal(reqAbortController.signal),
             ]);
 
             if (studentsRes.error) return { error: studentsRes.error.message };
@@ -1411,7 +1410,7 @@ export default async function handler(req: Request) {
                 .select('name, phone, guardian_phone')
                 .ilike('name', `%${recipientName}%`)
                 .limit(1)
-                .abortSignal((globalThis as any).reqAbortSignal);
+                .abortSignal(reqAbortController.signal);
               if (students?.length) {
                 resolvedPhone = students[0].guardian_phone || students[0].phone;
               }
@@ -1490,11 +1489,11 @@ export default async function handler(req: Request) {
           messages: modelMessages,
           temperature: 0.7,
           tools,
-          toolChoice: routeMode === 'simple-chat' ? 'none' : 'auto',
+          toolChoice: isGuestMode ? 'none' : 'auto',
           maxRetries: 0,
           // @ts-ignore - maxSteps is supported at runtime in version 6.x of the ai package
           maxSteps: 5,
-          abortSignal: (globalThis as any).reqAbortSignal
+          abortSignal: reqAbortController.signal
         });
 
         const uiStream = result.toUIMessageStream();
@@ -1535,7 +1534,7 @@ export default async function handler(req: Request) {
           await Promise.race([
             readPromise(),
             new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error('Connection handshake timed out after 5s')), 5000)
+              setTimeout(() => reject(new Error('Connection handshake timed out after 12s')), 12000)
             )
           ]);
         } catch (streamErr: any) {
@@ -1581,6 +1580,8 @@ export default async function handler(req: Request) {
           startupLatencyMs,
           routeMode,
         });
+
+        clearTimeout(reqTimeout);
 
         return createUIMessageStreamResponse({
           stream: customStream,

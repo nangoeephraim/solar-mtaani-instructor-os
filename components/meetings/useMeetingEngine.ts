@@ -323,6 +323,12 @@ export function useMeetingEngine(pendingMeetCode?: string) {
 
     // Setup Supabase signaling channel for WebRTC
     const setupSignaling = useCallback(async (mid: string) => {
+        // Tear down existing signaling channel if any
+        if (signalingChannelRef.current) {
+            supabase.removeChannel(signalingChannelRef.current).catch(() => {});
+            signalingChannelRef.current = null;
+        }
+
         const useLiveKit = !!(import.meta as any).env.VITE_LIVEKIT_URL;
         if (useLiveKit) {
             try {
@@ -343,6 +349,20 @@ export function useMeetingEngine(pendingMeetCode?: string) {
                         publishDefaults: { simulcast: true, videoSimulcastLayers: [VideoPresets.h1080, VideoPresets.h720, VideoPresets.h180], videoCodec: 'vp8' }
                     });
                     liveKitRoomRef.current = room;
+
+                    // Add participant connected listener so they show up immediately
+                    room.on(RoomEvent.ParticipantConnected, (participant) => {
+                        const pid = participant.identity;
+                        if (!remotePeersRef.current.has(pid)) {
+                            const peerData: RemotePeer = {
+                                odei: pid, userName: participant.name || pid, avatarUrl: undefined, pc: null as any,
+                                stream: null, screenStream: null,
+                                audioEnabled: participant.isMicrophoneEnabled, videoEnabled: participant.isCameraEnabled, handRaised: false
+                            };
+                            remotePeersRef.current.set(pid, peerData);
+                            setRemotePeers(new Map(remotePeersRef.current));
+                        }
+                    });
 
                     room.on(RoomEvent.TrackSubscribed, (track, pub, participant) => {
                         const pid = participant.identity;
@@ -616,10 +636,7 @@ export function useMeetingEngine(pendingMeetCode?: string) {
                 const newVotes = new Map(p.votes);
                 const key = String(optionIndex);
                 newVotes.set(key, (newVotes.get(key) || 0) + 1);
-            
-    
-
-    return { ...p, votes: newVotes };
+                return { ...p, votes: newVotes };
             }));
         });
         ch.on('broadcast', { event: 'end-poll' }, (payload: any) => {
@@ -646,8 +663,10 @@ export function useMeetingEngine(pendingMeetCode?: string) {
             setQuestions(prev => prev.map(q => q.id === questionId ? { ...q, isAnswered: true } : q));
         });
 
-        ch.subscribe((status: string) => {
+        let reconnectTimeout: any = null;
+        ch.subscribe((status: string, err?: any) => {
             if (status === 'SUBSCRIBED') {
+                console.log(`[Signaling] Subscribed to signaling channel ${channelName}`);
                 // Announce our presence to existing peers only if not using LiveKit
                 if (!liveKitRoomRef.current) {
                     ch.send({
@@ -662,7 +681,6 @@ export function useMeetingEngine(pendingMeetCode?: string) {
                 }
 
                 // BUG-08 FIX: Async backoff re-announce — no recursive closures / memory leak
-                // Uses a stable flag to signal stop instead of storing timeout IDs
                 let stopReAnnounce = false;
                 const reAnnounceDelays = [1000, 3000, 8000, 15000];
                 const runBackoffAnnounce = async () => {
@@ -684,6 +702,14 @@ export function useMeetingEngine(pendingMeetCode?: string) {
                 // Expose stop signal on channel for cleanup in handleLeaveMeeting
                 (ch as any).__stopReAnnounce = () => { stopReAnnounce = true; };
                 (ch as any).__reAnnounceTimeout = null; // legacy compat
+            } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                console.warn(`[Signaling] Channel status: ${status}. Reconnecting in 3s...`, err);
+                if (reconnectTimeout) clearTimeout(reconnectTimeout);
+                reconnectTimeout = setTimeout(() => {
+                    if (localStreamRef.current && signalingChannelRef.current === ch) {
+                        setupSignaling(mid);
+                    }
+                }, 3000);
             }
         });
 
@@ -693,18 +719,19 @@ export function useMeetingEngine(pendingMeetCode?: string) {
     // Broadcast local media state to all peers
     const broadcastMediaState = useCallback((overrides?: { audioEnabled?: boolean; videoEnabled?: boolean; handRaised?: boolean }) => {
         if (signalingChannelRef.current) {
+            const senderId = liveKitRoomRef.current ? (user?.id || localPeerId.current) : localPeerId.current;
             signalingChannelRef.current.send({
                 type: 'broadcast',
                 event: 'media-state',
                 payload: {
-                    peerId: localPeerId.current,
+                    peerId: senderId,
                     audioEnabled: overrides?.audioEnabled ?? audioEnabled,
                     videoEnabled: overrides?.videoEnabled ?? videoEnabled,
                     handRaised: overrides?.handRaised ?? handRaised,
                 },
             }).catch(() => {});
         }
-    }, [audioEnabled, videoEnabled, handRaised]);
+    }, [audioEnabled, videoEnabled, handRaised, user?.id]);
 
     const handleJoinMeeting = async (reusableStream?: MediaStream | null) => {
         // ─── Phase 0: Performance timing ───
@@ -745,14 +772,32 @@ export function useMeetingEngine(pendingMeetCode?: string) {
             // Task 0.2: Run chat channel + signaling + DB persist IN PARALLEL
             const chatSetup = () => {
                 const broadcastName = `prism-meet-chat:${mid}`;
+                // Clean up previous chat channel
+                if (chatChannelRef.current) {
+                    supabase.removeChannel(chatChannelRef.current).catch(() => {});
+                }
                 const ch = supabase.channel(broadcastName, { config: { broadcast: { self: false } } });
+                let reconnectTimeout: any = null;
+                
                 ch.on('broadcast', { event: 'chat' }, (payload: any) => {
                     const msg = payload.payload as MeetingMessage;
                     setChatMessages(prev => [...prev, { ...msg, timestamp: new Date(msg.timestamp), isSelf: false }]);
                 }).on('broadcast', { event: 'file-share' }, (payload: any) => {
                     const f = payload.payload;
                     setMeetingFiles(prev => [...prev, { ...f, timestamp: new Date(f.timestamp) }]);
-                }).subscribe();
+                }).subscribe((status, err) => {
+                    if (status === 'SUBSCRIBED') {
+                        console.log(`[Chat] Subscribed to chat channel ${broadcastName}`);
+                    } else if (status === 'CLOSED' || status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                        console.warn(`[Chat] Chat channel status: ${status}. Reconnecting in 3s...`, err);
+                        if (reconnectTimeout) clearTimeout(reconnectTimeout);
+                        reconnectTimeout = setTimeout(() => {
+                            if (localStreamRef.current && chatChannelRef.current === ch) {
+                                chatSetup();
+                            }
+                        }, 3000);
+                    }
+                });
                 chatChannelRef.current = ch;
             };
 
@@ -896,6 +941,71 @@ export function useMeetingEngine(pendingMeetCode?: string) {
         setNewPollOptions(['', '']);
         setNewQuestionText('');
     };
+
+    // Centralized audio level and active speaker tracking loop
+    useEffect(() => {
+        if (!inMeeting) return;
+
+        let intervalId = setInterval(async () => {
+            const newLevels = new Map<string, number>();
+            let loudestPeerId: string | null = null;
+            let maxLevel = 0.05; // threshold to trigger speaking
+
+            // 1. LiveKit Room Polling
+            if (liveKitRoomRef.current) {
+                // Handle active speaker and remote audio levels for LiveKit
+                liveKitRoomRef.current.remoteParticipants.forEach(participant => {
+                    const level = participant.audioLevel; // 0 to 1
+                    const pid = participant.identity;
+                    if (level > 0.05) {
+                        newLevels.set(pid, level);
+                        if (level > maxLevel) {
+                            maxLevel = level;
+                            loudestPeerId = pid;
+                        }
+                    }
+                });
+            } 
+            // 2. WebRTC Mesh fallback polling
+            else {
+                // Poll each remote peer's RTCPeerConnection stats
+                for (const [peerId, peer] of Array.from(remotePeersRef.current.entries())) {
+                    if (!peer.pc || peer.pc.connectionState === 'closed') continue;
+                    try {
+                        const stats = await peer.pc.getStats();
+                        stats.forEach(report => {
+                            if (report.type === 'inbound-rtp' && report.kind === 'audio') {
+                                const level = report.audioLevel || 0; // 0.0 to 1.0
+                                if (level > 0.05) {
+                                    newLevels.set(peerId, level);
+                                    if (level > maxLevel) {
+                                        maxLevel = level;
+                                        loudestPeerId = peerId;
+                                    }
+                                }
+                            }
+                        });
+                    } catch (e) {
+                        // ignore failed stats
+                    }
+                }
+            }
+
+            setRemoteAudioLevels(newLevels);
+            
+            // Only update activeSpeaker for remote peers if a remote peer is loudest.
+            // Local speaker detection is still handled responsively in LocalTile via ref
+            if (loudestPeerId) {
+                setActiveSpeaker(loudestPeerId);
+            } else {
+                // If no remote peer is speaking, check if the activeSpeaker was a remote peer, and clear it.
+                // Leave 'local' active speaker state alone (it is managed by LocalTile's debounce)
+                setActiveSpeaker(prev => (prev && prev !== 'local' ? null : prev));
+            }
+        }, 150);
+
+        return () => clearInterval(intervalId);
+    }, [inMeeting, setActiveSpeaker]);
 
     useEffect(() => {
         if (videoRef.current && stream) {

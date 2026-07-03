@@ -79,6 +79,7 @@ export default function MeetingSidebar(props: MeetingSidebarProps) {
         chatEndRef, handleSendChat, chatFileInputRef, handleChatFileAttach,
         chatInput, setChatInput, meetingTheme, setMeetingTheme, meetingWallpaper, setMeetingWallpaper
     } = props;
+    const themeInfo = THEME_COLORS[meetingTheme];
 
     return (
         <AnimatePresence>
@@ -96,7 +97,11 @@ export default function MeetingSidebar(props: MeetingSidebarProps) {
                         animate={{ y: 0, opacity: 1 }}
                         exit={{ y: '100%', opacity: 0 }}
                         transition={{ type: 'spring', damping: 35, stiffness: 400 }}
-                        className="absolute bottom-0 left-0 right-0 md:bottom-auto md:left-auto md:inset-auto md:right-0 md:top-0 md:h-full z-50 md:z-40 w-full md:w-80 lg:w-96 bg-black/60 md:bg-[#0c0d0f]/98 backdrop-blur-3xl md:backdrop-blur-none border-t md:border-t-0 md:border-l border-white/10 rounded-t-3xl md:rounded-none flex flex-col shadow-[0_-8px_32px_rgba(0,0,0,0.6)] md:shadow-[-10px_0_30px_rgba(0,0,0,0.5)] max-h-[85vh] md:max-h-full"
+                        className="absolute bottom-0 left-0 right-0 md:bottom-auto md:left-auto md:inset-auto md:right-0 md:top-0 md:h-full z-50 md:z-40 w-full md:w-80 lg:w-96 bg-black/60 md:bg-[#0c0d0f]/60 backdrop-blur-3xl md:backdrop-blur-3xl border-t md:border-t-0 md:border-l flex flex-col max-h-[85vh] md:max-h-full"
+                        style={{
+                            boxShadow: `rgba(0, 0, 0, 0.6) 0px -8px 32px, rgba(${themeInfo.rgb}, 0.08) -10px 0px 30px`,
+                            borderColor: `rgba(${themeInfo.rgb}, 0.15)`
+                        }}
                     >
                         {/* Drag handle for mobile */}
                         <div className="w-12 h-1.5 bg-white/20 rounded-full mx-auto mt-4 mb-2 md:hidden flex-shrink-0" />
@@ -532,20 +537,27 @@ export default function MeetingSidebar(props: MeetingSidebarProps) {
                                                                     disabled={!poll.isActive || poll.myVote !== null}
                                                                     className={clsx(
                                                                         "w-full text-left rounded-xl p-2.5 border transition-all relative overflow-hidden",
-                                                                        isMyVote ? "border-blue-500/50 bg-blue-500/10" : "border-white/10 bg-white/5",
-                                                                        poll.isActive && poll.myVote === null ? "hover:bg-blue-500/10 hover:border-blue-500/30 cursor-pointer" : "cursor-default"
+                                                                        isMyVote ? "bg-white/5" : "border-white/10 bg-white/5",
+                                                                        poll.isActive && poll.myVote === null ? "hover:bg-white/10 hover:border-white/20 cursor-pointer" : "cursor-default"
                                                                     )}
+                                                                    style={isMyVote ? {
+                                                                        borderColor: `rgba(${themeInfo.rgb}, 0.5)`,
+                                                                        backgroundColor: `rgba(${themeInfo.rgb}, 0.1)`
+                                                                    } : undefined}
                                                                 >
                                                                     {/* Progress bar */}
                                                                     {(poll.myVote !== null || !poll.isActive) && (
                                                                         <div
-                                                                            className="absolute inset-y-0 left-0 bg-blue-500/10 transition-all duration-500"
-                                                                            style={{ width: `${pct}%` }}
+                                                                            className="absolute inset-y-0 left-0 transition-all duration-500 opacity-20"
+                                                                            style={{ 
+                                                                                width: `${pct}%`,
+                                                                                backgroundColor: themeInfo.hex
+                                                                            }}
                                                                         />
                                                                     )}
                                                                     <div className="relative flex items-center justify-between">
-                                                                        <span className="text-xs font-medium text-white flex items-center gap-1.5">
-                                                                            {isMyVote && <Check size={12} className="text-blue-400" />}
+                                                                        <span className="text-xs font-medium text-white flex items-center gap-1.5 animate-fade-in">
+                                                                            {isMyVote && <Check size={12} style={{ color: themeInfo.hex }} />}
                                                                             {option}
                                                                         </span>
                                                                         {(poll.myVote !== null || !poll.isActive) && (
@@ -570,12 +582,13 @@ export default function MeetingSidebar(props: MeetingSidebarProps) {
                                                 onChange={e => setNewQuestionText(e.target.value)}
                                                 onKeyDown={e => e.key === 'Enter' && submitQuestion()}
                                                 placeholder="Ask a question..."
-                                                className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-purple-500/50"
+                                                className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-white/35 transition-colors"
                                             />
                                             <button
                                                 onClick={submitQuestion}
                                                 disabled={!newQuestionText.trim()}
-                                                className="bg-purple-500 hover:bg-purple-600 disabled:bg-white/10 disabled:text-white/30 text-white px-3 rounded-xl transition-colors flex-shrink-0"
+                                                className="disabled:bg-white/10 disabled:text-white/30 text-white px-3 rounded-xl transition-all flex-shrink-0 hover:brightness-110 active:scale-95"
+                                                style={newQuestionText.trim() ? { backgroundColor: themeInfo.hex } : undefined}
                                             >
                                                 <Plus size={18} />
                                             </button>
@@ -603,9 +616,10 @@ export default function MeetingSidebar(props: MeetingSidebarProps) {
                                                                 onClick={() => !q.hasUpvoted && !q.isAnswered && upvoteQuestion(q.id)}
                                                                 disabled={q.hasUpvoted || q.isAnswered}
                                                                 className={clsx(
-                                                                    "flex flex-col items-center gap-0.5 py-1 px-1.5 rounded-lg transition-all flex-shrink-0",
-                                                                    q.hasUpvoted ? "text-purple-400 bg-purple-500/10" : "text-white/40 hover:text-purple-400 hover:bg-purple-500/10"
+                                                                    "flex flex-col items-center gap-0.5 py-1 px-1.5 rounded-lg transition-all flex-shrink-0 active:scale-95",
+                                                                    q.hasUpvoted ? "bg-white/5" : "text-white/40 hover:bg-white/5"
                                                                 )}
+                                                                style={q.hasUpvoted ? { color: themeInfo.hex } : undefined}
                                                             >
                                                                 <ThumbsUp size={14} />
                                                                 <span className="text-[10px] font-bold">{q.upvotes}</span>
@@ -682,13 +696,15 @@ export default function MeetingSidebar(props: MeetingSidebarProps) {
                                         </div>
                                     ) : (
                                         chatMessages.map(msg => (
-                                            <div key={msg.id} className={clsx("flex flex-col", msg.isSelf ? "items-end" : "items-start")}>
-                                                <div className="flex items-baseline gap-2 mb-1">
-                                                    <span className="text-[10px] font-bold text-white/50">{msg.sender}</span>
-                                                    <span className="text-[9px] text-white/30">{msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                            <div key={msg.id} className={clsx("flex flex-col mb-1.5", msg.isSelf ? "items-end" : "items-start")}>
+                                                <div className="flex items-baseline gap-2 mb-1 px-1">
+                                                    <span className="text-[9px] font-black text-white/40 tracking-wider uppercase">{msg.sender}</span>
+                                                    <span className="text-[8px] text-white/35">{msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                                 </div>
                                                 {msg.fileUrl ? (
-                                                    <div className={clsx("rounded-2xl max-w-[85%] overflow-hidden shadow-sm", msg.isSelf ? "bg-blue-600/20 border border-blue-500/20 rounded-tr-sm" : "bg-white/10 border border-white/10 rounded-tl-sm")}>
+                                                    <div 
+                                                        className={clsx("rounded-2xl max-w-[85%] overflow-hidden shadow-md border", msg.isSelf ? "bg-blue-600/10 border-blue-500/20 rounded-tr-none" : "bg-white/5 border-white/5 rounded-tl-none")}
+                                                    >
                                                         {msg.fileType?.startsWith('image/') && (
                                                             <img src={msg.fileUrl} alt={msg.fileName} className="w-full max-h-48 object-cover" />
                                                         )}
@@ -702,7 +718,18 @@ export default function MeetingSidebar(props: MeetingSidebarProps) {
                                                         </a>
                                                     </div>
                                                 ) : (
-                                                    <div className={clsx("px-3 py-2 rounded-2xl text-sm max-w-[85%] break-words shadow-sm", msg.isSelf ? "bg-blue-600 text-white rounded-tr-sm" : "bg-white/10 text-white rounded-tl-sm")}>
+                                                    <div 
+                                                        className={clsx(
+                                                            "px-3.5 py-2 rounded-2xl text-xs max-w-[85%] break-words shadow-[0_4px_12px_rgba(0,0,0,0.15)] border transition-all", 
+                                                            msg.isSelf 
+                                                                ? "text-white rounded-tr-none bg-gradient-to-br"
+                                                                : "bg-white/5 text-white/95 border-white/5 rounded-tl-none"
+                                                        )}
+                                                        style={msg.isSelf ? {
+                                                            backgroundImage: `linear-gradient(135deg, rgba(${themeInfo.rgb}, 0.8) 0%, rgba(${themeInfo.rgb}, 0.55) 100%)`,
+                                                            borderColor: `rgba(${themeInfo.rgb}, 0.3)`
+                                                        } : undefined}
+                                                    >
                                                         {msg.text}
                                                     </div>
                                                 )}

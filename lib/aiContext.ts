@@ -78,7 +78,7 @@ async function safeQuery<T>(
  * Each query is individually guarded with a timeout and error handler
  * so that a single slow/failing query doesn't block the entire context.
  */
-export async function buildPrismAIContext(client?: SupabaseClient): Promise<PrismAIContext> {
+export async function buildPrismAIContext(client?: SupabaseClient, abortSignal?: AbortSignal): Promise<PrismAIContext> {
   const supabase = client || createServerSupabaseClient();
 
   // Parallel fetch DB snapshots — each query is independently resilient
@@ -93,15 +93,17 @@ export async function buildPrismAIContext(client?: SupabaseClient): Promise<Pris
     activeMeetingsRes
   ] = await Promise.all([
     safeQuery<any[]>(
-      async () =>
-        await supabase
+      async () => {
+        let q = supabase
           .from('cohorts')
           .select(`
             id, name, location, current_module, status,
             instructor:instructors(full_name),
             students(id, attendance_rate, average_score)
-          `)
-          .abortSignal((globalThis as any).reqAbortSignal),
+          `);
+        if (abortSignal) q = q.abortSignal(abortSignal);
+        return await q;
+      },
       'cohorts'
     ),
 
@@ -110,33 +112,39 @@ export async function buildPrismAIContext(client?: SupabaseClient): Promise<Pris
     // Supabase JS client doesn't support column-to-column comparisons.
     // Instead, fetch all inventory and filter client-side.
     safeQuery<any[]>(
-      async () => await supabase
-        .from('equipment_inventory')
-        .select('item_name, category, location, available_qty, quantity, low_stock_threshold')
-        .abortSignal((globalThis as any).reqAbortSignal),
+      async () => {
+        let q = supabase
+          .from('equipment_inventory')
+          .select('item_name, category, location, available_qty, quantity, low_stock_threshold');
+        if (abortSignal) q = q.abortSignal(abortSignal);
+        return await q;
+      },
       'inventory'
     ),
 
     safeQuery<any[]>(
-      async () =>
-        await supabase
+      async () => {
+        let q = supabase
           .from('assessments')
           .select(`
             score, module_name, graded_at,
             student:students(full_name)
           `)
           .order('graded_at', { ascending: false })
-          .limit(10)
-          .abortSignal((globalThis as any).reqAbortSignal),
+          .limit(10);
+        if (abortSignal) q = q.abortSignal(abortSignal);
+        return await q;
+      },
       'assessments'
     ),
 
     safeQuery<number>(
       async () => {
-        const { count, error } = await supabase
+        let q = supabase
           .from('students')
-          .select('*', { count: 'exact', head: true })
-          .abortSignal((globalThis as any).reqAbortSignal);
+          .select('*', { count: 'exact', head: true });
+        if (abortSignal) q = q.abortSignal(abortSignal);
+        const { count, error } = await q;
         return { data: count, error };
       },
       'students_count'
@@ -144,10 +152,11 @@ export async function buildPrismAIContext(client?: SupabaseClient): Promise<Pris
 
     safeQuery<number>(
       async () => {
-        const { count, error } = await supabase
+        let q = supabase
           .from('instructors')
-          .select('*', { count: 'exact', head: true })
-          .abortSignal((globalThis as any).reqAbortSignal);
+          .select('*', { count: 'exact', head: true });
+        if (abortSignal) q = q.abortSignal(abortSignal);
+        const { count, error } = await q;
         return { data: count, error };
       },
       'instructors_count'
@@ -155,27 +164,33 @@ export async function buildPrismAIContext(client?: SupabaseClient): Promise<Pris
 
     safeQuery<number>(
       async () => {
-        const { count, error } = await supabase
+        let q = supabase
           .from('library_resources')
-          .select('*', { count: 'exact', head: true })
-          .abortSignal((globalThis as any).reqAbortSignal);
+          .select('*', { count: 'exact', head: true });
+        if (abortSignal) q = q.abortSignal(abortSignal);
+        const { count, error } = await q;
         return { data: count, error };
       },
       'library_count'
     ),
 
     safeQuery<any[]>(
-      async () => await supabase.from('fee_payments').select('amount').eq('status', 'completed').abortSignal((globalThis as any).reqAbortSignal),
+      async () => {
+        let q = supabase.from('fee_payments').select('amount').eq('status', 'completed');
+        if (abortSignal) q = q.abortSignal(abortSignal);
+        return await q;
+      },
       'payments_stats'
     ),
 
     safeQuery<number>(
       async () => {
-        const { count, error } = await supabase
+        let q = supabase
           .from('meetings')
           .select('*', { count: 'exact', head: true })
-          .eq('status', 'active')
-          .abortSignal((globalThis as any).reqAbortSignal);
+          .eq('status', 'active');
+        if (abortSignal) q = q.abortSignal(abortSignal);
+        const { count, error } = await q;
         return { data: count, error };
       },
       'active_meetings_count'
@@ -326,6 +341,7 @@ CONVERSATIONAL RANGE & CLARIFICATION POLICIES:
 - Summarize Tool Outputs: Once a database tool runs and returns data, never let the tool card speak for itself. Always generate a friendly, natural summary of the results (e.g. "I've checked Ephraim's attendance records. He is currently at 88% overall...") in your follow-up text.
 - Converse on Tool Errors: If a tool returns a database message or validation error (e.g. "No student found matching..."), translate it into a supportive conversation rather than repeating the technical error payload. Suggest options to help them.
 - Live Data: You are fully aware of all application data, including student profiles, fee collections/receipts, digital library resources, and chat feeds. You can query specific details live using the database tools described below.
+- Mandatory Tool Calls for Visuals: Whenever the user asks for a performance summary, operational overview, attendance statistics, analytics, or reports, you MUST invoke the appropriate database/analytics tool (such as "getAnalyticsInsights", "getAttendanceData", or "getStudentData") rather than answering solely from the pre-injected context. This is required because running the tool triggers the interactive visual charts and dashboard cards on the user's screen.
 
 CURRENT SYSTEM STATISTICS (Use these for high-level summaries):
 - Total Students: ${ctx.statsSummary.totalStudents} students registered across all cohorts and programs.

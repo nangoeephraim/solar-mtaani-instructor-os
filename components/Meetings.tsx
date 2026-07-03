@@ -24,6 +24,160 @@ import MeetingTimer from './meetings/MeetingTimer';
 
 // ICE_SERVERS, REACTION_EMOJIS, getTimeGreeting are imported from './meetings/types'
 
+const PrejoinVisualizer: React.FC<{ stream: MediaStream | null; audioEnabled: boolean }> = ({ stream, audioEnabled }) => {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+
+    useEffect(() => {
+        if (!stream || !audioEnabled || !canvasRef.current) return;
+
+        let audioContext: AudioContext | null = null;
+        let source: MediaStreamAudioSourceNode | null = null;
+        let analyser: AnalyserNode | null = null;
+        let animationFrameId: number;
+
+        try {
+            audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+            source = audioContext.createMediaStreamSource(stream);
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 256;
+            source.connect(analyser);
+
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+
+            const canvas = canvasRef.current;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return;
+
+            const draw = () => {
+                animationFrameId = requestAnimationFrame(draw);
+                analyser.getByteTimeDomainData(dataArray);
+
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                ctx.lineWidth = 2.5;
+                const gradient = ctx.createLinearGradient(0, 0, canvas.width, 0);
+                gradient.addColorStop(0, 'rgba(59, 130, 246, 0.1)');
+                gradient.addColorStop(0.5, 'rgba(139, 92, 246, 0.9)');
+                gradient.addColorStop(1, 'rgba(236, 72, 153, 0.1)');
+                ctx.strokeStyle = gradient;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = 'rgba(139, 92, 246, 0.6)';
+
+                ctx.beginPath();
+                const sliceWidth = canvas.width / bufferLength;
+                let x = 0;
+
+                for (let i = 0; i < bufferLength; i++) {
+                    const v = dataArray[i] / 128.0;
+                    const y = (v * canvas.height) / 2;
+
+                    if (i === 0) {
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+
+                    x += sliceWidth;
+                }
+
+                ctx.lineTo(canvas.width, canvas.height / 2);
+                ctx.stroke();
+            };
+
+            draw();
+        } catch (e) {
+            console.warn(e);
+        }
+
+        return () => {
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            if (source) source.disconnect();
+            if (analyser) analyser.disconnect();
+            if (audioContext) audioContext.close().catch(() => {});
+        };
+    }, [stream, audioEnabled]);
+
+    return (
+        <canvas 
+            ref={canvasRef} 
+            className="absolute bottom-0 left-0 right-0 w-full h-16 pointer-events-none z-10 opacity-70"
+            width={600}
+            height={80}
+        />
+    );
+};
+
+const SettingsMicMeter: React.FC<{ stream: MediaStream | null; enabled: boolean }> = ({ stream, enabled }) => {
+    const [level, setLevel] = useState(0);
+
+    useEffect(() => {
+        if (!stream || !enabled) {
+            setLevel(0);
+            return;
+        }
+
+        let audioContext: AudioContext | null = null;
+        let source: MediaStreamAudioSourceNode | null = null;
+        let analyser: AnalyserNode | null = null;
+        let animationFrameId: number;
+
+        try {
+            audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+            source = audioContext.createMediaStreamSource(stream);
+            analyser = audioContext.createAnalyser();
+            analyser.fftSize = 32;
+            source.connect(analyser);
+
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+            const update = () => {
+                if (!analyser) return;
+                analyser.getByteFrequencyData(dataArray);
+                const sum = dataArray.reduce((acc, val) => acc + val, 0);
+                const avg = sum / dataArray.length;
+                const normalized = Math.min(avg / 90, 1);
+                setLevel(normalized);
+                animationFrameId = requestAnimationFrame(update);
+            };
+
+            update();
+        } catch (e) {
+            console.warn(e);
+        }
+
+        return () => {
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            if (source) source.disconnect();
+            if (analyser) analyser.disconnect();
+            if (audioContext) audioContext.close().catch(() => {});
+        };
+    }, [stream, enabled]);
+
+    return (
+        <div className="flex items-center gap-1 mt-2 bg-black/40 px-3 py-2.5 rounded-xl border border-white/5">
+            <span className="text-[10px] font-bold text-white/40 uppercase tracking-wider w-16">Input Level</span>
+            <div className="flex gap-0.5 flex-1 h-2 items-center">
+                {Array.from({ length: 12 }).map((_, i) => {
+                    const active = level > i / 12;
+                    let dotColor = "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.7)]";
+                    if (i >= 9) dotColor = "bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.7)]";
+                    else if (i >= 6) dotColor = "bg-yellow-500 shadow-[0_0_8px_rgba(245,158,11,0.7)]";
+                    
+                    return (
+                        <div
+                            key={i}
+                            className={clsx(
+                                "flex-1 h-full rounded-full transition-all duration-75",
+                                active ? dotColor : "bg-white/10"
+                            )}
+                        />
+                    );
+                })}
+            </div>
+        </div>
+    );
+};
+
 export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string }) {
     const engine = useMeetingEngine(pendingMeetCode);
     const {
@@ -63,6 +217,7 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
     // ─── Premium Customization State ───
     const [meetingTheme, setMeetingTheme] = useState<MeetingTheme>('classic');
     const [meetingWallpaper, setMeetingWallpaper] = useState<MeetingWallpaper>('classic');
+    const [settingsTab, setSettingsTab] = useState<'audio' | 'video'>('audio');
 
 
     if (!inMeeting) {
@@ -97,6 +252,8 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                                 {previewStream ? (
                                     <>
                                         <video ref={previewVideoRef} autoPlay playsInline muted className="w-full h-full object-cover transform -scale-x-100 absolute inset-0" />
+                                        {/* Premium Live Audio Waveform Visualizer */}
+                                        <PrejoinVisualizer stream={previewStream} audioEnabled={audioEnabled} />
                                         {/* Self label */}
                                         <div className="absolute bottom-3 left-3 md:bottom-4 md:left-4 bg-black/60 px-2.5 py-1 md:px-3 md:py-1.5 rounded-lg md:rounded-xl border border-white/10 z-10 flex items-center gap-1.5 md:gap-2">
                                             <div className="w-2 h-2 rounded-full bg-green-400" />
@@ -118,15 +275,24 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                             <div className="flex items-center justify-center gap-3 p-4 bg-white/5 border-t border-white/5">
                                 <button 
                                     onClick={() => { setAudioEnabled(!audioEnabled); }}
-                                    className={clsx("p-3 rounded-2xl transition-all duration-200", audioEnabled ? "bg-white/10 hover:bg-white/15 text-white" : "bg-red-500/90 text-white")}
+                                    className={clsx("p-3 rounded-2xl transition-all duration-200 hover:scale-105 active:scale-95", audioEnabled ? "bg-white/10 hover:bg-white/15 text-white" : "bg-red-500/90 text-white")}
+                                    title={audioEnabled ? "Mute Microphone" : "Unmute Microphone"}
                                 >
                                     {audioEnabled ? <Mic size={18} /> : <MicOff size={18} />}
                                 </button>
                                 <button 
                                     onClick={() => { setVideoEnabled(!videoEnabled); }}
-                                    className={clsx("p-3 rounded-2xl transition-all duration-200", videoEnabled ? "bg-white/10 hover:bg-white/15 text-white" : "bg-red-500/90 text-white")}
+                                    className={clsx("p-3 rounded-2xl transition-all duration-200 hover:scale-105 active:scale-95", videoEnabled ? "bg-white/10 hover:bg-white/15 text-white" : "bg-red-500/90 text-white")}
+                                    title={videoEnabled ? "Turn Off Camera" : "Turn On Camera"}
                                 >
                                     {videoEnabled ? <Video size={18} /> : <VideoOff size={18} />}
+                                </button>
+                                <button 
+                                    onClick={() => { setShowDeviceSelector(true); }}
+                                    className="p-3 rounded-2xl bg-white/10 hover:bg-white/15 text-white transition-all duration-200 hover:scale-105 active:scale-95"
+                                    title="Device Settings"
+                                >
+                                    <Settings size={18} />
                                 </button>
                             </div>
                         </div>
@@ -205,6 +371,154 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                         </motion.div>
                     )}
                 </div>
+
+                {/* Device Selector Modal for Pre-join Room */}
+                <AnimatePresence>
+                    {showDeviceSelector && (
+                        <>
+                            <motion.div
+                                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                                className="fixed inset-0 z-50 bg-black/50"
+                                onClick={() => setShowDeviceSelector(false)}
+                            />
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                                className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 glass-card p-5 shadow-[0_8px_32px_rgba(0,0,0,0.6)] w-[90%] max-w-md border border-white/10 rounded-3xl"
+                            >
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                                        <Settings size={16} className="text-blue-400 animate-[spin_4s_linear_infinite]" /> Device Settings
+                                    </h3>
+                                    <button onClick={() => setShowDeviceSelector(false)} className="p-1 rounded-lg hover:bg-white/10 text-white/50 hover:text-white transition-colors">
+                                        <X size={16} />
+                                    </button>
+                                </div>
+
+                                {/* Custom premium Tab bar */}
+                                <div className="flex border-b border-white/5 mb-4 gap-2">
+                                    <button
+                                        onClick={() => setSettingsTab('audio')}
+                                        className={clsx(
+                                            "flex-1 pb-2 text-xs font-bold transition-all relative border-b-2",
+                                            settingsTab === 'audio' ? "text-blue-400 border-blue-500" : "text-white/40 border-transparent hover:text-white/60"
+                                        )}
+                                    >
+                                        Audio
+                                    </button>
+                                    <button
+                                        onClick={() => setSettingsTab('video')}
+                                        className={clsx(
+                                            "flex-1 pb-2 text-xs font-bold transition-all relative border-b-2",
+                                            settingsTab === 'video' ? "text-blue-400 border-blue-500" : "text-white/40 border-transparent hover:text-white/60"
+                                        )}
+                                    >
+                                        Video
+                                    </button>
+                                </div>
+
+                                {settingsTab === 'audio' ? (
+                                    <div className="space-y-4">
+                                        {/* Microphone select */}
+                                        <div>
+                                            <label className="text-[10px] font-bold text-white/50 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                                                <Mic size={12} /> Microphone Source
+                                            </label>
+                                            <select
+                                                value={selectedAudioIn}
+                                                onChange={(e) => switchDevice('audio', e.target.value)}
+                                                className="w-full bg-[#161719] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none input-glow transition-all cursor-pointer"
+                                            >
+                                                {availableDevices.audioin.map(d => (
+                                                    <option key={d.deviceId} value={d.deviceId} className="bg-[#1a1b1e]">
+                                                        {d.label || `Microphone ${d.deviceId.slice(0, 8)}`}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        {/* Live input feedback meter */}
+                                        <SettingsMicMeter stream={stream || previewStream} enabled={audioEnabled} />
+
+                                        {/* Noise Suppression Toggle */}
+                                        <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-xl px-3 py-2.5">
+                                            <span className="text-xs text-white font-medium flex items-center gap-2">
+                                                <AlertCircle size={12} className="text-emerald-400" /> Noise Suppression
+                                            </span>
+                                            <button
+                                                onClick={toggleNoiseSuppression}
+                                                className={clsx(
+                                                    "w-10 h-5 rounded-full transition-colors relative",
+                                                    noiseSuppression ? "bg-emerald-500" : "bg-white/20"
+                                                )}
+                                            >
+                                                <div className={clsx(
+                                                    "w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform",
+                                                    noiseSuppression ? "translate-x-5" : "translate-x-0.5"
+                                                )} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {/* Camera select */}
+                                        <div>
+                                            <label className="text-[10px] font-bold text-white/50 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                                                <Video size={12} /> Camera Device
+                                            </label>
+                                            <select
+                                                value={selectedVideoIn}
+                                                onChange={(e) => switchDevice('video', e.target.value)}
+                                                className="w-full bg-[#161719] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none input-glow transition-all cursor-pointer"
+                                            >
+                                                {availableDevices.videoin.map(d => (
+                                                    <option key={d.deviceId} value={d.deviceId} className="bg-[#1a1b1e]">
+                                                        {d.label || `Camera ${d.deviceId.slice(0, 8)}`}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        {/* Video effects settings shortcuts */}
+                                        <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-xl px-3 py-2.5">
+                                            <span className="text-xs text-white font-medium flex items-center gap-2">
+                                                <Sparkles size={12} className="text-purple-400" /> Studio Lighting
+                                            </span>
+                                            <button
+                                                onClick={toggleStudioLighting}
+                                                className={clsx(
+                                                    "w-10 h-5 rounded-full transition-colors relative",
+                                                    studioLighting ? "bg-purple-500" : "bg-white/20"
+                                                )}
+                                            >
+                                                <div className={clsx(
+                                                    "w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform",
+                                                    studioLighting ? "translate-x-5" : "translate-x-0.5"
+                                                )} />
+                                            </button>
+                                        </div>
+                                        
+                                        <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-xl px-3 py-2.5">
+                                            <span className="text-xs text-white font-medium flex items-center gap-2">
+                                                <Sparkles size={12} className="text-blue-400" /> Background Blur
+                                            </span>
+                                            <select
+                                                value={backgroundBlur}
+                                                onChange={(e) => toggleBackgroundBlur(e.target.value as BlurLevel)}
+                                                className="bg-[#1a1b1e] border border-white/10 rounded-lg px-2 py-1 text-xs text-white focus:outline-none"
+                                            >
+                                                <option value="Off">Off</option>
+                                                <option value="Light">Light</option>
+                                                <option value="Heavy">Heavy</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                )}
+                            </motion.div>
+                        </>
+                    )}
+                </AnimatePresence>
             </div>
         );
     }
@@ -306,6 +620,7 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                 
                 {/* Header — extracted to MeetingHeader component */}
                 <MeetingHeader
+                    meetingTheme={meetingTheme}
                     inMeeting={inMeeting}
                     isRecording={isRecording}
                     remotePeersCount={remotePeers.size}
@@ -394,6 +709,7 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
 
                 {/* Controls — extracted to MeetingControls component */}
                 <MeetingControls
+                    meetingTheme={meetingTheme}
                     audioEnabled={audioEnabled}
                     setAudioEnabled={setAudioEnabled}
                     videoEnabled={videoEnabled}
@@ -441,73 +757,136 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                             initial={{ opacity: 0, scale: 0.9, y: 20 }}
                             animate={{ opacity: 1, scale: 1, y: 0 }}
                             exit={{ opacity: 0, scale: 0.9, y: 20 }}
-                            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 glass-card p-5 shadow-elevation-3 w-[90%] max-w-md"
+                            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 glass-card p-5 shadow-[0_8px_32px_rgba(0,0,0,0.6)] w-[90%] max-w-md border border-white/10 rounded-3xl"
                         >
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                                    <Settings size={16} className="text-blue-400" /> Device Settings
+                                    <Settings size={16} className="text-blue-400 animate-[spin_4s_linear_infinite]" /> Device Settings
                                 </h3>
                                 <button onClick={() => setShowDeviceSelector(false)} className="p-1 rounded-lg hover:bg-white/10 text-white/50 hover:text-white transition-colors">
                                     <X size={16} />
                                 </button>
                             </div>
 
-                            <div className="space-y-4">
-                                {/* Microphone */}
-                                <div>
-                                    <label className="text-[10px] font-bold text-white/50 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                                        <Mic size={12} /> Microphone
-                                    </label>
-                                    <select
-                                        value={selectedAudioIn}
-                                        onChange={(e) => switchDevice('audio', e.target.value)}
-                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none input-glow transition-all appearance-none cursor-pointer"
-                                    >
-                                        {availableDevices.audioin.map(d => (
-                                            <option key={d.deviceId} value={d.deviceId} className="bg-[#1a1b1e]">
-                                                {d.label || `Microphone ${d.deviceId.slice(0, 8)}`}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                {/* Camera */}
-                                <div>
-                                    <label className="text-[10px] font-bold text-white/50 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
-                                        <Video size={12} /> Camera
-                                    </label>
-                                    <select
-                                        value={selectedVideoIn}
-                                        onChange={(e) => switchDevice('video', e.target.value)}
-                                        className="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none input-glow transition-all appearance-none cursor-pointer"
-                                    >
-                                        {availableDevices.videoin.map(d => (
-                                            <option key={d.deviceId} value={d.deviceId} className="bg-[#1a1b1e]">
-                                                {d.label || `Camera ${d.deviceId.slice(0, 8)}`}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                {/* Noise Suppression Toggle */}
-                                <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-xl px-3 py-2.5">
-                                    <span className="text-xs text-white font-medium flex items-center gap-2">
-                                        <AlertCircle size={12} className="text-emerald-400" /> Noise Suppression
-                                    </span>
-                                    <button
-                                        onClick={toggleNoiseSuppression}
-                                        className={clsx(
-                                            "w-10 h-5 rounded-full transition-colors relative",
-                                            noiseSuppression ? "bg-emerald-500" : "bg-white/20"
-                                        )}
-                                    >
-                                        <div className={clsx(
-                                            "w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform",
-                                            noiseSuppression ? "translate-x-5" : "translate-x-0.5"
-                                        )} />
-                                    </button>
-                                </div>
+                            {/* Custom premium Tab bar */}
+                            <div className="flex border-b border-white/5 mb-4 gap-2">
+                                <button
+                                    onClick={() => setSettingsTab('audio')}
+                                    className={clsx(
+                                        "flex-1 pb-2 text-xs font-bold transition-all relative border-b-2",
+                                        settingsTab === 'audio' ? "text-blue-400 border-blue-500" : "text-white/40 border-transparent hover:text-white/60"
+                                    )}
+                                >
+                                    Audio
+                                </button>
+                                <button
+                                    onClick={() => setSettingsTab('video')}
+                                    className={clsx(
+                                        "flex-1 pb-2 text-xs font-bold transition-all relative border-b-2",
+                                        settingsTab === 'video' ? "text-blue-400 border-blue-500" : "text-white/40 border-transparent hover:text-white/60"
+                                    )}
+                                >
+                                    Video
+                                </button>
                             </div>
+
+                            {settingsTab === 'audio' ? (
+                                <div className="space-y-4">
+                                    {/* Microphone select */}
+                                    <div>
+                                        <label className="text-[10px] font-bold text-white/50 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                                            <Mic size={12} /> Microphone Source
+                                        </label>
+                                        <select
+                                            value={selectedAudioIn}
+                                            onChange={(e) => switchDevice('audio', e.target.value)}
+                                            className="w-full bg-[#161719] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none input-glow transition-all cursor-pointer"
+                                        >
+                                            {availableDevices.audioin.map(d => (
+                                                <option key={d.deviceId} value={d.deviceId} className="bg-[#1a1b1e]">
+                                                    {d.label || `Microphone ${d.deviceId.slice(0, 8)}`}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* Live input feedback meter */}
+                                    <SettingsMicMeter stream={stream || previewStream} enabled={audioEnabled} />
+
+                                    {/* Noise Suppression Toggle */}
+                                    <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-xl px-3 py-2.5">
+                                        <span className="text-xs text-white font-medium flex items-center gap-2">
+                                            <AlertCircle size={12} className="text-emerald-400" /> Noise Suppression
+                                        </span>
+                                        <button
+                                            onClick={toggleNoiseSuppression}
+                                            className={clsx(
+                                                "w-10 h-5 rounded-full transition-colors relative",
+                                                noiseSuppression ? "bg-emerald-500" : "bg-white/20"
+                                            )}
+                                        >
+                                            <div className={clsx(
+                                                "w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform",
+                                                noiseSuppression ? "translate-x-5" : "translate-x-0.5"
+                                            )} />
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {/* Camera select */}
+                                    <div>
+                                        <label className="text-[10px] font-bold text-white/50 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+                                            <Video size={12} /> Camera Device
+                                        </label>
+                                        <select
+                                            value={selectedVideoIn}
+                                            onChange={(e) => switchDevice('video', e.target.value)}
+                                            className="w-full bg-[#161719] border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:outline-none input-glow transition-all cursor-pointer"
+                                        >
+                                            {availableDevices.videoin.map(d => (
+                                                <option key={d.deviceId} value={d.deviceId} className="bg-[#1a1b1e]">
+                                                    {d.label || `Camera ${d.deviceId.slice(0, 8)}`}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* Video effects settings shortcuts */}
+                                    <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-xl px-3 py-2.5">
+                                        <span className="text-xs text-white font-medium flex items-center gap-2">
+                                            <Sparkles size={12} className="text-purple-400" /> Studio Lighting
+                                        </span>
+                                        <button
+                                            onClick={toggleStudioLighting}
+                                            className={clsx(
+                                                "w-10 h-5 rounded-full transition-colors relative",
+                                                studioLighting ? "bg-purple-500" : "bg-white/20"
+                                            )}
+                                        >
+                                            <div className={clsx(
+                                                "w-4 h-4 bg-white rounded-full absolute top-0.5 transition-transform",
+                                                studioLighting ? "translate-x-5" : "translate-x-0.5"
+                                            )} />
+                                        </button>
+                                    </div>
+                                    
+                                    <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-xl px-3 py-2.5">
+                                        <span className="text-xs text-white font-medium flex items-center gap-2">
+                                            <Sparkles size={12} className="text-blue-400" /> Background Blur
+                                        </span>
+                                        <select
+                                            value={backgroundBlur}
+                                            onChange={(e) => toggleBackgroundBlur(e.target.value as BlurLevel)}
+                                            className="bg-[#1a1b1e] border border-white/10 rounded-lg px-2 py-1 text-xs text-white focus:outline-none"
+                                        >
+                                            <option value="Off">Off</option>
+                                            <option value="Light">Light</option>
+                                            <option value="Heavy">Heavy</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            )}
                         </motion.div>
                     </>
                 )}

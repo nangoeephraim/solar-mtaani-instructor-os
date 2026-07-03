@@ -64,6 +64,7 @@ const LocalTile: React.FC<{
     lowLightMode, studioLighting, isSpotlight, themeRgb
 }) => {
     const voiceRingRef = useRef<HTMLDivElement>(null);
+    const voiceRingOuterRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -71,6 +72,10 @@ const LocalTile: React.FC<{
             if (voiceRingRef.current) {
                 voiceRingRef.current.style.transform = 'scale(1)';
                 voiceRingRef.current.style.opacity = '0';
+            }
+            if (voiceRingOuterRef.current) {
+                voiceRingOuterRef.current.style.transform = 'scale(1)';
+                voiceRingOuterRef.current.style.opacity = '0';
             }
             if (containerRef.current) {
                 containerRef.current.style.borderColor = 'rgba(255,255,255,0.05)';
@@ -105,8 +110,12 @@ const LocalTile: React.FC<{
 
                 // Throttled UI manipulation directly via Ref for 60fps responsiveness
                 if (voiceRingRef.current) {
-                    voiceRingRef.current.style.transform = `scale(${1 + level * 0.25})`;
-                    voiceRingRef.current.style.opacity = level > 0.05 ? '0.85' : '0';
+                    voiceRingRef.current.style.transform = `scale(${1 + level * 0.15})`;
+                    voiceRingRef.current.style.opacity = level > 0.05 ? '0.9' : '0';
+                }
+                if (voiceRingOuterRef.current) {
+                    voiceRingOuterRef.current.style.transform = `scale(${1 + level * 0.38})`;
+                    voiceRingOuterRef.current.style.opacity = level > 0.05 ? `${0.85 - level * 0.45}` : '0';
                 }
 
                 if (containerRef.current) {
@@ -171,7 +180,13 @@ const LocalTile: React.FC<{
             <div 
                 ref={voiceRingRef}
                 className="absolute inset-0 rounded-2xl md:rounded-3xl pointer-events-none opacity-0 scale-100 transition-opacity duration-150 z-10"
-                style={{ border: `2px solid rgba(${themeRgb},0.4)` }}
+                style={{ border: `2px solid rgba(${themeRgb},0.45)` }}
+            />
+            {/* Outer wave propagation ring */}
+            <div 
+                ref={voiceRingOuterRef}
+                className="absolute -inset-1 rounded-3xl pointer-events-none opacity-0 scale-100 transition-opacity duration-150 z-0"
+                style={{ border: `1.5px dashed rgba(${themeRgb},0.25)` }}
             />
 
             {/* Avatar Placeholder (displayed when video is disabled) */}
@@ -269,18 +284,26 @@ const RemoteTile: React.FC<{
     activeSpeaker: string | null;
     isSpotlight: boolean;
     themeRgb: string;
-}> = React.memo(({ peer, setActiveSpeaker, activeSpeaker, isSpotlight, themeRgb }) => {
+    level?: number;
+}> = React.memo(({ peer, setActiveSpeaker, activeSpeaker, isSpotlight, themeRgb, level = 0 }) => {
     const voiceRingRef = useRef<HTMLDivElement>(null);
+    const voiceRingOuterRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
 
     const isConnecting = peer.pc?.connectionState === 'new' || peer.pc?.connectionState === 'connecting';
     const isSpeaking = activeSpeaker === peer.odei;
 
     useEffect(() => {
+        const currentLevel = level;
+        
         if (!peer.audioEnabled || !peer.stream || isConnecting) {
             if (voiceRingRef.current) {
                 voiceRingRef.current.style.transform = 'scale(1)';
                 voiceRingRef.current.style.opacity = '0';
+            }
+            if (voiceRingOuterRef.current) {
+                voiceRingOuterRef.current.style.transform = 'scale(1)';
+                voiceRingOuterRef.current.style.opacity = '0';
             }
             if (containerRef.current) {
                 containerRef.current.style.borderColor = 'rgba(255,255,255,0.05)';
@@ -289,74 +312,26 @@ const RemoteTile: React.FC<{
             return;
         }
 
-        const audioCtx = getSharedAudioContext();
-        if (!audioCtx) return;
-
-        let source: MediaStreamAudioSourceNode | null = null;
-        let analyser: AnalyserNode | null = null;
-        let animId: number = 0;
-
-        try {
-            source = audioCtx.createMediaStreamSource(peer.stream);
-            analyser = audioCtx.createAnalyser();
-            analyser.fftSize = 64;
-            analyser.smoothingTimeConstant = 0.6;
-            source.connect(analyser);
-
-            const dataArr = new Uint8Array(analyser.frequencyBinCount);
-            let speakFrames = 0;
-            let silenceFrames = 0;
-
-            const tick = () => {
-                if (!analyser) return;
-                analyser.getByteFrequencyData(dataArr);
-                const avg = dataArr.reduce((a, b) => a + b, 0) / dataArr.length;
-                const level = Math.min(avg / 80, 1);
-
-                // Direct style mutations for high frame-rate rendering
-                if (voiceRingRef.current) {
-                    voiceRingRef.current.style.transform = `scale(${1 + level * 0.25})`;
-                    voiceRingRef.current.style.opacity = level > 0.05 ? '0.85' : '0';
-                }
-
-                if (containerRef.current) {
-                    if (level > 0.05) {
-                        containerRef.current.style.borderColor = `rgba(${themeRgb},${0.2 + level * 0.6})`;
-                        containerRef.current.style.boxShadow = `0 0 ${15 + level * 25}px rgba(${themeRgb},${0.1 + level * 0.3})`;
-                    } else {
-                        containerRef.current.style.borderColor = activeSpeaker === peer.odei ? `rgba(${themeRgb},0.5)` : 'rgba(255,255,255,0.05)';
-                        containerRef.current.style.boxShadow = activeSpeaker === peer.odei ? `0 0 15px rgba(${themeRgb},0.15)` : 'none';
-                    }
-                }
-
-                // Debounced active speaker switcher logic
-                if (level > 0.08) {
-                    silenceFrames = 0;
-                    speakFrames++;
-                    if (speakFrames > 8) {
-                        setActiveSpeaker(prev => (prev === peer.odei ? prev : peer.odei));
-                    }
-                } else {
-                    speakFrames = 0;
-                    silenceFrames++;
-                    if (silenceFrames > 60) {
-                        setActiveSpeaker(prev => (prev === peer.odei ? null : prev));
-                    }
-                }
-
-                animId = requestAnimationFrame(tick);
-            };
-
-            tick();
-        } catch (err) {
-            console.warn(`[Audio] Remote tile analysis error for ${peer.userName}:`, err);
+        // Direct style mutations for high frame-rate rendering based on passed level
+        if (voiceRingRef.current) {
+            voiceRingRef.current.style.transform = `scale(${1 + currentLevel * 0.15})`;
+            voiceRingRef.current.style.opacity = currentLevel > 0.05 ? '0.9' : '0';
+        }
+        if (voiceRingOuterRef.current) {
+            voiceRingOuterRef.current.style.transform = `scale(${1 + currentLevel * 0.38})`;
+            voiceRingOuterRef.current.style.opacity = currentLevel > 0.05 ? `${0.85 - currentLevel * 0.45}` : '0';
         }
 
-        return () => {
-            if (animId) cancelAnimationFrame(animId);
-            if (source) source.disconnect();
-        };
-    }, [peer.audioEnabled, peer.stream, peer.odei, activeSpeaker, setActiveSpeaker, isConnecting, themeRgb]);
+        if (containerRef.current) {
+            if (currentLevel > 0.05) {
+                containerRef.current.style.borderColor = `rgba(${themeRgb},${0.2 + currentLevel * 0.6})`;
+                containerRef.current.style.boxShadow = `0 0 ${15 + currentLevel * 25}px rgba(${themeRgb},${0.1 + currentLevel * 0.3})`;
+            } else {
+                containerRef.current.style.borderColor = activeSpeaker === peer.odei ? `rgba(${themeRgb},0.5)` : 'rgba(255,255,255,0.05)';
+                containerRef.current.style.boxShadow = activeSpeaker === peer.odei ? `0 0 15px rgba(${themeRgb},0.15)` : 'none';
+            }
+        }
+    }, [peer.audioEnabled, peer.stream, peer.odei, activeSpeaker, isConnecting, themeRgb, level]);
 
     return (
         <motion.div 
@@ -378,7 +353,13 @@ const RemoteTile: React.FC<{
             <div 
                 ref={voiceRingRef}
                 className="absolute inset-0 rounded-2xl md:rounded-3xl pointer-events-none opacity-0 scale-100 transition-opacity duration-150 z-10"
-                style={{ border: `2px solid rgba(${themeRgb},0.4)` }}
+                style={{ border: `2px solid rgba(${themeRgb},0.45)` }}
+            />
+            {/* Outer wave propagation ring */}
+            <div 
+                ref={voiceRingOuterRef}
+                className="absolute -inset-1 rounded-3xl pointer-events-none opacity-0 scale-100 transition-opacity duration-150 z-0"
+                style={{ border: `1.5px dashed rgba(${themeRgb},0.25)` }}
             />
 
             {/* Connecting Shimmer View */}
@@ -425,7 +406,7 @@ const RemoteTile: React.FC<{
                 <video 
                     autoPlay playsInline 
                     className={clsx(
-                        "w-full h-full object-cover transform -scale-x-100 transition-opacity duration-300 absolute inset-0 z-0",
+                        "w-full h-full object-cover transition-opacity duration-300 absolute inset-0 z-0",
                         (!peer.videoEnabled || isConnecting) ? "opacity-0 pointer-events-none" : "opacity-100"
                     )}
                     ref={el => { if (el && el.srcObject !== peer.stream) el.srcObject = peer.stream; }}
@@ -467,7 +448,7 @@ RemoteTile.displayName = 'RemoteTile';
 const MeetingGrid: React.FC<MeetingGridProps> = ({
     userName, userAvatar, videoEnabled, audioEnabled, audioLevel,
     videoRef, screenRef, localStream, setActiveSpeaker, screenShared,
-    handRaised, activeSpeaker, remotePeers, selectedBg, backgroundBlur,
+    handRaised, activeSpeaker, remotePeers, remoteAudioLevels, selectedBg, backgroundBlur,
     lowLightMode, studioLighting, meetingTheme
 }) => {
     const peersList = Array.from(remotePeers.values());
@@ -556,6 +537,7 @@ const MeetingGrid: React.FC<MeetingGridProps> = ({
                                 activeSpeaker={activeSpeaker}
                                 isSpotlight={true}
                                 themeRgb={themeRgb}
+                                level={remoteAudioLevels.get(peer.odei) || 0}
                             />
                         ))}
                     </div>
@@ -586,6 +568,7 @@ const MeetingGrid: React.FC<MeetingGridProps> = ({
                                 activeSpeaker={activeSpeaker}
                                 isSpotlight={false}
                                 themeRgb={themeRgb}
+                                level={remoteAudioLevels.get(peer.odei) || 0}
                             />
                         ))}
                     </>
