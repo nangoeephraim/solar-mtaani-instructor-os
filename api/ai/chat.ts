@@ -113,6 +113,28 @@ function shouldUseLiveContext(userText: string): boolean {
   return liveDataPattern.test(text) || actionPattern.test(text);
 }
 
+function isStreamErrorChunk(chunk: any): boolean {
+  if (typeof chunk !== 'string') return false;
+  const trimmed = chunk.trim();
+  
+  // 1. Data Stream Protocol Error Code 3
+  if (trimmed.startsWith('3:')) return true;
+  
+  // 2. Finish event indicating error
+  if (trimmed.startsWith('e:') && (trimmed.includes('"error"') || trimmed.includes('"finishReason":"error"'))) return true;
+  
+  // 3. Raw JSON errors or raw error strings that are not valid content (not starting with 0:, 1:, 2:, etc.)
+  const isContentProtocol = /^[012456789a-z]:/.test(trimmed);
+  if (!isContentProtocol) {
+    const lower = trimmed.toLowerCase();
+    if (lower.includes('error') || lower.includes('rate limit') || lower.includes('quota') || lower.includes('forbidden') || lower.includes('unauthorized') || lower.includes('insufficient')) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
 function getCachedProvider(): AIProviderType | null {
   if (!cachedHealthyProvider) return null;
   if (Date.now() > cachedHealthyProviderExpiresAt) {
@@ -1465,6 +1487,12 @@ export default async function handler(req: Request) {
                 isDone = true;
                 break;
               }
+              
+              // Inspect the chunk for streamed protocol or API errors
+              if (isStreamErrorChunk(value)) {
+                throw new Error(`Stream error chunk received: ${value}`);
+              }
+
               bufferedChunks.push(value);
               // Read up to 2 chunks to bypass initial setup/metadata frames and verify API request resolution
               if (bufferedChunks.length >= 2) {
