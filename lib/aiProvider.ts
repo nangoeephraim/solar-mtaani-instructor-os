@@ -57,8 +57,8 @@ export async function getAIProviderConfig(client?: SupabaseClient): Promise<AIPr
     if (envKey) return { provider: dbProvider, apiKey: envKey };
   }
 
-  // Fallback Priority Sequence: Groq -> Cerebras -> OpenRouter -> Google
-  const fallbackOrder: AIProviderType[] = ['groq', 'cerebras', 'openrouter', 'google'];
+  // Fallback Priority Sequence: Cerebras -> Groq -> OpenRouter -> Google
+  const fallbackOrder: AIProviderType[] = ['cerebras', 'groq', 'openrouter', 'google'];
   for (const p of fallbackOrder) {
     const envKey = normalizeApiKey(process.env[PROVIDER_ENV_MAP[p]]);
     if (envKey) return { provider: p, apiKey: envKey };
@@ -108,7 +108,7 @@ export async function getPrioritizedProviderConfigs(client?: SupabaseClient): Pr
   let startingProvider = dbProvider;
   if (!startingProvider) {
     // If no active provider set in DB, find the first fallback in order that has a key
-    const fallbackOrder: AIProviderType[] = ['groq', 'cerebras', 'openrouter', 'google'];
+    const fallbackOrder: AIProviderType[] = ['cerebras', 'groq', 'openrouter', 'google'];
     for (const p of fallbackOrder) {
       if (getApiKey(p)) {
         startingProvider = p;
@@ -127,7 +127,7 @@ export async function getPrioritizedProviderConfigs(client?: SupabaseClient): Pr
   });
 
   // Add remaining fallback order
-  const fallbackOrder: AIProviderType[] = ['groq', 'cerebras', 'openrouter', 'google'];
+  const fallbackOrder: AIProviderType[] = ['cerebras', 'groq', 'openrouter', 'google'];
   for (const p of fallbackOrder) {
     if (p !== startingProvider) {
       const key = getApiKey(p);

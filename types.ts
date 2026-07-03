@@ -184,10 +184,15 @@ export interface LibraryResource {
   fileType: string;
   category: 'lesson-plan' | 'session-plan' | 'guide' | 'notes' | 'report' | 'question-paper' | 'other';
   uploadedBy: string;
+  uploadedById?: string; // UUID from profiles
   uploadedAt: string; // ISO String
   size: number;
   isApproved: boolean;
   downloadUrl?: string; // Cloud Storage URL
+  description?: string; // Short synopsis of file content
+  downloadsCount?: number; // Popularity tracker
+  tags?: string[]; // Taxonomy keywords
+  academicTerm?: 1 | 2 | 3; // Associated academic term
 }
 
 export interface ResourceUsageLog {

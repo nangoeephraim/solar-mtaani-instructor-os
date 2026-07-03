@@ -98,10 +98,15 @@ export const fetchAppData = async (): Promise<AppData> => {
         fileType: item.file_type,
         category: item.category,
         uploadedBy: item.uploaded_by,
+        uploadedById: item.uploaded_by_id,
         uploadedAt: item.uploaded_at,
         size: item.size,
         isApproved: item.is_approved,
-        downloadUrl: item.download_url
+        downloadUrl: item.download_url,
+        description: item.description,
+        downloadsCount: item.downloads_count,
+        tags: item.tags,
+        academicTerm: item.academic_term
       })),
       communications: {
         channels: (channels || []).map((ch: any) => ({
@@ -767,9 +772,14 @@ export const addLibraryResource = async (resource: Omit<LibraryResource, 'id'>):
     file_type: resource.fileType || 'application/octet-stream',
     category: resource.category,
     uploaded_by: resource.uploadedBy,
+    uploaded_by_id: resource.uploadedById,
     size: resource.size,
     is_approved: resource.isApproved,
-    download_url: resource.downloadUrl
+    download_url: resource.downloadUrl,
+    description: resource.description,
+    tags: resource.tags || [],
+    academic_term: resource.academicTerm,
+    downloads_count: resource.downloadsCount || 0
   }).select().single();
 
   if (error) {
@@ -784,17 +794,26 @@ export const addLibraryResource = async (resource: Omit<LibraryResource, 'id'>):
     fileType: data.file_type,
     category: data.category,
     uploadedBy: data.uploaded_by,
+    uploadedById: data.uploaded_by_id,
     uploadedAt: data.uploaded_at,
     size: data.size,
     isApproved: data.is_approved,
-    downloadUrl: data.download_url
+    downloadUrl: data.download_url,
+    description: data.description,
+    downloadsCount: data.downloads_count,
+    tags: data.tags,
+    academicTerm: data.academic_term
   } as LibraryResource;
 };
 
 export const updateLibraryResource = async (dataState: AppData, resource: LibraryResource): Promise<AppData> => {
   const { error } = await supabase.from('library_resources').update({
     title: resource.title,
-    is_approved: resource.isApproved
+    is_approved: resource.isApproved,
+    description: resource.description,
+    category: resource.category,
+    tags: resource.tags || [],
+    academic_term: resource.academicTerm
   }).eq('id', resource.id);
 
   if (error) {
@@ -812,6 +831,20 @@ export const deleteLibraryResource = async (id: string): Promise<boolean> => {
   const { error } = await supabase.from('library_resources').delete().eq('id', id);
   if (error) {
     console.error("Error deleting library resource:", error);
+    return false;
+  }
+  return true;
+};
+
+export const incrementLibraryDownloadCount = async (id: string): Promise<boolean> => {
+  const { error } = await supabase.rpc('increment_library_download', { resource_id: id });
+  if (error) {
+    console.error("Error incrementing download count via RPC:", error);
+    // Fallback direct update
+    const { data: current } = await supabase.from('library_resources').select('downloads_count').eq('id', id).single();
+    if (current) {
+      await supabase.from('library_resources').update({ downloads_count: (current.downloads_count || 0) + 1 }).eq('id', id);
+    }
     return false;
   }
   return true;
