@@ -130,29 +130,11 @@ function isStreamErrorChunk(chunk: any): boolean {
     return false;
   }
 
-  // If it is an array of messages or other objects (UIMessage[] format from toUIMessageStream)
-  if (Array.isArray(chunk)) {
-    return chunk.some(item => {
-      if (!item) return false;
-      // Check if it represents a data error
-      if (item.role === 'data' && item.data && (item.data.error || String(item.data.message || '').toLowerCase().includes('error'))) return true;
-      // Or if the content contains a raw rate limit error string
-      if (typeof item.content === 'string') {
-        const lower = item.content.toLowerCase();
-        if (lower.includes('rate limit') || lower.includes('tpd') || lower.includes('limit reached') || lower.includes('quota exceeded')) return true;
-      }
-      return false;
-    });
-  }
-
-  // If it is a raw JSON error object
+  // If it is a structural message chunk object (AI SDK UIMessageChunk)
   if (typeof chunk === 'object') {
-    try {
-      const str = JSON.stringify(chunk).toLowerCase();
-      if (str.includes('error') || str.includes('rate limit') || str.includes('quota') || str.includes('insufficient') || str.includes('limit reached')) return true;
-    } catch {
-      // Ignore serialization errors
-    }
+    if (chunk.type === 'error') return true;
+    if (chunk.error || chunk.errorText) return true;
+    if (chunk.role === 'data' && chunk.data && (chunk.data.error || chunk.data.status === 'error')) return true;
   }
 
   return false;
@@ -165,15 +147,14 @@ function hasTextOrToolContent(chunk: any): boolean {
     return chunk.includes('0:"') || chunk.includes('1:') || chunk.includes('9:');
   }
 
-  if (Array.isArray(chunk)) {
-    return chunk.some(msg => {
-      if (!msg) return false;
-      if (msg.role === 'assistant') {
-        if (typeof msg.content === 'string' && msg.content.trim().length > 0) return true;
-        if (msg.toolInvocations && msg.toolInvocations.length > 0) return true;
-      }
-      return false;
-    });
+  if (typeof chunk === 'object') {
+    if (chunk.type === 'text-delta' || chunk.type === 'tool-call') return true;
+    
+    // Support message object format
+    if (chunk.role === 'assistant') {
+      if (typeof chunk.content === 'string' && chunk.content.trim().length > 0) return true;
+      if (chunk.toolInvocations && chunk.toolInvocations.length > 0) return true;
+    }
   }
 
   return false;
