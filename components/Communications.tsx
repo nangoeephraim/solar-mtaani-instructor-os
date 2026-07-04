@@ -313,32 +313,64 @@ const MessageGroupRenderer = React.memo(({
                             let baseClass = "";
                             let inlineStyle: React.CSSProperties = {};
 
-                            if (!isMyMsg) {
-                                // Frosted glass layout for incoming messages to ensure perfect contrast and legibility
-                                baseClass = `rounded-r-2xl text-slate-800 dark:text-slate-100 bg-white/90 dark:bg-slate-900/75 border border-slate-200/60 dark:border-white/[0.06] backdrop-blur-md shadow-[0_2px_8px_rgba(0,0,0,0.04)] ${isFirst ? 'rounded-tl-2xl' : 'rounded-tl-md'} ${isLast ? 'rounded-bl-2xl' : 'rounded-bl-md'}`;
+                            const cornerClasses = isMyMsg
+                                ? `${isFirst ? 'rounded-tr-2xl' : 'rounded-tr-md'} ${isLast ? 'rounded-br-2xl' : 'rounded-br-md'} rounded-l-2xl`
+                                : `rounded-r-2xl ${isFirst ? 'rounded-tl-2xl' : 'rounded-tl-md'} ${isLast ? 'rounded-bl-2xl' : 'rounded-bl-md'}`;
+
+                            if (chatWallpaper === 'mesh') {
+                                if (!isMyMsg) {
+                                    // Ultra frosted glass for incoming messages
+                                    baseClass = `bg-slate-900/5 dark:bg-white/[0.03] border border-slate-950/10 dark:border-white/10 text-slate-800 dark:text-slate-100 backdrop-blur-xl shadow-sm ${cornerClasses}`;
+                                } else {
+                                    // Custom glass tints for outgoing messages
+                                    switch (chatBubbleTheme) {
+                                        case 'lavender':
+                                            baseClass = `bg-indigo-600/10 dark:bg-indigo-500/15 border-indigo-600/20 dark:border-indigo-400/25 text-indigo-950 dark:text-indigo-200 backdrop-blur-xl ${cornerClasses}`;
+                                            break;
+                                        case 'rose':
+                                            baseClass = `bg-rose-600/10 dark:bg-rose-500/15 border-rose-600/20 dark:border-rose-400/25 text-rose-950 dark:text-rose-200 backdrop-blur-xl ${cornerClasses}`;
+                                            break;
+                                        case 'ocean':
+                                            baseClass = `bg-sky-600/10 dark:bg-sky-500/15 border-sky-600/20 dark:border-sky-400/25 text-sky-950 dark:text-sky-200 backdrop-blur-xl ${cornerClasses}`;
+                                            break;
+                                        case 'emerald':
+                                            baseClass = `bg-emerald-600/10 dark:bg-emerald-500/15 border-emerald-600/20 dark:border-emerald-400/25 text-emerald-950 dark:text-emerald-200 backdrop-blur-xl ${cornerClasses}`;
+                                            break;
+                                        case 'amethyst':
+                                            baseClass = `bg-purple-600/10 dark:bg-purple-500/15 border-purple-600/20 dark:border-purple-400/25 text-purple-950 dark:text-purple-200 backdrop-blur-xl ${cornerClasses}`;
+                                            break;
+                                        case 'default':
+                                        default:
+                                            baseClass = `bg-indigo-600/10 dark:bg-indigo-500/15 border-indigo-600/20 dark:border-indigo-400/25 text-indigo-950 dark:text-indigo-200 backdrop-blur-xl ${cornerClasses}`;
+                                            break;
+                                    }
+                                }
                             } else {
-                                // High-contrast gradient layout for own outgoing messages
-                                const cornerClasses = `${isFirst ? 'rounded-tr-2xl' : 'rounded-tr-md'} ${isLast ? 'rounded-br-2xl' : 'rounded-br-md'} rounded-l-2xl border border-white/10`;
-                                switch (chatBubbleTheme) {
-                                    case 'lavender':
-                                        baseClass = `bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 text-white shadow-[0_3px_12px_rgba(99,102,241,0.25)] ${cornerClasses}`;
-                                        break;
-                                    case 'rose':
-                                        baseClass = `bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 text-white shadow-[0_3px_12px_rgba(244,63,94,0.25)] ${cornerClasses}`;
-                                        break;
-                                    case 'ocean':
-                                        baseClass = `bg-gradient-to-tr from-sky-600 via-sky-500 to-cyan-500 text-white shadow-[0_3px_12px_rgba(14,165,233,0.25)] ${cornerClasses}`;
-                                        break;
-                                    case 'emerald':
-                                        baseClass = `bg-gradient-to-tr from-emerald-600 via-emerald-500 to-teal-500 text-white shadow-[0_3px_12px_rgba(16,185,129,0.25)] ${cornerClasses}`;
-                                        break;
-                                    case 'amethyst':
-                                        baseClass = `bg-gradient-to-tr from-purple-600 via-purple-500 to-fuchsia-500 text-white shadow-[0_3px_12px_rgba(168,85,247,0.25)] ${cornerClasses}`;
-                                        break;
-                                    case 'default':
-                                    default:
-                                        baseClass = `bg-gradient-to-tr from-[var(--md-sys-color-primary)] to-indigo-600/90 text-white shadow-[0_3px_12px_rgba(99,102,241,0.2)] ${cornerClasses}`;
-                                        break;
+                                // Default wallpapers fallback to original styles
+                                if (!isMyMsg) {
+                                    baseClass = `text-slate-800 dark:text-slate-100 bg-white/95 dark:bg-slate-900/80 border border-slate-200/80 dark:border-white/[0.08] shadow-[0_2px_8px_rgba(0,0,0,0.04)] ${cornerClasses}`;
+                                } else {
+                                    switch (chatBubbleTheme) {
+                                        case 'lavender':
+                                            baseClass = `bg-gradient-to-tr from-indigo-600 via-indigo-500 to-violet-500 text-white shadow-[0_3px_12px_rgba(99,102,241,0.25)] border border-indigo-500/10 ${cornerClasses}`;
+                                            break;
+                                        case 'rose':
+                                            baseClass = `bg-gradient-to-tr from-rose-600 via-rose-500 to-pink-500 text-white shadow-[0_3px_12px_rgba(244,63,94,0.25)] border border-rose-500/10 ${cornerClasses}`;
+                                            break;
+                                        case 'ocean':
+                                            baseClass = `bg-gradient-to-tr from-sky-600 via-sky-500 to-cyan-500 text-white shadow-[0_3px_12px_rgba(14,165,233,0.25)] border border-sky-500/10 ${cornerClasses}`;
+                                            break;
+                                        case 'emerald':
+                                            baseClass = `bg-gradient-to-tr from-emerald-600 via-emerald-500 to-teal-500 text-white shadow-[0_3px_12px_rgba(16,185,129,0.25)] border border-emerald-500/10 ${cornerClasses}`;
+                                            break;
+                                        case 'amethyst':
+                                            baseClass = `bg-gradient-to-tr from-purple-600 via-purple-500 to-fuchsia-500 text-white shadow-[0_3px_12px_rgba(168,85,247,0.25)] border border-purple-500/10 ${cornerClasses}`;
+                                            break;
+                                        case 'default':
+                                        default:
+                                            baseClass = `bg-gradient-to-tr from-[var(--md-sys-color-primary)] to-indigo-600/90 text-white shadow-[0_3px_12px_rgba(99,102,241,0.2)] border border-indigo-500/10 ${cornerClasses}`;
+                                            break;
+                                    }
                                 }
                             }
                             return { className: baseClass, style: inlineStyle };
@@ -1788,25 +1820,42 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                 >
                                     <ChevronLeft size={20} />
                                 </button>
-                                <div className="p-1.5 rounded-xl bg-gradient-to-tr from-indigo-500/20 to-purple-500/20 border border-indigo-500/10 text-indigo-600 dark:text-indigo-400">
-                                    {activeChannel.type === 'announcement' ? <Megaphone size={16} /> : activeChannel.type === 'dm' ? <User size={16} /> : <Hash size={16} />}
+                                <div className="p-1.5 rounded-lg border border-slate-950/10 dark:border-white/15 bg-slate-950/5 dark:bg-white/5 text-slate-800 dark:text-slate-100">
+                                    {activeChannel.type === 'announcement' ? <Megaphone size={15} strokeWidth={1.5} /> : activeChannel.type === 'dm' ? <User size={15} strokeWidth={1.5} /> : <Hash size={15} strokeWidth={1.5} />}
                                 </div>
                                 <div>
-                                    <h1 className="font-google font-bold text-sm text-slate-800 dark:text-slate-100">
+                                    <h1 className="font-google font-bold text-sm tracking-wide text-slate-950 dark:text-white">
                                         {activeChannel.type === 'dm' ? getDMPartnerName(activeChannel) : activeChannel.name}
                                     </h1>
                                     {activeChannel.description && <p className="text-[10px] font-medium hidden md:block text-slate-500 dark:text-slate-400">{activeChannel.description}</p>}
                                 </div>
                             </div>
                             <div className="flex items-center gap-1.5">
-                                {pinnedMessages.length > 0 && (
-                                    <button onClick={() => setShowPinnedPanel(!showPinnedPanel)} className={clsx("glass-button px-2.5 py-1.5 text-xs flex items-center gap-1.5 border hover:scale-105 active:scale-95 transition-all rounded-xl", showPinnedPanel ? "bg-gradient-to-tr from-indigo-600 to-violet-600 text-white border-white/20" : "bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/[0.05]")}>
-                                        <Pin size={13} className={clsx(showPinnedPanel ? "text-white" : "text-yellow-500 dark:text-yellow-400")} /><span className="font-bold">{pinnedMessages.length}</span>
-                                    </button>
-                                )}
-                                <button onClick={() => setShowSearch(!showSearch)} title="Search (Ctrl+K)" className={clsx("glass-button p-2 rounded-xl border hover:scale-105 active:scale-95 transition-all", showSearch ? "bg-gradient-to-tr from-indigo-600 to-violet-600 text-white border-white/20" : "bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/[0.05]")}><Search size={15} /></button>
-                                <button onClick={() => setShowInfoDrawer(!showInfoDrawer)} title="Channel info" className={clsx("glass-button p-2 rounded-xl border hover:scale-105 active:scale-95 transition-all", showInfoDrawer ? "bg-gradient-to-tr from-indigo-600 to-violet-600 text-white border-white/20" : "bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/[0.05]")}><Users size={15} /></button>
-                                <button onClick={() => { triggerHaptics('light'); setShowCustomSettings(true); }} title="Chat Customization" className="glass-button p-2 rounded-xl border border-slate-200 dark:border-white/[0.05] bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 hover:text-indigo-600 dark:hover:text-indigo-400 hover:scale-105 active:scale-95 transition-all text-slate-700 dark:text-slate-300"><Settings size={15} /></button>
+                                {(() => {
+                                    const getHeaderBtnClass = (active: boolean) => clsx(
+                                        "p-2 rounded-lg border transition-all duration-300 hover:scale-105 active:scale-95 flex items-center justify-center gap-1.5 text-xs font-bold",
+                                        active
+                                            ? (chatWallpaper === 'mesh'
+                                                ? "bg-slate-950 dark:bg-white text-white dark:text-slate-950 border-transparent shadow-sm"
+                                                : "bg-gradient-to-tr from-indigo-600 to-violet-600 text-white border-white/20")
+                                            : (chatWallpaper === 'mesh'
+                                                ? "bg-slate-950/5 dark:bg-white/5 text-slate-500 dark:text-slate-400 border-slate-950/10 dark:border-white/10 hover:bg-slate-950/10 dark:hover:bg-white/10"
+                                                : "bg-slate-100 dark:bg-white/5 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-white/[0.05]")
+                                    );
+                                    return (
+                                        <>
+                                            {pinnedMessages.length > 0 && (
+                                                <button onClick={() => setShowPinnedPanel(!showPinnedPanel)} className={clsx(getHeaderBtnClass(showPinnedPanel), "px-2.5 py-1.5")}>
+                                                    <Pin size={13} className={clsx(showPinnedPanel ? (chatWallpaper === 'mesh' ? "text-white dark:text-slate-950" : "text-white") : "text-yellow-500 dark:text-yellow-400")} />
+                                                    <span className="font-bold">{pinnedMessages.length}</span>
+                                                </button>
+                                            )}
+                                            <button onClick={() => setShowSearch(!showSearch)} title="Search (Ctrl+K)" className={getHeaderBtnClass(showSearch)}><Search size={15} /></button>
+                                            <button onClick={() => setShowInfoDrawer(!showInfoDrawer)} title="Channel info" className={getHeaderBtnClass(showInfoDrawer)}><Users size={15} /></button>
+                                            <button onClick={() => { triggerHaptics('light'); setShowCustomSettings(true); }} title="Chat Customization" className={getHeaderBtnClass(showCustomSettings)}><Settings size={15} /></button>
+                                        </>
+                                    );
+                                })()}
                             </div>
                         </div>
 
