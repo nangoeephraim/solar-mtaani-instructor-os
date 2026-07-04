@@ -2,6 +2,7 @@ import React, { lazy, Suspense, useState, useEffect, useRef, useMemo, useCallbac
 import { motion, AnimatePresence, useMotionValue, useTransform, animate } from 'framer-motion';
 import { AppData, ChatChannel, ChatMessage, ChatAttachment } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import {
     MessageSquare, Hash, Megaphone, Search, MoreVertical, Paperclip, Send,
     Image as ImageIcon, FileText, Smile, X, Edit2, Pencil, Trash2, Pin, CornerUpLeft,
@@ -140,7 +141,7 @@ const TypingIndicator = ({ typers }: { typers: string[] }) => (
 /* ─── Date Separator ─── */
 const DateSeparator = ({ date }: { date: string }) => (
     <div className="flex items-center justify-center my-6">
-        <div className="bg-[var(--md-sys-color-surface-variant)] text-[var(--md-sys-color-on-surface-variant)] text-[10px] font-bold uppercase tracking-widest px-4 py-1.5 rounded-full z-10">
+        <div className="backdrop-blur-md bg-slate-900/5 dark:bg-white/5 border border-slate-950/5 dark:border-white/5 text-slate-500 dark:text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] px-4 py-1.5 rounded-full z-10 shadow-sm">
             {formatDateSeparator(date)}
         </div>
     </div>
@@ -550,6 +551,7 @@ interface CommunicationsProps {
 
 export default function Communications({ data, onUpdateAppData, onNavigate, pendingMeetCode }: CommunicationsProps) {
     const { user } = useAuth();
+    const { preferences } = useTheme();
     // Derive userId immediately so all effects below can reference it safely
     const userId = user?.id || '';
     const { showToast } = useToast();
@@ -872,7 +874,9 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
 
     // Android customizable chat preferences
     const [chatWallpaper, setChatWallpaper] = useState<'default' | 'midnight' | 'sunset' | 'emerald' | 'doodle' | 'mesh'>(() => {
-        return (localStorage.getItem('prism_chat_wallpaper') as any) || 'mesh';
+        const saved = localStorage.getItem('prism_chat_wallpaper');
+        if (!saved || saved === 'default') return 'mesh'; // Force 'mesh' as the premium default theme
+        return saved as any;
     });
     const [enterIsSend, setEnterIsSend] = useState<boolean>(() => {
         return localStorage.getItem('prism_enter_is_send') !== 'false';
@@ -958,17 +962,21 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                     backgroundImage: 'radial-gradient(var(--md-sys-color-outline-variant) 1px, transparent 0px)',
                     backgroundSize: '24px 24px',
                 };
-            case 'mesh':
+            case 'mesh': {
+                const isDark = document.documentElement.classList.contains('dark');
                 return {
-                    background: 'transparent',
+                    background: isDark
+                        ? 'radial-gradient(circle at 50% 50%, #0d0e15 0%, #020306 100%)' // Rich dark space
+                        : 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',           // Pristine light gray
                 };
+            }
             case 'default':
             default:
                 return {
                     background: 'var(--md-sys-color-background)',
                 };
         }
-    }, [chatWallpaper]);
+    }, [chatWallpaper, preferences]);
 
     // Native app-back-button listener coordinator
     useEffect(() => {
@@ -2227,7 +2235,14 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                                          triggerHaptics('light');
                                                          setShowAiInputMenu(prev => !prev);
                                                      }} 
-                                                     className={clsx("p-2 rounded-xl transition-all flex items-center justify-center", showAiInputMenu ? "bg-indigo-500/20 text-indigo-400 border border-indigo-500/30" : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 animate-pulse")} 
+                                                     className={clsx(
+                                                         "p-2 rounded-xl transition-all flex items-center justify-center", 
+                                                         showAiInputMenu 
+                                                             ? "bg-indigo-500/20 text-indigo-400 border border-indigo-500/30" 
+                                                             : (chatWallpaper === 'mesh'
+                                                                 ? "bg-white/5 hover:bg-white/10 text-slate-400 dark:text-slate-350 border border-slate-200/10 dark:border-white/5"
+                                                                 : "bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400")
+                                                     )} 
                                                      title="AI Chat Assist Options"
                                                  >
                                                      {aiAssistLoading ? (
@@ -2292,15 +2307,36 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                              {isRecording ? (
                                                  <>
                                                      <button type="button" onClick={() => stopRecording(true)} className="p-2 text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"><Trash2 size={18} /></button>
-                                                     <button type="button" onClick={() => stopRecording(false)} className="bg-gradient-to-tr from-indigo-500 to-purple-600 text-white w-9 h-9 flex items-center justify-center rounded-xl hover:scale-105 active:scale-95 transition-all shadow-[0_4px_12px_rgba(99,102,241,0.3)]"><Send size={15} className="ml-0.5" /></button>
+                                                     <button 
+                                                         type="button" 
+                                                         onClick={() => stopRecording(false)} 
+                                                         className={clsx(
+                                                             "w-9 h-9 flex items-center justify-center rounded-full hover:scale-105 active:scale-95 transition-all shadow-sm",
+                                                             chatWallpaper === 'mesh'
+                                                                 ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900"
+                                                                 : "bg-gradient-to-tr from-indigo-500 to-purple-600 text-white"
+                                                         )}
+                                                     >
+                                                         <Send size={15} className="ml-0.5" />
+                                                     </button>
                                                  </>
                                              ) : (
-                                                 <button type="button" onClick={e => {
-                                                     if (!messageInput.trim() && pendingAttachments.length === 0) { startRecording(); }
-                                                     else { handleSendMessage(e as any); }
-                                                 }} disabled={isUploadingAttachment} className="bg-gradient-to-tr from-indigo-500 to-purple-600 text-white w-9 h-9 flex items-center justify-center rounded-xl disabled:opacity-40 hover:scale-108 active:scale-95 transition-all shadow-[0_4px_12px_rgba(99,102,241,0.3)] disabled:hover:scale-100">
+                                                 <button 
+                                                     type="button" 
+                                                     onClick={e => {
+                                                         if (!messageInput.trim() && pendingAttachments.length === 0) { startRecording(); }
+                                                         else { handleSendMessage(e as any); }
+                                                     }} 
+                                                     disabled={isUploadingAttachment} 
+                                                     className={clsx(
+                                                         "w-9 h-9 flex items-center justify-center rounded-full disabled:opacity-40 hover:scale-108 active:scale-95 transition-all",
+                                                         chatWallpaper === 'mesh'
+                                                             ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-sm"
+                                                             : "bg-gradient-to-tr from-indigo-500 to-purple-600 text-white shadow-[0_4px_12px_rgba(99,102,241,0.3)]"
+                                                     )}
+                                                 >
                                                      {isUploadingAttachment
-                                                         ? <div className="w-4 h-4 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                                                         ? <div className="w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin" />
                                                          : (!messageInput.trim() && pendingAttachments.length === 0) ? <Mic size={18} /> : <Send size={15} className="ml-0.5" />}
                                                  </button>
                                              )}

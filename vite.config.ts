@@ -35,6 +35,10 @@ export default defineConfig({
     assetsInlineLimit: 4096
   },
   optimizeDeps: {
-    include: ['react', 'react-dom', 'recharts', 'framer-motion', 'lucide-react', 'clsx', 'date-fns']
+    include: [
+      'react', 'react-dom', 'recharts', 'framer-motion', 'lucide-react', 'clsx', 'date-fns',
+      '@supabase/supabase-js', 'zod', 'jspdf', 'html2canvas', '@dnd-kit/core', '@dnd-kit/modifiers',
+      '@dnd-kit/utilities', 'livekit-client', '@livekit/components-react', 'ai', '@ai-sdk/react'
+    ]
   }
 });
