@@ -1,6 +1,6 @@
 // ─── PRISM Meetings — Header Bar Component ───
 import React from 'react';
-import { Circle, Users, Copy, CheckCircle2, Wifi, WifiOff, AlertCircle, Share2, LayoutGrid, Maximize, Minimize, PictureInPicture2 } from 'lucide-react';
+import { Circle, Users, Copy, CheckCircle2, Wifi, WifiOff, AlertCircle, Share2, LayoutGrid, Maximize, Minimize, PictureInPicture2, Presentation, Sparkles } from 'lucide-react';
 import clsx from 'clsx';
 import MeetingTimer from './MeetingTimer';
 import type { ConnectionQuality, LayoutMode, MeetingTheme } from './types';
@@ -87,13 +87,48 @@ const MeetingHeader = React.memo(({
                 </div>
                 {/* RIGHT: layout + fullscreen + PiP */}
                 <div className="flex items-center gap-1 md:gap-1.5 flex-shrink-0">
-                    <button onClick={togglePiP} className="p-1.5 md:p-2 rounded-lg bg-white/8 hover:bg-white/15 border border-white/10 transition-colors hidden md:flex items-center justify-center text-white/80 hover:text-white" title="Picture-in-Picture">
+                    <button onClick={togglePiP} className="p-1.5 md:p-2 rounded-lg bg-white/8 hover:bg-white/15 border border-white/10 transition-colors hidden md:flex items-center justify-center text-white/80 hover:text-white shadow-sm" title="Picture-in-Picture">
                         <PictureInPicture2 size={14} />
                     </button>
-                    <button onClick={() => setLayout(layout === 'grid' ? 'spotlight' : 'grid')} className="p-1.5 md:p-2 rounded-lg bg-white/8 hover:bg-white/15 border border-white/10 transition-colors flex items-center justify-center text-white/80 hover:text-white" title="Toggle Layout">
-                        <LayoutGrid size={14} />
-                    </button>
-                    <button onClick={toggleFullscreen} className="p-1.5 md:p-2 rounded-lg bg-white/8 hover:bg-white/15 border border-white/10 transition-colors hidden sm:flex items-center justify-center text-white/80 hover:text-white" title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}>
+                    <div className="flex bg-white/5 border border-white/10 rounded-lg p-0.5 items-center gap-0.5">
+                        <button 
+                            onClick={() => setLayout('grid')} 
+                            className={clsx(
+                                "p-1 md:p-1.5 rounded-md transition-colors flex items-center justify-center cursor-pointer",
+                                layout === 'grid' 
+                                    ? "bg-blue-600/30 text-blue-400 border border-blue-500/25" 
+                                    : "text-white/60 hover:text-white hover:bg-white/5"
+                            )} 
+                            title="Grid Layout"
+                        >
+                            <LayoutGrid size={13} />
+                        </button>
+                        <button 
+                            onClick={() => setLayout('spotlight')} 
+                            className={clsx(
+                                "p-1 md:p-1.5 rounded-md transition-colors flex items-center justify-center cursor-pointer",
+                                layout === 'spotlight' 
+                                    ? "bg-blue-600/30 text-blue-400 border border-blue-500/25" 
+                                    : "text-white/60 hover:text-white hover:bg-white/5"
+                            )} 
+                            title="Spotlight Layout"
+                        >
+                            <Presentation size={13} />
+                        </button>
+                        <button 
+                            onClick={() => setLayout('bubbles')} 
+                            className={clsx(
+                                "p-1 md:p-1.5 rounded-md transition-colors flex items-center justify-center cursor-pointer",
+                                layout === 'bubbles' 
+                                    ? "bg-purple-600/30 text-purple-400 border border-purple-500/25" 
+                                    : "text-white/60 hover:text-white hover:bg-white/5"
+                            )} 
+                            title="3D Bubble Universe"
+                        >
+                            <Sparkles size={13} className={layout === 'bubbles' ? 'animate-pulse' : ''} />
+                        </button>
+                    </div>
+                    <button onClick={toggleFullscreen} className="p-1.5 md:p-2 rounded-lg bg-white/8 hover:bg-white/15 border border-white/10 transition-colors hidden sm:flex items-center justify-center text-white/80 hover:text-white shadow-sm" title={isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}>
                         {isFullscreen ? <Minimize size={14} /> : <Maximize size={14} />}
                     </button>
                 </div>

@@ -13,6 +13,7 @@ import MeetingHeader from './meetings/MeetingHeader';
 import MeetingControls from './meetings/MeetingControls';
 import MeetingGrid from './meetings/MeetingGrid';
 import MeetingSidebar from './meetings/MeetingSidebar';
+import BubbleUniverse from './meetings/BubbleUniverse';
 import type {
     MeetingMessage, MeetingFile, FloatingReaction,
     MeetingPoll, MeetingQuestion, RemotePeer,
@@ -217,13 +218,47 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
     // ─── Premium Customization State ───
     const [meetingTheme, setMeetingTheme] = useState<MeetingTheme>('classic');
     const [meetingWallpaper, setMeetingWallpaper] = useState<MeetingWallpaper>('classic');
+
+    // Automatically enable closed captions under the hood in 3D Bubbles layout to display real-time speech wave transcripts
+    useEffect(() => {
+        if (layout === 'bubbles') {
+            setCaptionsEnabled(true);
+        }
+    }, [layout, setCaptionsEnabled]);
     const [settingsTab, setSettingsTab] = useState<'audio' | 'video'>('audio');
+    const [pinnedParticipant, setPinnedParticipant] = useState<string | null>(null);
+    const [selfViewMode, setSelfViewMode] = useState<'grid' | 'minimized' | 'hidden'>('grid');
+
+    const floatingVideoRef = useRef<HTMLVideoElement>(null);
+    useEffect(() => {
+        if (selfViewMode === 'minimized' && floatingVideoRef.current && stream) {
+            floatingVideoRef.current.srcObject = stream;
+        }
+    }, [selfViewMode, stream]);
 
 
     if (!inMeeting) {
         const { greeting, icon } = getTimeGreeting(userName);
         return (
             <div className="w-full h-full relative overflow-y-auto overflow-x-hidden bg-[#08090a] z-20">
+                <style>{`
+                    @keyframes bubble-wobble {
+                        0% { border-radius: 51% 49% 51% 49% / 49% 51% 49% 51%; }
+                        50% { border-radius: 49% 51% 48% 52% / 52% 48% 51% 49%; }
+                        100% { border-radius: 51% 49% 51% 49% / 49% 51% 49% 51%; }
+                    }
+                    .fluid-bubble-frame {
+                        animation: bubble-wobble 8s ease-in-out infinite;
+                        box-shadow: inset 0 0 20px rgba(255,255,255,0.12), 0 8px 32px rgba(0,0,0,0.5), 0 0 20px rgba(168,85,247,0.15);
+                        border: 1.5px solid rgba(255,255,255,0.08);
+                        transition: border-radius 0.5s ease-in-out;
+                    }
+                    .fluid-bubble-frame.speaking {
+                        animation-duration: 4.5s;
+                        box-shadow: inset 0 0 20px rgba(255,255,255,0.2), 0 12px 40px rgba(168,85,247,0.25), 0 0 25px rgba(168,85,247,0.35);
+                        border-color: rgba(168,85,247,0.45);
+                    }
+                `}</style>
                 {/* Optimized static aurora background — no animate-pulse, reduced blur */}
                 <div className="fixed inset-0 pointer-events-none overflow-hidden">
                     <div className="absolute top-[-30%] left-[-20%] w-[70%] h-[70%] bg-blue-600/8 rounded-full blur-[80px]" />
@@ -241,60 +276,58 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                         <p className="text-white/40 text-sm mt-2 font-medium">Ready to start or join a meeting?</p>
                     </motion.div>
 
-                    {/* Camera preview card */}
+                    {/* Camera bubble preview */}
                     <motion.div 
                         initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.2 }}
-                        className="w-full max-w-2xl"
+                        className="flex flex-col items-center gap-6 w-full max-w-2xl"
                     >
-                        <div className="relative overflow-hidden glass-card shadow-elevation-3">
-                            {/* Video preview */}
-                            <div className="aspect-video relative flex items-center justify-center">
-                                {previewStream ? (
-                                    <>
-                                        <video ref={previewVideoRef} autoPlay playsInline muted className="w-full h-full object-cover transform -scale-x-100 absolute inset-0" />
-                                        {/* Premium Live Audio Waveform Visualizer */}
-                                        <PrejoinVisualizer stream={previewStream} audioEnabled={audioEnabled} />
-                                        {/* Self label */}
-                                        <div className="absolute bottom-3 left-3 md:bottom-4 md:left-4 bg-black/60 px-2.5 py-1 md:px-3 md:py-1.5 rounded-lg md:rounded-xl border border-white/10 z-10 flex items-center gap-1.5 md:gap-2">
-                                            <div className="w-2 h-2 rounded-full bg-green-400" />
-                                            <span className="text-white/90 text-xs font-bold font-google">{userName}</span>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <div className="flex flex-col items-center justify-center py-12">
-                                        <div className="w-28 h-28 rounded-full flex items-center justify-center mb-5 bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-white/10 shadow-[0_0_60px_rgba(59,130,246,0.15)]">
-                                            <UserAvatar name={userName} avatarUrl={userAvatar} size={88} rounded="full" />
-                                        </div>
-                                        <h3 className="text-lg font-bold text-white mb-1 font-google">Camera is off</h3>
-                                        <p className="text-white/40 text-xs">Click the camera button below to preview</p>
+                        {/* Video preview - fluid bubble shape */}
+                        <div className="w-64 h-64 md:w-80 md:h-80 aspect-square relative flex items-center justify-center overflow-hidden fluid-bubble-frame border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.5)] bg-zinc-950/40 backdrop-blur-md">
+                            {previewStream ? (
+                                <>
+                                    <video ref={previewVideoRef} autoPlay playsInline muted className="w-full h-full object-cover transform -scale-x-100 absolute inset-0" />
+                                    {/* Premium Live Audio Waveform Visualizer */}
+                                    <PrejoinVisualizer stream={previewStream} audioEnabled={audioEnabled} />
+                                    {/* Self label */}
+                                    <div className="absolute bottom-3 left-1/2 -translate-x-1/2 bg-black/60 px-2.5 py-1.5 rounded-xl border border-white/10 z-10 flex items-center gap-1.5">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                                        <span className="text-white/90 text-[10px] font-bold font-google whitespace-nowrap">{userName}</span>
                                     </div>
-                                )}
-                            </div>
+                                </>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center">
+                                    <div className="w-20 h-20 rounded-full flex items-center justify-center mb-4 bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-white/10 shadow-[0_0_30px_rgba(59,130,246,0.15)]">
+                                        <UserAvatar name={userName} avatarUrl={userAvatar} size={64} rounded="full" />
+                                    </div>
+                                    <h3 className="text-sm font-bold text-white mb-0.5 font-google">Camera is off</h3>
+                                    <p className="text-white/40 text-[10px]">Click the camera button to preview</p>
+                                </div>
+                            )}
+                        </div>
 
-                            {/* Device controls row */}
-                            <div className="flex items-center justify-center gap-3 p-4 bg-white/5 border-t border-white/5">
-                                <button 
-                                    onClick={() => { setAudioEnabled(!audioEnabled); }}
-                                    className={clsx("p-3 rounded-2xl transition-all duration-200 hover:scale-105 active:scale-95", audioEnabled ? "bg-white/10 hover:bg-white/15 text-white" : "bg-red-500/90 text-white")}
-                                    title={audioEnabled ? "Mute Microphone" : "Unmute Microphone"}
-                                >
-                                    {audioEnabled ? <Mic size={18} /> : <MicOff size={18} />}
-                                </button>
-                                <button 
-                                    onClick={() => { setVideoEnabled(!videoEnabled); }}
-                                    className={clsx("p-3 rounded-2xl transition-all duration-200 hover:scale-105 active:scale-95", videoEnabled ? "bg-white/10 hover:bg-white/15 text-white" : "bg-red-500/90 text-white")}
-                                    title={videoEnabled ? "Turn Off Camera" : "Turn On Camera"}
-                                >
-                                    {videoEnabled ? <Video size={18} /> : <VideoOff size={18} />}
-                                </button>
-                                <button 
-                                    onClick={() => { setShowDeviceSelector(true); }}
-                                    className="p-3 rounded-2xl bg-white/10 hover:bg-white/15 text-white transition-all duration-200 hover:scale-105 active:scale-95"
-                                    title="Device Settings"
-                                >
-                                    <Settings size={18} />
-                                </button>
-                            </div>
+                        {/* Device controls row - floating glass bar */}
+                        <div className="flex items-center justify-center gap-3.5 p-2 px-4 bg-[#0c0d0f]/50 border border-white/10 rounded-2xl shadow-xl backdrop-blur-md">
+                            <button 
+                                onClick={() => { setAudioEnabled(!audioEnabled); }}
+                                className={clsx("p-3 rounded-2xl transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer", audioEnabled ? "bg-white/8 hover:bg-white/12 text-white/90" : "bg-red-500/90 text-white")}
+                                title={audioEnabled ? "Mute Microphone" : "Unmute Microphone"}
+                            >
+                                {audioEnabled ? <Mic size={18} /> : <MicOff size={18} />}
+                            </button>
+                            <button 
+                                onClick={() => { setVideoEnabled(!videoEnabled); }}
+                                className={clsx("p-3 rounded-2xl transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer", videoEnabled ? "bg-white/8 hover:bg-white/12 text-white/90" : "bg-red-500/90 text-white")}
+                                title={videoEnabled ? "Turn Off Camera" : "Turn On Camera"}
+                            >
+                                {videoEnabled ? <Video size={18} /> : <VideoOff size={18} />}
+                            </button>
+                            <button 
+                                onClick={() => { setShowDeviceSelector(true); }}
+                                className="p-3 rounded-2xl bg-white/8 hover:bg-white/12 text-white/90 transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer"
+                                title="Device Settings"
+                            >
+                                <Settings size={18} />
+                            </button>
                         </div>
                     </motion.div>
 
@@ -525,6 +558,24 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
 
     return (
         <div ref={containerRef} className="flex w-full h-full relative overflow-hidden bg-[#08090a] text-white z-20">
+            <style>{`
+                @keyframes bubble-wobble {
+                    0% { border-radius: 51% 49% 51% 49% / 49% 51% 49% 51%; }
+                    50% { border-radius: 49% 51% 48% 52% / 52% 48% 51% 49%; }
+                    100% { border-radius: 51% 49% 51% 49% / 49% 51% 49% 51%; }
+                }
+                .fluid-bubble-frame {
+                    animation: bubble-wobble 8s ease-in-out infinite;
+                    box-shadow: inset 0 0 20px rgba(255,255,255,0.12), 0 8px 32px rgba(0,0,0,0.5), 0 0 20px rgba(168,85,247,0.15);
+                    border: 1.5px solid rgba(255,255,255,0.08);
+                    transition: border-radius 0.5s ease-in-out;
+                }
+                .fluid-bubble-frame.speaking {
+                    animation-duration: 4.5s;
+                    box-shadow: inset 0 0 20px rgba(255,255,255,0.2), 0 12px 40px rgba(168,85,247,0.25), 0 0 25px rgba(168,85,247,0.35);
+                    border-color: rgba(168,85,247,0.45);
+                }
+            `}</style>
             {/* Meeting Pulse Bar */}
             <div className={clsx(
                 "absolute top-0 left-0 right-0 h-1 z-50 transition-colors duration-1000",
@@ -649,28 +700,123 @@ export default function Meetings({ pendingMeetCode }: { pendingMeetCode?: string
                     </div>
                 )}
 
-                {/* Video Grid — extracted to MeetingGrid component */}
-                <MeetingGrid
-                    userName={userName}
-                    userAvatar={userAvatar}
-                    videoEnabled={videoEnabled}
-                    audioEnabled={audioEnabled}
-                    audioLevel={audioLevel}
-                    videoRef={videoRef}
-                    screenRef={screenRef}
-                    localStream={stream}
-                    setActiveSpeaker={setActiveSpeaker}
-                    screenShared={screenShared}
-                    handRaised={handRaised}
-                    activeSpeaker={activeSpeaker}
-                    remotePeers={remotePeers}
-                    remoteAudioLevels={remoteAudioLevels}
-                    selectedBg={selectedBg}
-                    backgroundBlur={backgroundBlur}
-                    lowLightMode={lowLightMode}
-                    studioLighting={studioLighting}
-                    meetingTheme={meetingTheme}
-                />
+                {/* Video Grid or 3D Bubble Universe Layout */}
+                {layout === 'bubbles' ? (
+                    <BubbleUniverse
+                        userName={userName}
+                        userAvatar={userAvatar}
+                        videoEnabled={videoEnabled}
+                        audioEnabled={audioEnabled}
+                        audioLevel={audioLevel}
+                        localStream={stream}
+                        remotePeers={remotePeers}
+                        remoteAudioLevels={remoteAudioLevels}
+                        meetingTheme={meetingTheme}
+                        captionText={captionText}
+                        captionInterim={captionInterim}
+                    />
+                ) : (
+                    <MeetingGrid
+                        userName={userName}
+                        userAvatar={userAvatar}
+                        videoEnabled={videoEnabled}
+                        audioEnabled={audioEnabled}
+                        audioLevel={audioLevel}
+                        videoRef={videoRef}
+                        screenRef={screenRef}
+                        localStream={stream}
+                        setActiveSpeaker={setActiveSpeaker}
+                        screenShared={screenShared}
+                        handRaised={handRaised}
+                        activeSpeaker={activeSpeaker}
+                        remotePeers={remotePeers}
+                        remoteAudioLevels={remoteAudioLevels}
+                        selectedBg={selectedBg}
+                        backgroundBlur={backgroundBlur}
+                        lowLightMode={lowLightMode}
+                        studioLighting={studioLighting}
+                        meetingTheme={meetingTheme}
+                        pinnedParticipant={pinnedParticipant}
+                        setPinnedParticipant={setPinnedParticipant}
+                        selfViewMode={selfViewMode}
+                        setSelfViewMode={setSelfViewMode}
+                    />
+                )}
+
+                {/* Floating Minimized Self-View badge */}
+                <AnimatePresence>
+                    {selfViewMode === 'minimized' && (
+                        <motion.div
+                            drag
+                            dragConstraints={{ left: -100, right: 100, top: -100, bottom: 400 }}
+                            dragElastic={0.1}
+                            dragMomentum={false}
+                            initial={{ scale: 0.8, opacity: 0, y: 50 }}
+                            animate={{ scale: 1, opacity: 1, y: 0 }}
+                            exit={{ scale: 0.8, opacity: 0, y: 50 }}
+                            className="absolute bottom-24 md:bottom-28 right-4 md:right-8 z-30 w-32 h-32 md:w-36 md:h-36 bg-[#0c0d0f]/60 backdrop-blur-2xl overflow-hidden shadow-2xl border border-white/10 group cursor-grab active:cursor-grabbing flex flex-col pointer-events-auto fluid-bubble-frame shadow-[0_0_20px_rgba(168,85,247,0.15)]"
+                        >
+                            {videoEnabled && stream ? (
+                                <video
+                                    ref={floatingVideoRef}
+                                    autoPlay
+                                    playsInline
+                                    muted
+                                    className="w-full h-full object-cover transform -scale-x-100"
+                                />
+                            ) : (
+                                <div className="w-full h-full flex flex-col items-center justify-center bg-zinc-900">
+                                    <UserAvatar
+                                        name={userName}
+                                        avatarUrl={userAvatar || undefined}
+                                        size={56}
+                                        rounded="full"
+                                        className="border border-white/10"
+                                    />
+                                </div>
+                            )}
+
+                            {/* Floating overlay actions on hover */}
+                            <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                                <button
+                                    onClick={() => setSelfViewMode('grid')}
+                                    className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                                    title="Maximize"
+                                >
+                                    <Maximize size={12} />
+                                </button>
+                                <button
+                                    onClick={() => setSelfViewMode('hidden')}
+                                    className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                                    title="Hide Self-View"
+                                >
+                                    <VideoOff size={12} />
+                                </button>
+                            </div>
+                            
+                            {/* Local name badge */}
+                            <div className="absolute bottom-1 left-1.5 bg-black/40 px-1.5 py-0.5 rounded text-[8px] font-bold text-white/90">
+                                You (Minimized)
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* Restore Hidden Self-View button */}
+                <AnimatePresence>
+                    {selfViewMode === 'hidden' && (
+                        <motion.button
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.8 }}
+                            onClick={() => setSelfViewMode('grid')}
+                            className="absolute bottom-24 right-4 md:right-8 z-30 px-3 py-1.5 bg-[#0c0d0f]/60 backdrop-blur-2xl rounded-full border border-white/10 shadow-lg text-[10px] font-bold text-white/70 hover:text-white hover:bg-white/10 transition-all flex items-center gap-1.5 pointer-events-auto cursor-pointer"
+                        >
+                            <Video size={10} />
+                            Show Self-View
+                        </motion.button>
+                    )}
+                </AnimatePresence>
 
                 {/* Closed Captions Overlay — Live Speech Recognition */}
                 <AnimatePresence>

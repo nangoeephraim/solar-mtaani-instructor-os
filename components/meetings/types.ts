@@ -143,7 +143,7 @@ export const getFileIcon = (type: string) => {
 };
 
 export type SidebarTab = 'chat' | 'people' | 'effects' | 'notes' | 'files' | 'polls' | null;
-export type LayoutMode = 'grid' | 'spotlight';
+export type LayoutMode = 'grid' | 'spotlight' | 'bubbles';
 export type ConnectionQuality = 'good' | 'fair' | 'poor';
 export type BlurLevel = 'None' | 'Light' | 'Heavy';
 

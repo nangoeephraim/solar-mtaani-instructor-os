@@ -38,7 +38,7 @@ export function useMeetingEngine(pendingMeetCode?: string) {
     const [screenShared, setScreenShared] = useState(false);
     const [showSidebar, setShowSidebar] = useState<'chat' | 'people' | 'effects' | 'notes' | 'files' | 'polls' | null>(null);
     const [showMobileMore, setShowMobileMore] = useState(false);
-    const [layout, setLayout] = useState<'grid' | 'spotlight'>('grid');
+    const [layout, setLayout] = useState<LayoutMode>('bubbles');
     const [isRecording, setIsRecording] = useState(false);
     const [handRaised, setHandRaised] = useState(false);
     const [captionsEnabled, setCaptionsEnabled] = useState(false);

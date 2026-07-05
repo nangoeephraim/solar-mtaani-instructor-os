@@ -1,7 +1,7 @@
 // ─── PRISM Meetings — Video Grid Layout ───
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { useEffect, useRef, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MicOff, VideoOff, MonitorUp, Hand, Wifi } from 'lucide-react';
+import { MicOff, VideoOff, MonitorUp, Hand, Wifi, Pin, PinOff, Maximize, Minimize2, Volume2, VolumeX } from 'lucide-react';
 import clsx from 'clsx';
 import { RemotePeer, MeetingTheme, THEME_COLORS } from './types';
 import UserAvatar from '../UserAvatar';
@@ -34,6 +34,12 @@ interface MeetingGridProps {
 
     // Theme
     meetingTheme: MeetingTheme;
+
+    // Pinning / self-view mode
+    pinnedParticipant: string | null;
+    setPinnedParticipant: (id: string | null) => void;
+    selfViewMode: 'grid' | 'minimized' | 'hidden';
+    setSelfViewMode: (mode: 'grid' | 'minimized' | 'hidden') => void;
 }
 
 // Helper: get theme color RGB string
@@ -58,10 +64,14 @@ const LocalTile: React.FC<{
     studioLighting: boolean;
     isSpotlight: boolean;
     themeRgb: string;
+    pinnedParticipant: string | null;
+    setPinnedParticipant: (id: string | null) => void;
+    setSelfViewMode: (mode: 'grid' | 'minimized' | 'hidden') => void;
 }> = React.memo(({
     userName, userAvatar, videoEnabled, audioEnabled, videoRef, localStream,
     setActiveSpeaker, activeSpeaker, handRaised, selectedBg, backgroundBlur,
-    lowLightMode, studioLighting, isSpotlight, themeRgb
+    lowLightMode, studioLighting, isSpotlight, themeRgb, pinnedParticipant,
+    setPinnedParticipant, setSelfViewMode
 }) => {
     const voiceRingRef = useRef<HTMLDivElement>(null);
     const voiceRingOuterRef = useRef<HTMLDivElement>(null);
@@ -166,11 +176,11 @@ const LocalTile: React.FC<{
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.3 }}
             className={clsx(
-                "relative rounded-2xl md:rounded-3xl overflow-hidden bg-[#111214] flex items-center justify-center group min-h-0 border transition-all duration-300",
+                "relative overflow-hidden bg-[#111214] flex items-center justify-center group min-h-0 border transition-all duration-300 fluid-bubble-frame",
                 isSpotlight
                     ? "w-36 h-full flex-shrink-0 md:w-full md:h-full md:flex-shrink md:col-span-1 md:row-span-1"
                     : "w-full h-full",
-                isSpeaking ? "shadow-[0_0_20px_rgba(59,130,246,0.2)]" : ""
+                isSpeaking ? "speaking z-20 scale-[1.04]" : ""
             )}
             style={{
                 borderColor: isSpeaking ? `rgba(${themeRgb},0.5)` : 'rgba(255,255,255,0.05)',
@@ -247,6 +257,24 @@ const LocalTile: React.FC<{
                 </div>
             )}
 
+            {/* Interactive Hover Actions overlay (Meet-like) */}
+            <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-30 flex items-center justify-center gap-2.5 pointer-events-none">
+                <button
+                    onClick={() => setPinnedParticipant(pinnedParticipant === 'local' ? null : 'local')}
+                    className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-all transform hover:scale-105 active:scale-95 pointer-events-auto cursor-pointer flex items-center justify-center"
+                    title={pinnedParticipant === 'local' ? 'Unpin self' : 'Pin self'}
+                >
+                    {pinnedParticipant === 'local' ? <PinOff size={14} className="text-blue-400" /> : <Pin size={14} />}
+                </button>
+                <button
+                    onClick={() => setSelfViewMode('minimized')}
+                    className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-all transform hover:scale-105 active:scale-95 pointer-events-auto cursor-pointer flex items-center justify-center"
+                    title="Minimize self-view"
+                >
+                    <Minimize2 size={14} />
+                </button>
+            </div>
+
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent p-2 md:p-4 flex justify-between items-end z-30">
                 <div className="flex gap-1.5 items-center">
                     <div className="bg-black/60 px-2 py-1 md:px-3 md:py-1.5 rounded-lg md:rounded-xl border border-white/10 flex items-center gap-1.5 md:gap-2">
@@ -285,10 +313,15 @@ const RemoteTile: React.FC<{
     isSpotlight: boolean;
     themeRgb: string;
     level?: number;
-}> = React.memo(({ peer, setActiveSpeaker, activeSpeaker, isSpotlight, themeRgb, level = 0 }) => {
+    pinnedParticipant: string | null;
+    setPinnedParticipant: (id: string | null) => void;
+}> = React.memo(({ peer, setActiveSpeaker, activeSpeaker, isSpotlight, themeRgb, level = 0, pinnedParticipant, setPinnedParticipant }) => {
     const voiceRingRef = useRef<HTMLDivElement>(null);
     const voiceRingOuterRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
+
+    const [isMutedLocally, setIsMutedLocally] = useState(false);
+    const [videoFit, setVideoFit] = useState<'cover' | 'contain'>('cover');
 
     const isConnecting = peer.pc?.connectionState === 'new' || peer.pc?.connectionState === 'connecting';
     const isSpeaking = activeSpeaker === peer.odei;
@@ -339,14 +372,14 @@ const RemoteTile: React.FC<{
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             className={clsx(
-                "relative rounded-2xl md:rounded-3xl overflow-hidden bg-[#111214] flex items-center justify-center group min-h-0 border transition-all duration-300",
+                "relative overflow-hidden bg-[#111214] flex items-center justify-center group min-h-0 border transition-all duration-300 fluid-bubble-frame",
                 isSpotlight
                     ? "w-36 h-full flex-shrink-0 md:w-full md:h-full md:flex-shrink md:col-span-1 md:row-span-1"
                     : "w-full h-full",
+                isSpeaking ? "speaking z-20 scale-[1.04]" : ""
             )}
             style={{
                 borderColor: isSpeaking ? `rgba(${themeRgb},0.5)` : 'rgba(255,255,255,0.05)',
-                boxShadow: isSpeaking ? `0 0 20px rgba(${themeRgb},0.2)` : 'none',
             }}
         >
             {/* Visual audio animation ring (pulsing border effect) */}
@@ -405,12 +438,44 @@ const RemoteTile: React.FC<{
             {peer.stream && (
                 <video 
                     autoPlay playsInline 
+                    muted={isMutedLocally}
                     className={clsx(
-                        "w-full h-full object-cover transition-opacity duration-300 absolute inset-0 z-0",
+                        "w-full h-full transition-opacity duration-300 absolute inset-0 z-0",
+                        videoFit === 'cover' ? "object-cover" : "object-contain",
                         (!peer.videoEnabled || isConnecting) ? "opacity-0 pointer-events-none" : "opacity-100"
                     )}
                     ref={el => { if (el && el.srcObject !== peer.stream) el.srcObject = peer.stream; }}
                 />
+            )}
+
+            {/* Interactive Hover Actions overlay (Meet-like) */}
+            {!isConnecting && (
+                <div className="absolute inset-0 bg-black/45 opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-30 flex items-center justify-center gap-2.5 pointer-events-none">
+                    <button
+                        onClick={() => setPinnedParticipant(pinnedParticipant === peer.odei ? null : peer.odei)}
+                        className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-all transform hover:scale-105 active:scale-95 pointer-events-auto cursor-pointer flex items-center justify-center"
+                        title={pinnedParticipant === peer.odei ? 'Unpin participant' : 'Pin participant'}
+                    >
+                        {pinnedParticipant === peer.odei ? <PinOff size={14} className="text-blue-400" /> : <Pin size={14} />}
+                    </button>
+                    <button
+                        onClick={() => setVideoFit(videoFit === 'cover' ? 'contain' : 'cover')}
+                        className="p-2 rounded-xl bg-white/10 hover:bg-white/20 text-white transition-all transform hover:scale-105 active:scale-95 pointer-events-auto cursor-pointer flex items-center justify-center"
+                        title={videoFit === 'cover' ? 'Resize to fit' : 'Fill screen'}
+                    >
+                        <Maximize size={14} />
+                    </button>
+                    <button
+                        onClick={() => setIsMutedLocally(!isMutedLocally)}
+                        className={clsx(
+                            "p-2 rounded-xl text-white transition-all transform hover:scale-105 active:scale-95 pointer-events-auto cursor-pointer flex items-center justify-center",
+                            isMutedLocally ? "bg-red-500/20 hover:bg-red-500/30 text-red-400" : "bg-white/10 hover:bg-white/20"
+                        )}
+                        title={isMutedLocally ? 'Unmute participant for me' : 'Mute participant for me'}
+                    >
+                        {isMutedLocally ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                    </button>
+                </div>
             )}
 
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent p-2 md:p-4 flex justify-between items-end z-30">
@@ -449,15 +514,34 @@ const MeetingGrid: React.FC<MeetingGridProps> = ({
     userName, userAvatar, videoEnabled, audioEnabled, audioLevel,
     videoRef, screenRef, localStream, setActiveSpeaker, screenShared,
     handRaised, activeSpeaker, remotePeers, remoteAudioLevels, selectedBg, backgroundBlur,
-    lowLightMode, studioLighting, meetingTheme
+    lowLightMode, studioLighting, meetingTheme, pinnedParticipant, setPinnedParticipant,
+    selfViewMode, setSelfViewMode
 }) => {
     const peersList = Array.from(remotePeers.values());
-    const totalCount = 1 + peersList.length;
+    const showLocalInGrid = selfViewMode === 'grid';
+
+    // Prioritize active speakers and hand raises in list sorting
+    const sortedPeersList = useMemo(() => {
+        return [...peersList].sort((a, b) => {
+            if (a.handRaised && !b.handRaised) return -1;
+            if (!a.handRaised && b.handRaised) return 1;
+
+            const aIsSpeaking = activeSpeaker === a.odei;
+            const bIsSpeaking = activeSpeaker === b.odei;
+            if (aIsSpeaking && !bIsSpeaking) return -1;
+            if (!aIsSpeaking && bIsSpeaking) return 1;
+
+            return 0;
+        });
+    }, [peersList, activeSpeaker]);
+
+    const totalCount = (showLocalInGrid ? 1 : 0) + sortedPeersList.length;
     
     const anyRemoteScreen = peersList.find(p => p.screenStream !== null);
-    const isSpotlight = screenShared || !!anyRemoteScreen;
+    const isSpotlight = screenShared || !!anyRemoteScreen || pinnedParticipant !== null;
 
     const themeRgb = useMemo(() => getThemeRgb(meetingTheme), [meetingTheme]);
+    const pinnedPeer = pinnedParticipant && pinnedParticipant !== 'local' ? remotePeers.get(pinnedParticipant) : null;
     
     let gridCols = "grid-cols-1";
     if (!isSpotlight) {
@@ -478,29 +562,129 @@ const MeetingGrid: React.FC<MeetingGridProps> = ({
                     : clsx("grid gap-2 md:gap-4", gridCols),
                 !isSpotlight && totalCount > 6 ? "overflow-y-auto custom-scrollbar auto-rows-[minmax(180px,1fr)] md:auto-rows-fr" : !isSpotlight ? "auto-rows-fr" : ""
             )}>
-                {/* Spotlight Screen Share view */}
+                {/* Spotlight Primary View */}
                 {isSpotlight && (
                     <motion.div 
                         initial={{ opacity: 0, scale: 0.95 }}
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ duration: 0.3 }}
-                        className="flex-1 min-h-0 md:col-span-2 md:row-span-3 relative rounded-2xl md:rounded-3xl overflow-hidden shadow-2xl bg-[#131416] border border-white/5 flex items-center justify-center"
+                        className={clsx(
+                            "flex-1 min-h-0 md:col-span-2 md:row-span-3 relative overflow-hidden shadow-2xl bg-[#131416] border border-white/5 flex items-center justify-center group fluid-bubble-frame",
+                            (pinnedParticipant === 'local' ? audioLevel > 0.06 : pinnedParticipant ? (remoteAudioLevels.get(pinnedParticipant) || 0) > 0.06 : activeSpeaker === 'local' ? audioLevel > 0.06 : activeSpeaker ? (remoteAudioLevels.get(activeSpeaker) || 0) > 0.06 : false) ? "speaking" : ""
+                        )}
                     >
-                        {screenShared ? (
-                            <video ref={screenRef} autoPlay playsInline muted className="w-full h-full object-contain" />
+                        {/* Cinematic Ambient Glow matching Theme */}
+                        <div 
+                            className="absolute inset-0 z-0 opacity-15 filter blur-3xl pointer-events-none"
+                            style={{
+                                background: `radial-gradient(circle, rgba(${themeRgb}, 0.25) 0%, transparent 70%)`
+                            }}
+                        />
+
+                        {pinnedParticipant === 'local' ? (
+                            videoEnabled && localStream ? (
+                                <video
+                                    ref={videoRef}
+                                    autoPlay
+                                    playsInline
+                                    muted
+                                    className="w-full h-full object-contain relative z-10 transform -scale-x-100"
+                                />
+                            ) : (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#111214] z-10">
+                                    <UserAvatar name={userName} avatarUrl={userAvatar} size={120} className="w-20 h-20 md:w-32 md:h-32" />
+                                    <p className="text-white/50 text-sm mt-4 font-bold">{userName} (You)</p>
+                                </div>
+                            )
+                        ) : pinnedPeer ? (
+                            pinnedPeer.videoEnabled && pinnedPeer.stream ? (
+                                <video
+                                    autoPlay
+                                    playsInline
+                                    className="w-full h-full object-contain relative z-10"
+                                    ref={el => { if (el && el.srcObject !== pinnedPeer.stream) el.srcObject = pinnedPeer.stream; }}
+                                />
+                            ) : (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#111214] z-10">
+                                    <UserAvatar name={pinnedPeer.userName} avatarUrl={pinnedPeer.avatarUrl} size={120} className="w-20 h-20 md:w-32 md:h-32" />
+                                    <p className="text-white/50 text-sm mt-4 font-bold">{pinnedPeer.userName}</p>
+                                </div>
+                            )
+                        ) : screenShared ? (
+                            <video ref={screenRef} autoPlay playsInline muted className="w-full h-full object-contain relative z-10" />
                         ) : anyRemoteScreen ? (
                             <video 
                                 autoPlay playsInline 
-                                className="w-full h-full object-contain"
+                                className="w-full h-full object-contain relative z-10"
                                 ref={el => { if (el && el.srcObject !== anyRemoteScreen.screenStream) el.srcObject = anyRemoteScreen.screenStream; }} 
                             />
-                        ) : null}
-                        <div className="absolute bottom-2 md:bottom-4 left-2 md:left-4 px-2.5 md:px-3.5 py-1.5 md:py-2 rounded-lg md:rounded-xl border flex items-center gap-1.5 md:gap-2.5 shadow-lg"
-                             style={{ background: `rgba(${themeRgb},0.9)`, borderColor: `rgba(${themeRgb},0.3)` }}>
-                            <MonitorUp size={16} />
-                            <span className="text-[10px] md:text-sm font-bold font-google text-white">
-                                {screenShared ? 'You are sharing screen' : `${anyRemoteScreen?.userName} is sharing screen`}
-                            </span>
+                        ) : activeSpeaker && activeSpeaker !== 'local' && remotePeers.has(activeSpeaker) ? (
+                            (() => {
+                                const speaker = remotePeers.get(activeSpeaker)!;
+                                return speaker.videoEnabled && speaker.stream ? (
+                                    <video
+                                        autoPlay
+                                        playsInline
+                                        className="w-full h-full object-contain relative z-10"
+                                        ref={el => { if (el && el.srcObject !== speaker.stream) el.srcObject = speaker.stream; }}
+                                    />
+                                ) : (
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#111214] z-10">
+                                        <UserAvatar name={speaker.userName} avatarUrl={speaker.avatarUrl} size={120} className="w-20 h-20 md:w-32 md:h-32" />
+                                        <p className="text-white/50 text-sm mt-4 font-bold">{speaker.userName}</p>
+                                    </div>
+                                );
+                            })()
+                        ) : showLocalInGrid && videoEnabled && localStream ? (
+                            <video
+                                ref={videoRef}
+                                autoPlay
+                                playsInline
+                                muted
+                                className="w-full h-full object-contain relative z-10 transform -scale-x-100"
+                            />
+                        ) : (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#111214] z-10">
+                                <UserAvatar name={userName} avatarUrl={userAvatar} size={120} className="w-20 h-20 md:w-32 md:h-32" />
+                                <p className="text-white/50 text-sm mt-4 font-bold">{userName} (You)</p>
+                            </div>
+                        )}
+
+                        {/* Top-Right action to unpin */}
+                        {pinnedParticipant !== null && (
+                            <button
+                                onClick={() => setPinnedParticipant(null)}
+                                className="absolute top-4 right-4 z-20 p-2 rounded-xl bg-black/60 hover:bg-black/80 text-white/90 hover:text-white border border-white/10 transition-colors flex items-center gap-1.5 text-xs font-bold cursor-pointer"
+                            >
+                                <PinOff size={12} className="text-blue-400" />
+                                <span>Unpin view</span>
+                            </button>
+                        )}
+
+                        {/* Bottom-left label badge */}
+                        <div className="absolute bottom-2 md:bottom-4 left-2 md:left-4 z-20 px-2.5 md:px-3.5 py-1.5 md:py-2 rounded-lg md:rounded-xl border flex items-center gap-1.5 md:gap-2.5 shadow-lg bg-black/60 border-white/15">
+                            {pinnedParticipant !== null ? (
+                                <>
+                                    <Pin size={14} className="text-blue-400" />
+                                    <span className="text-[10px] md:text-sm font-bold font-google text-white">
+                                        Pinned: {pinnedParticipant === 'local' ? 'You' : (pinnedPeer?.userName || 'Participant')}
+                                    </span>
+                                </>
+                            ) : screenShared || anyRemoteScreen ? (
+                                <>
+                                    <MonitorUp size={14} className="text-blue-400" />
+                                    <span className="text-[10px] md:text-sm font-bold font-google text-white">
+                                        {screenShared ? 'You are sharing screen' : `${anyRemoteScreen?.userName} is sharing screen`}
+                                    </span>
+                                </>
+                            ) : (
+                                <>
+                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                                    <span className="text-[10px] md:text-sm font-bold font-google text-white">
+                                        Speaker Focus: {activeSpeaker === 'local' || !activeSpeaker ? 'You' : remotePeers.get(activeSpeaker)?.userName}
+                                    </span>
+                                </>
+                            )}
                         </div>
                     </motion.div>
                 )}
@@ -512,24 +696,29 @@ const MeetingGrid: React.FC<MeetingGridProps> = ({
                 */}
                 {isSpotlight ? (
                     <div className="flex flex-row overflow-x-auto gap-2 py-1.5 h-28 w-full flex-shrink-0 scrollbar-none md:contents">
-                        <LocalTile 
-                            userName={userName}
-                            userAvatar={userAvatar}
-                            videoEnabled={videoEnabled}
-                            audioEnabled={audioEnabled}
-                            videoRef={videoRef}
-                            localStream={localStream}
-                            setActiveSpeaker={setActiveSpeaker}
-                            activeSpeaker={activeSpeaker}
-                            handRaised={handRaised}
-                            selectedBg={selectedBg}
-                            backgroundBlur={backgroundBlur}
-                            lowLightMode={lowLightMode}
-                            studioLighting={studioLighting}
-                            isSpotlight={true}
-                            themeRgb={themeRgb}
-                        />
-                        {peersList.map((peer) => (
+                        {showLocalInGrid && (
+                            <LocalTile 
+                                userName={userName}
+                                userAvatar={userAvatar}
+                                videoEnabled={videoEnabled}
+                                audioEnabled={audioEnabled}
+                                videoRef={videoRef}
+                                localStream={localStream}
+                                setActiveSpeaker={setActiveSpeaker}
+                                activeSpeaker={activeSpeaker}
+                                handRaised={handRaised}
+                                selectedBg={selectedBg}
+                                backgroundBlur={backgroundBlur}
+                                lowLightMode={lowLightMode}
+                                studioLighting={studioLighting}
+                                isSpotlight={true}
+                                themeRgb={themeRgb}
+                                pinnedParticipant={pinnedParticipant}
+                                setPinnedParticipant={setPinnedParticipant}
+                                setSelfViewMode={setSelfViewMode}
+                            />
+                        )}
+                        {sortedPeersList.map((peer) => (
                             <RemoteTile 
                                 key={peer.odei}
                                 peer={peer}
@@ -538,29 +727,36 @@ const MeetingGrid: React.FC<MeetingGridProps> = ({
                                 isSpotlight={true}
                                 themeRgb={themeRgb}
                                 level={remoteAudioLevels.get(peer.odei) || 0}
+                                pinnedParticipant={pinnedParticipant}
+                                setPinnedParticipant={setPinnedParticipant}
                             />
                         ))}
                     </div>
                 ) : (
                     <>
-                        <LocalTile 
-                            userName={userName}
-                            userAvatar={userAvatar}
-                            videoEnabled={videoEnabled}
-                            audioEnabled={audioEnabled}
-                            videoRef={videoRef}
-                            localStream={localStream}
-                            setActiveSpeaker={setActiveSpeaker}
-                            activeSpeaker={activeSpeaker}
-                            handRaised={handRaised}
-                            selectedBg={selectedBg}
-                            backgroundBlur={backgroundBlur}
-                            lowLightMode={lowLightMode}
-                            studioLighting={studioLighting}
-                            isSpotlight={false}
-                            themeRgb={themeRgb}
-                        />
-                        {peersList.map((peer) => (
+                        {showLocalInGrid && (
+                            <LocalTile 
+                                userName={userName}
+                                userAvatar={userAvatar}
+                                videoEnabled={videoEnabled}
+                                audioEnabled={audioEnabled}
+                                videoRef={videoRef}
+                                localStream={localStream}
+                                setActiveSpeaker={setActiveSpeaker}
+                                activeSpeaker={activeSpeaker}
+                                handRaised={handRaised}
+                                selectedBg={selectedBg}
+                                backgroundBlur={backgroundBlur}
+                                lowLightMode={lowLightMode}
+                                studioLighting={studioLighting}
+                                isSpotlight={false}
+                                themeRgb={themeRgb}
+                                pinnedParticipant={pinnedParticipant}
+                                setPinnedParticipant={setPinnedParticipant}
+                                setSelfViewMode={setSelfViewMode}
+                            />
+                        )}
+                        {sortedPeersList.map((peer) => (
                             <RemoteTile 
                                 key={peer.odei}
                                 peer={peer}
@@ -569,6 +765,8 @@ const MeetingGrid: React.FC<MeetingGridProps> = ({
                                 isSpotlight={false}
                                 themeRgb={themeRgb}
                                 level={remoteAudioLevels.get(peer.odei) || 0}
+                                pinnedParticipant={pinnedParticipant}
+                                setPinnedParticipant={setPinnedParticipant}
                             />
                         ))}
                     </>

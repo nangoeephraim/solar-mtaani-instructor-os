@@ -378,7 +378,6 @@ const MessageGroupRenderer = React.memo(({
 
                         const bubbleData = getBubbleStyleAndClass();
 
-                        return (
                             <SwipeableMessage
                                 key={msg.id}
                                 msg={msg}
@@ -387,6 +386,7 @@ const MessageGroupRenderer = React.memo(({
                                 onSwipeEdit={onSwipeEdit}
                             >
                             <motion.div 
+                                id={`msg-${msg.id}`}
                                 layout 
                                 initial={{ opacity: 0, y: 10 }} 
                                 animate={{ opacity: 1, y: 0 }} 
@@ -610,7 +610,6 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
     const [inlineChatSummary, setInlineChatSummary] = useState<string | null>(null);
     const [inlineChatSummaryLoading, setInlineChatSummaryLoading] = useState(false);
 
-    // Helper to run streaming completions from Vercel AI SDK on the client
     const runAICompletion = async (prompt: string, onChunk: (text: string) => void) => {
         const authHeaders = await getAuthHeaders();
         const response = await fetch('/api/ai/chat', {
@@ -641,20 +640,33 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
             for (const line of lines) {
                 const trimmed = line.trim();
                 if (!trimmed) continue;
+
+                let jsonPayload = '';
+                if (trimmed.startsWith('data: ')) {
+                    jsonPayload = trimmed.substring(6);
+                } else if (trimmed.startsWith('0:')) {
+                    jsonPayload = trimmed.substring(2);
+                } else {
+                    jsonPayload = trimmed;
+                }
+
+                if (jsonPayload === '[DONE]') continue;
+
                 try {
-                    const parsed = JSON.parse(trimmed);
-                    if (parsed.type === 'text-delta' && typeof parsed.delta === 'string') {
-                        currentText += parsed.delta;
+                    const parsed = JSON.parse(jsonPayload);
+                    if (typeof parsed === 'string') {
+                        currentText += parsed;
                         onChunk(currentText);
+                    } else if (parsed && typeof parsed === 'object') {
+                        if (parsed.type === 'text-delta' && typeof parsed.delta === 'string') {
+                            currentText += parsed.delta;
+                            onChunk(currentText);
+                        } else if (parsed.type === 'error' && parsed.errorText) {
+                            throw new Error(parsed.errorText);
+                        }
                     }
                 } catch (e) {
-                    if (trimmed.startsWith('0:')) {
-                        try {
-                            const content = JSON.parse(trimmed.substring(2));
-                            currentText += content;
-                            onChunk(currentText);
-                        } catch {}
-                    }
+                    console.warn("Failed to parse stream chunk:", jsonPayload, e);
                 }
             }
         }
@@ -845,6 +857,18 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
     const [isInputFocused, setIsInputFocused] = useState(false);
     const [showMobileSidebar, setShowMobileSidebar] = useState(false);
     const [showInfoDrawer, setShowInfoDrawer] = useState(false);
+    const [infoTab, setInfoTab] = useState<'members' | 'media'>('members');
+
+    // Slash Commands State
+    const [showSlashCommands, setShowSlashCommands] = useState(false);
+    const [slashQuery, setSlashQuery] = useState('');
+    const [selectedSlashIdx, setSelectedSlashIdx] = useState(0);
+
+    // Audio recording waveform state
+    const [audioLevels, setAudioLevels] = useState<number[]>(new Array(18).fill(2));
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const analyserRef = useRef<AnalyserNode | null>(null);
+    const animationFrameRef = useRef<number | null>(null);
     const [mobileView, setMobileView] = useState<'list' | 'chat'>('list');
 
     useEffect(() => {
@@ -890,6 +914,88 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
     const audioChunksRef = useRef<Blob[]>([]);
     const [recordingDuration, setRecordingDuration] = useState(0);
     const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+    // Voice note decibel visualizer loop
+    useEffect(() => {
+        if (!isRecording) {
+            if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+            if (audioContextRef.current) {
+                audioContextRef.current.close().catch(() => {});
+                audioContextRef.current = null;
+            }
+            return;
+        }
+
+        let stream: MediaStream | null = null;
+        const initAudio = async () => {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+                const audioCtx = new AudioContextClass();
+                const analyser = audioCtx.createAnalyser();
+                analyser.fftSize = 64;
+                const source = audioCtx.createMediaStreamSource(stream);
+                source.connect(analyser);
+
+                audioContextRef.current = audioCtx;
+                analyserRef.current = analyser;
+
+                const dataArray = new Uint8Array(analyser.frequencyBinCount);
+                const update = () => {
+                    if (!analyserRef.current) return;
+                    analyserRef.current.getByteFrequencyData(dataArray);
+                    const levels = Array.from({ length: 18 }, (_, i) => {
+                        const bin = Math.floor((i / 18) * dataArray.length);
+                        const val = dataArray[bin] || 0;
+                        return Math.max(3, Math.min(24, (val / 255) * 24));
+                    });
+                    setAudioLevels(levels);
+                    animationFrameRef.current = requestAnimationFrame(update);
+                };
+                update();
+            } catch (err) {
+                // Fallback visualizer simulating realistic human speech frequencies
+                let tick = 0;
+                const updateFallback = () => {
+                    tick += 0.15;
+                    const levels = Array.from({ length: 18 }, (_, i) => {
+                        const sinVal = Math.sin(tick + i * 0.5) * Math.cos(tick * 0.7 - i * 0.3);
+                        return Math.max(3, Math.min(24, Math.abs(sinVal) * 20 + Math.random() * 4));
+                    });
+                    setAudioLevels(levels);
+                    animationFrameRef.current = requestAnimationFrame(updateFallback);
+                };
+                updateFallback();
+            }
+        };
+
+        initAudio();
+
+        return () => {
+            if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+            if (audioContextRef.current) audioContextRef.current.close().catch(() => {});
+            if (stream) {
+                stream.getTracks().forEach(t => t.stop());
+            }
+        };
+    }, [isRecording]);
+
+    // AI command draft helper
+    const handleDraftPrompt = async (prompt: string) => {
+        if (!prompt.trim()) return;
+        setAiAssistLoading(true);
+        triggerHaptics('medium');
+        try {
+            const result = await runAICompletion(`Draft a short, professional chat message about the following topic: "${prompt}". Respond with ONLY the drafted message content and nothing else.`, () => {});
+            if (result) {
+                setMessageInput(result);
+            }
+        } catch (err) {
+            showToast('Failed to draft message', 'error');
+        } finally {
+            setAiAssistLoading(false);
+        }
+    };
 
     const activeChannel = useMemo(() => channels.find(c => c.id === activeChannelId), [channels, activeChannelId]);
     const allActiveMessages = useMemo(() => messages[activeChannelId] || [], [messages, activeChannelId]);
@@ -1447,7 +1553,61 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
         setTimeout(() => textareaRef.current?.focus(), 100);
     };
 
+    const SLASH_COMMANDS = useMemo(() => [
+        { cmd: '/summarize', desc: 'Summarize the recent channel messages', action: () => { setMessageInput(''); handleSummarizeChannelInline(); } },
+        { cmd: '/translate sw', desc: 'Translate current text to Swahili', action: () => { handleRephraseInput('translate-sw'); } },
+        { cmd: '/translate en', desc: 'Translate current text to English', action: () => { handleRephraseInput('translate-en'); } },
+        { cmd: '/professional', desc: 'Refine tone to be professional', action: () => { handleRephraseInput('tone'); } },
+        { cmd: '/correct', desc: 'Correct spelling and grammar', action: () => { handleRephraseInput('grammar'); } },
+        { cmd: '/draft', desc: 'Ask Sally to draft a message', action: (args?: string) => {
+            if (args) {
+                handleDraftPrompt(args);
+                setMessageInput('');
+            } else {
+                setMessageInput('Draft: [Type topic here]');
+                setTimeout(() => {
+                    const t = textareaRef.current;
+                    if (t) {
+                        t.focus();
+                        t.setSelectionRange(7, 24);
+                    }
+                }, 50);
+            }
+        }},
+    ], [handleSummarizeChannelInline, handleRephraseInput, handleDraftPrompt]);
+
+    const filteredCommands = useMemo(() => {
+        if (!showSlashCommands) return [];
+        return SLASH_COMMANDS.filter(c => c.cmd.startsWith(slashQuery.toLowerCase()));
+    }, [showSlashCommands, slashQuery, SLASH_COMMANDS]);
+
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (showSlashCommands && filteredCommands.length > 0) {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setSelectedSlashIdx(prev => (prev + 1) % filteredCommands.length);
+                return;
+            }
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setSelectedSlashIdx(prev => (prev - 1 + filteredCommands.length) % filteredCommands.length);
+                return;
+            }
+            if (e.key === 'Enter' || e.key === 'Tab') {
+                e.preventDefault();
+                const cmdObj = filteredCommands[selectedSlashIdx];
+                const restText = messageInput.substring(cmdObj.cmd.length).trim();
+                cmdObj.action(restText);
+                setShowSlashCommands(false);
+                return;
+            }
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                setShowSlashCommands(false);
+                return;
+            }
+        }
+
         if (e.key === 'Enter' && !e.shiftKey) {
             if (enterIsSend) {
                 e.preventDefault();
@@ -1463,6 +1623,17 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
         
         const val = target.value;
         setMessageInput(val);
+
+        // Slash command trigger detection
+        if (val.startsWith('/')) {
+            setShowSlashCommands(true);
+            const query = val.split(' ')[0] || '';
+            setSlashQuery(query);
+            setSelectedSlashIdx(0);
+        } else {
+            setShowSlashCommands(false);
+        }
+
         // Detect @ for mentions
         const lastWord = val.split(/\s/).pop() || '';
         if (lastWord.startsWith('@') && lastWord.length > 1) { setShowMentions(true); setMentionFilter(lastWord.slice(1)); }
@@ -1602,6 +1773,23 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
 
     const pinnedMessages = useMemo(() => allActiveMessages.filter(m => m.isPinned && !m.isDeleted), [allActiveMessages]);
     const uniqueUsers = useMemo(() => { const map = new Map<string, string>(); allActiveMessages.forEach(m => { if (!map.has(m.senderId)) map.set(m.senderId, m.senderName); }); return Array.from(map.entries()); }, [allActiveMessages]);
+
+    const sharedMedia = useMemo(() => {
+        const images: any[] = [];
+        const docs: any[] = [];
+        allActiveMessages.forEach(msg => {
+            if (msg.attachments && !msg.isDeleted) {
+                msg.attachments.forEach((att: any) => {
+                    if (att.type.startsWith('image/')) {
+                        images.push({ ...att, msgId: msg.id });
+                    } else {
+                        docs.push({ ...att, msgId: msg.id });
+                    }
+                });
+            }
+        });
+        return { images, docs };
+    }, [allActiveMessages]);
 
     // Find the first unread message index
     const firstUnreadIdx = useMemo(() => {
@@ -2158,6 +2346,54 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                                     </motion.div>
                                                 )}
                                             </AnimatePresence>
+
+                                     {/* ── Input Slash Commands Popover ── */}
+                                     <AnimatePresence>
+                                         {showSlashCommands && filteredCommands.length > 0 && (
+                                             <>
+                                                 <div className="fixed inset-0 z-20" onClick={() => setShowSlashCommands(false)} />
+                                                 <motion.div 
+                                                     initial={{ opacity: 0, y: 10, scale: 0.95 }} 
+                                                     animate={{ opacity: 1, y: 0, scale: 1 }} 
+                                                     exit={{ opacity: 0, y: 10, scale: 0.95 }} 
+                                                     className="absolute bottom-[calc(100%+8px)] left-2 md:left-4 z-30 p-2 rounded-2xl border border-slate-200/60 dark:border-white/10 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl shadow-2xl w-80 max-w-[calc(100vw-32px)] flex flex-col gap-0.5"
+                                                 >
+                                                     <div className="px-2.5 py-1 text-[10px] font-bold text-indigo-500 dark:text-indigo-400 uppercase tracking-wide border-b border-slate-100 dark:border-white/5 mb-1 flex items-center justify-between">
+                                                         <span>Sally AI commands</span>
+                                                         <span className="text-[9px] font-medium opacity-65">Press ↑↓ to navigate</span>
+                                                     </div>
+                                                     <div className="max-h-52 overflow-y-auto custom-scrollbar flex flex-col gap-0.5">
+                                                         {filteredCommands.map((cmd, idx) => {
+                                                             const active = selectedSlashIdx === idx;
+                                                             return (
+                                                                 <button 
+                                                                     key={cmd.cmd} 
+                                                                     type="button" 
+                                                                     onClick={() => {
+                                                                         triggerHaptics('light');
+                                                                         const restText = messageInput.substring(cmd.cmd.length).trim();
+                                                                         cmd.action(restText);
+                                                                         setShowSlashCommands(false);
+                                                                     }} 
+                                                                     className={clsx(
+                                                                         "w-full text-left px-3 py-2 text-xs rounded-xl transition-all font-medium flex flex-col gap-0.5",
+                                                                         active 
+                                                                             ? "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/25" 
+                                                                             : "text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-white/5 border border-transparent"
+                                                                     )}
+                                                                 >
+                                                                     <div className="font-bold flex items-center gap-1">
+                                                                         <span className={active ? "text-indigo-600 dark:text-indigo-400" : "text-indigo-500"}>{cmd.cmd}</span>
+                                                                     </div>
+                                                                     <div className="text-[10px] opacity-70">{cmd.desc}</div>
+                                                                 </button>
+                                                             );
+                                                         })}
+                                                     </div>
+                                                 </motion.div>
+                                             </>
+                                         )}
+                                     </AnimatePresence>
                                         </div>
                                     )}
                                 </div>
@@ -2343,11 +2579,23 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                          </div>
 
                                          {isRecording ? (
-                                             <div className="flex-1 flex items-center gap-3 py-2 px-3 min-h-[36px]">
-                                                 <div className="w-2.5 h-2.5 bg-red-500 rounded-full animate-pulse" />
-                                                 <span className="font-google font-bold text-red-500 text-sm">{Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}</span>
-                                                 <span className="text-xs ml-auto opacity-70 animate-pulse hidden sm:inline text-red-500 dark:text-red-400">Recording voice message...</span>
-                                             </div>
+                                              <div className="flex-1 flex items-center gap-3 py-1 px-3 min-h-[36px] overflow-hidden">
+                                                  <div className="w-2.5 h-2.5 bg-red-500 rounded-full animate-ping flex-shrink-0" />
+                                                  <span className="font-google font-bold text-red-500 text-sm flex-shrink-0">{Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}</span>
+                                                  
+                                                  {/* Animating Waveform Visualizer */}
+                                                  <div className="flex items-center gap-[3px] h-6 px-3 flex-1 overflow-hidden select-none">
+                                                      {audioLevels.map((level, i) => (
+                                                          <motion.div 
+                                                              key={i} 
+                                                              className="w-[3px] rounded-full bg-red-500 dark:bg-red-400"
+                                                              style={{ height: `${level}px` }}
+                                                              animate={{ height: `${level}px` }}
+                                                              transition={{ type: 'spring', stiffness: 350, damping: 15 }}
+                                                          />
+                                                      ))}
+                                                  </div>
+                                              </div>
                                          ) : (
                                              <textarea ref={textareaRef} value={messageInput} onChange={handleInputChange} onKeyDown={handleKeyDown} onFocus={() => setIsInputFocused(true)} onBlur={() => setTimeout(() => { setIsInputFocused(false); setShowMentions(false); }, 200)} placeholder={activeChannel.type === 'announcement' ? 'Compose broadcast message...' : `Message #${activeChannel.name}`} className="flex-1 bg-transparent py-2 px-2 border-none outline-none focus:outline-none focus:ring-0 resize-none overflow-y-auto max-h-32 min-h-[36px] text-[15px] font-google font-medium text-slate-800 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 scrollbar-none" style={{ outline: 'none', border: 'none', boxShadow: 'none' }} rows={1} />
                                          )}
