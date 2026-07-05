@@ -378,6 +378,7 @@ const MessageGroupRenderer = React.memo(({
 
                         const bubbleData = getBubbleStyleAndClass();
 
+                            return (
                             <SwipeableMessage
                                 key={msg.id}
                                 msg={msg}
@@ -2257,35 +2258,202 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                             {/* Channel Info Drawer */}
                             <AnimatePresence>
                                 {showInfoDrawer && (
-                                    <motion.div initial={{ width: 0, opacity: 0 }} animate={{ width: 280, opacity: 1 }} exit={{ width: 0, opacity: 0 }} className="flex-shrink-0 overflow-hidden overflow-y-auto custom-scrollbar" style={{ borderLeft: '1px solid var(--md-sys-color-outline-variant)', background: 'var(--md-sys-color-surface)' }}>
+                                    <motion.div 
+                                        initial={{ width: 0, opacity: 0 }} 
+                                        animate={{ width: 310, opacity: 1 }} 
+                                        exit={{ width: 0, opacity: 0 }} 
+                                        className={clsx(
+                                            "flex-shrink-0 overflow-hidden overflow-y-auto custom-scrollbar border-l transition-all duration-500 relative z-20",
+                                            chatWallpaper === 'mesh' 
+                                                ? "bg-white/20 dark:bg-slate-950/20 border-white/10 dark:border-white/5 backdrop-blur-xl" 
+                                                : "bg-white dark:bg-slate-950 border-slate-200 dark:border-white/[0.05]"
+                                        )}
+                                    >
                                         <div className="p-5 space-y-6">
                                             <div className="flex items-center justify-between">
-                                                <h3 className="font-google font-bold text-sm" style={{ color: 'var(--md-sys-color-on-surface)' }}>Channel Info</h3>
-                                                <button onClick={() => setShowInfoDrawer(false)} className="p-1.5 rounded-lg hover:bg-[var(--md-sys-color-surface-variant)]"><X size={16} style={{ color: 'var(--md-sys-color-secondary)' }} /></button>
+                                                <h3 className="font-google font-bold text-sm text-slate-800 dark:text-slate-200">Channel Info</h3>
+                                                <button onClick={() => setShowInfoDrawer(false)} className="p-1.5 rounded-lg hover:bg-slate-200/50 dark:hover:bg-white/5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><X size={16} /></button>
                                             </div>
                                             <div className="text-center">
-                                                <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3" style={{ background: 'var(--md-sys-color-primary-container)' }}>
-                                                    {activeChannel.type === 'announcement' ? <Megaphone size={24} style={{ color: 'var(--md-sys-color-primary)' }} /> : <Hash size={24} style={{ color: 'var(--md-sys-color-primary)' }} />}
+                                                <div className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3 bg-gradient-to-tr from-indigo-500/20 to-purple-500/20 border border-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                                                    {activeChannel.type === 'announcement' ? <Megaphone size={24} /> : activeChannel.type === 'dm' ? <User size={24} /> : <Hash size={24} />}
                                                 </div>
-                                                <h4 className="font-google font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>{activeChannel.name}</h4>
-                                                {activeChannel.description && <p className="text-xs mt-1" style={{ color: 'var(--md-sys-color-secondary)' }}>{activeChannel.description}</p>}
+                                                <h4 className="font-google font-bold text-slate-800 dark:text-slate-100">{activeChannel.type === 'dm' ? getDMPartnerName(activeChannel) : activeChannel.name}</h4>
+                                                {activeChannel.description && <p className="text-xs mt-1 text-slate-500 dark:text-slate-400">{activeChannel.description}</p>}
                                             </div>
-                                            <div>
-                                                <h5 className="text-[10px] font-black uppercase tracking-widest mb-3" style={{ color: 'var(--md-sys-color-secondary)' }}>Participants ({uniqueUsers.length})</h5>
-                                                <div className="space-y-2">
-                                                    {uniqueUsers.map(([uid, name]) => (
-                                                        <div key={uid} className="flex items-center gap-2.5 px-2 py-1.5 rounded-xl hover:bg-[var(--md-sys-color-surface-variant)] transition-colors">
-                                                            <UserAvatar name={name} avatarUrl={avatarMap[uid]} size={28} />
-                                                            <span className="text-sm font-medium font-google" style={{ color: 'var(--md-sys-color-on-surface)' }}>{name}</span>
-                                                        </div>
-                                                    ))}
-                                                </div>
+
+                                            {/* Tab Switcher */}
+                                            <div className="flex border-b border-slate-200/50 dark:border-white/5">
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => { triggerHaptics('light'); setInfoTab('members'); }} 
+                                                    className={clsx(
+                                                        "flex-1 pb-2 text-xs font-bold transition-all border-b-2 text-center", 
+                                                        infoTab === 'members' 
+                                                            ? "border-indigo-500 text-indigo-600 dark:text-indigo-400" 
+                                                            : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+                                                    )}
+                                                >
+                                                    Members
+                                                </button>
+                                                <button 
+                                                    type="button"
+                                                    onClick={() => { triggerHaptics('light'); setInfoTab('media'); }} 
+                                                    className={clsx(
+                                                        "flex-1 pb-2 text-xs font-bold transition-all border-b-2 text-center", 
+                                                        infoTab === 'media' 
+                                                            ? "border-indigo-500 text-indigo-600 dark:text-indigo-400" 
+                                                            : "border-transparent text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-300"
+                                                    )}
+                                                >
+                                                    Pins & Media
+                                                </button>
                                             </div>
-                                            {pinnedMessages.length > 0 && (
+
+                                            {infoTab === 'members' ? (
                                                 <div>
-                                                    <h5 className="text-[10px] font-black uppercase tracking-widest mb-3" style={{ color: 'var(--md-sys-color-secondary)' }}>Pinned ({pinnedMessages.length})</h5>
+                                                    <h5 className="text-[10px] font-black uppercase tracking-widest mb-3 text-slate-400 dark:text-slate-500">Participants ({uniqueUsers.length})</h5>
                                                     <div className="space-y-2">
-                                                        {pinnedMessages.map(m => <div key={m.id} className="p-2 rounded-xl text-xs" style={{ background: 'var(--md-sys-color-surface-variant)' }}><span className="font-bold" style={{ color: 'var(--md-sys-color-on-surface)' }}>{m.senderName}:</span> <span style={{ color: 'var(--md-sys-color-secondary)' }}>{m.content.slice(0, 80)}</span></div>)}
+                                                        {uniqueUsers.map(([uid, name]) => {
+                                                            const isActive = uid === userId || dmUsers.some(u => u.id === uid && u.isActive);
+                                                            const role = uid === userId ? (user?.role || 'user') : 'user';
+                                                            const isSelf = uid === userId;
+                                                            return (
+                                                                <div 
+                                                                    key={uid} 
+                                                                    className="flex items-center gap-2.5 px-2.5 py-2 rounded-2xl hover:bg-slate-200/40 dark:hover:bg-white/5 transition-all duration-300 group/member"
+                                                                >
+                                                                    <div className="relative">
+                                                                        <UserAvatar name={name} avatarUrl={avatarMap[uid]} size={28} />
+                                                                        <div className={clsx(
+                                                                            "absolute -bottom-1 -right-1 w-2.5 h-2.5 rounded-full border-2 border-white dark:border-slate-900 shadow-sm",
+                                                                            isActive ? "bg-emerald-500 animate-pulse" : "bg-slate-400"
+                                                                        )} />
+                                                                    </div>
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <div className="text-xs font-bold font-google truncate text-slate-800 dark:text-slate-200">{name}</div>
+                                                                        <div className="text-[8px] font-black tracking-wider uppercase text-slate-400 dark:text-slate-500 flex items-center gap-1">
+                                                                            {isSelf && <span className="text-indigo-500 dark:text-indigo-400">You</span>}
+                                                                            {role === 'admin' && <span className="text-rose-500">Admin</span>}
+                                                                        </div>
+                                                                    </div>
+                                                                    {!isSelf && (
+                                                                        <button 
+                                                                            type="button"
+                                                                            onClick={() => {
+                                                                                triggerHaptics('light');
+                                                                                createDirectMessage(userId, uid).then(newCh => {
+                                                                                    if (newCh) {
+                                                                                        onUpdateAppData?.({
+                                                                                            ...data,
+                                                                                            communications: {
+                                                                                                ...data.communications,
+                                                                                                channels: [...data.communications.channels, newCh]
+                                                                                            }
+                                                                                        });
+                                                                                        setActiveChannelId(newCh.id);
+                                                                                        setMobileView('chat');
+                                                                                    }
+                                                                                });
+                                                                            }}
+                                                                            className="opacity-0 group-hover/member:opacity-100 p-1.5 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all scale-90 hover:scale-100"
+                                                                            title={`Send Direct Message to ${name}`}
+                                                                        >
+                                                                            <MessageSquare size={12} />
+                                                                        </button>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="space-y-6">
+                                                    {/* Pinned Messages */}
+                                                    <div>
+                                                        <h5 className="text-[10px] font-black uppercase tracking-widest mb-3 text-slate-400 dark:text-slate-500 flex items-center gap-1"><Pin size={10} className="text-yellow-500" /> Pinned Messages ({pinnedMessages.length})</h5>
+                                                        {pinnedMessages.length === 0 ? (
+                                                            <div className="text-[11px] text-slate-400 dark:text-slate-500 italic px-2">No pinned messages yet.</div>
+                                                        ) : (
+                                                            <div className="space-y-2">
+                                                                {pinnedMessages.map(m => (
+                                                                    <div 
+                                                                        key={m.id} 
+                                                                        onClick={() => {
+                                                                            triggerHaptics('light');
+                                                                            const el = document.getElementById(`msg-${m.id}`);
+                                                                            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                                                        }}
+                                                                        className="p-2.5 rounded-2xl text-[11px] border border-slate-200/50 dark:border-white/5 hover:border-indigo-500/30 cursor-pointer transition-all hover:translate-y-[-1px] hover:shadow-sm"
+                                                                        style={chatWallpaper === 'mesh' ? { background: 'rgba(255, 255, 255, 0.15)' } : { background: 'var(--md-sys-color-surface-variant)' }}
+                                                                    >
+                                                                        <div className="font-bold text-slate-800 dark:text-slate-200 mb-0.5">{m.senderName}</div>
+                                                                        <div className="text-slate-650 dark:text-slate-400 line-clamp-2">{m.content}</div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Shared Photos */}
+                                                    <div>
+                                                        <h5 className="text-[10px] font-black uppercase tracking-widest mb-3 text-slate-400 dark:text-slate-500 flex items-center gap-1"><ImageIcon size={10} /> Shared Photos ({sharedMedia.images.length})</h5>
+                                                        {sharedMedia.images.length === 0 ? (
+                                                            <div className="text-[11px] text-slate-400 dark:text-slate-500 italic px-2">No shared photos.</div>
+                                                        ) : (
+                                                            <div className="grid grid-cols-3 gap-1.5">
+                                                                {sharedMedia.images.map((img: any, idx: number) => (
+                                                                    <div 
+                                                                        key={idx} 
+                                                                        onClick={() => {
+                                                                            triggerHaptics('light');
+                                                                            const el = document.getElementById(`msg-${img.msgId}`);
+                                                                            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                                                        }}
+                                                                        className="aspect-square rounded-xl overflow-hidden cursor-pointer border border-slate-200/50 dark:border-white/5 hover:scale-105 active:scale-95 transition-all shadow-sm group/photo"
+                                                                    >
+                                                                        <img src={img.url} alt={img.name} className="w-full h-full object-cover group-hover/photo:brightness-110" />
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+
+                                                    {/* Shared Files */}
+                                                    <div>
+                                                        <h5 className="text-[10px] font-black uppercase tracking-widest mb-3 text-slate-400 dark:text-slate-500 flex items-center gap-1"><FileText size={10} /> Shared Documents ({sharedMedia.docs.length})</h5>
+                                                        {sharedMedia.docs.length === 0 ? (
+                                                            <div className="text-[11px] text-slate-400 dark:text-slate-500 italic px-2">No shared files.</div>
+                                                        ) : (
+                                                            <div className="space-y-1.5">
+                                                                {sharedMedia.docs.map((doc: any, idx: number) => (
+                                                                    <div 
+                                                                        key={idx} 
+                                                                        className="flex items-center gap-2 p-2 rounded-2xl border border-slate-200/50 dark:border-white/5 hover:border-indigo-500/20 transition-colors"
+                                                                        style={chatWallpaper === 'mesh' ? { background: 'rgba(255, 255, 255, 0.15)' } : { background: 'var(--md-sys-color-surface-variant)' }}
+                                                                    >
+                                                                        <div className="w-8 h-8 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center flex-shrink-0">
+                                                                            <FileText size={14} />
+                                                                        </div>
+                                                                        <div className="flex-1 min-w-0">
+                                                                            <div className="text-[10px] font-bold text-slate-800 dark:text-slate-200 truncate">{doc.name}</div>
+                                                                            <div className="text-[9px] opacity-60 text-slate-500 dark:text-slate-400">{(doc.size / 1024).toFixed(1)} KB</div>
+                                                                        </div>
+                                                                        <a 
+                                                                            href={doc.url} 
+                                                                            download={doc.name}
+                                                                            target="_blank"
+                                                                            rel="noopener noreferrer"
+                                                                            onClick={() => triggerHaptics('light')}
+                                                                            className="p-1.5 rounded-lg hover:bg-slate-200/60 dark:hover:bg-white/5 text-indigo-650 dark:text-indigo-400 flex-shrink-0"
+                                                                            title="Download file"
+                                                                        >
+                                                                            <Download size={13} />
+                                                                        </a>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                             )}
