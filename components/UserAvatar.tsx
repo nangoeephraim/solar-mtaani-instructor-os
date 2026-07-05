@@ -17,6 +17,8 @@ interface UserAvatarProps {
     rounded?: 'xl' | 'full';
 }
 
+const loadedAvatarsCache = new Set<string>();
+
 const UserAvatar: React.FC<UserAvatarProps> = ({
     name,
     avatarUrl,
@@ -24,14 +26,20 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
     className = '',
     rounded = 'xl',
 }) => {
-    const [status, setStatus] = useState<'loading' | 'loaded' | 'error'>(
-        avatarUrl ? 'loading' : 'error'
-    );
+    const [status, setStatus] = useState<'loading' | 'loaded' | 'error'>(() => {
+        if (!avatarUrl) return 'error';
+        if (loadedAvatarsCache.has(avatarUrl)) return 'loaded';
+        return 'loading';
+    });
 
     // When avatarUrl changes (e.g. map populates), reset status
     useEffect(() => {
         if (avatarUrl) {
-            setStatus('loading');
+            if (loadedAvatarsCache.has(avatarUrl)) {
+                setStatus('loaded');
+            } else {
+                setStatus('loading');
+            }
         } else {
             setStatus('error');
         }
@@ -62,16 +70,28 @@ const UserAvatar: React.FC<UserAvatarProps> = ({
                 />
             )}
 
-            {/* Actual photo — crossfades in */}
-            {avatarUrl && (
+            {/* Offscreen image to trigger loading/onload caching */}
+            {avatarUrl && status === 'loading' && (
                 <img
                     src={avatarUrl}
-                    alt={name}
-                    draggable={false}
-                    onLoad={() => setStatus('loaded')}
+                    alt=""
+                    onLoad={() => {
+                        loadedAvatarsCache.add(avatarUrl);
+                        setStatus('loaded');
+                    }}
                     onError={() => setStatus('error')}
-                    className={`absolute inset-0 w-full h-full object-cover ${roundedClass} transition-opacity duration-300`}
-                    style={{ opacity: status === 'loaded' ? 1 : 0 }}
+                    className="hidden"
+                />
+            )}
+
+            {/* Actual photo rendered as background-image to prevent any frame-clearing flicker */}
+            {avatarUrl && (
+                <div
+                    className={`absolute inset-0 w-full h-full bg-cover bg-center ${roundedClass} transition-opacity duration-300`}
+                    style={{ 
+                        backgroundImage: `url(${avatarUrl})`,
+                        opacity: status === 'loaded' ? 1 : 0 
+                    }}
                 />
             )}
         </div>

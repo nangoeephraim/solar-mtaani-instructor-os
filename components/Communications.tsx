@@ -551,6 +551,7 @@ const MessageGroupRenderer = React.memo(({
     if (hasPickerNow !== hadPicker) return false;
 
     // Check message deep references (React state update gives new references on change)
+    if (prevProps.group.length !== nextProps.group.length) return false;
     for (let i = 0; i < prevProps.group.length; i++) {
         if (prevProps.group[i] !== nextProps.group[i]) return false;
     }
@@ -1239,22 +1240,24 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
     }, [messages]);
 
     // Also include DM users so their avatars load in sidebar/DM header
-    const allRelevantIds = useMemo(() => {
+    const allRelevantIdsKey = useMemo(() => {
         const dmIds = dmUsers.map(u => u.id);
-        return [...new Set([...allSenderIds, ...dmIds])];
+        const uniqueIds = [...new Set([...allSenderIds, ...dmIds])];
+        return uniqueIds.sort().join(',');
     }, [allSenderIds, dmUsers]);
 
-    // Fetch avatar map — re-runs any time a new sender ID appears (new realtime messages)
+    // Fetch avatar map — re-runs ONLY when a new unique user ID appears in the list
     useEffect(() => {
-        if (allRelevantIds.length === 0) return;
-        fetchAvatarMap(allRelevantIds).then(freshMap => {
+        if (!allRelevantIdsKey) return;
+        const ids = allRelevantIdsKey.split(',').filter(Boolean);
+        fetchAvatarMap(ids).then(freshMap => {
             setAvatarMap(prev => {
                 const merged = { ...prev, ...freshMap };
-                const changed = allRelevantIds.some(id => prev[id] !== merged[id]);
+                const changed = ids.some(id => prev[id] !== merged[id]);
                 return changed ? merged : prev;
             });
         }).catch(() => { });
-    }, [allRelevantIds]);
+    }, [allRelevantIdsKey]);
 
     // Subscribe to Supabase realtime profile changes so avatar updates are instant
     useEffect(() => {
@@ -2205,7 +2208,7 @@ export default function Communications({ data, onUpdateAppData, onNavigate, pend
                                                 const prevMsg = prevGroup ? prevGroup[prevGroup.length - 1] : null;
                                                 const showDateSep = !prevMsg || !isSameDay(first.timestamp, prevMsg.timestamp);
                                                 return (
-                                                    <React.Fragment key={`g - ${gIdx} -${first.id} `}>
+                                                    <React.Fragment key={`g-${first.id}`}>
                                                         {showDateSep && <DateSeparator date={first.timestamp} />}
                                                         {firstUnreadIdx >= 0 && allActiveMessages.indexOf(first) === firstUnreadIdx && <UnreadSeparator />}
                                                         <MessageGroupRenderer
