@@ -5,6 +5,7 @@ import { FeePayment, Student } from '../types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import clsx from 'clsx';
+import { useTheme } from '../contexts/ThemeContext';
 
 interface ReceiptModalProps {
     payment: FeePayment;
@@ -14,6 +15,7 @@ interface ReceiptModalProps {
 }
 
 const ReceiptModal: React.FC<ReceiptModalProps> = ({ payment, student, balance, onClose }) => {
+    const { preferences } = useTheme();
     const receiptRef = useRef<HTMLDivElement>(null);
     const [isGenerating, setIsGenerating] = useState(false);
 
@@ -248,8 +250,8 @@ const ReceiptModal: React.FC<ReceiptModalProps> = ({ payment, student, balance, 
                         {/* Term/Balance Info */}
                         <div className="space-y-3">
                             <div className="flex justify-between text-sm">
-                                <span className="text-gray-500">Term Applied</span>
-                                <span className="font-medium text-gray-900">Term {payment.term || 'N/A'}</span>
+                                <span className="text-gray-500">{preferences.terminology?.periodLabel || 'Term'} Applied</span>
+                                <span className="font-medium text-gray-900">{preferences.terminology?.periodLabel || 'Term'} {payment.term || 'N/A'}</span>
                             </div>
                             <div className="flex justify-between text-sm">
                                 <span className="text-gray-500">Recorded By</span>

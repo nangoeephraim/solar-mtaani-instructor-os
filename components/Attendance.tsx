@@ -464,7 +464,7 @@ const Attendance: React.FC<AttendanceProps> = ({ data, onUpdateStudent, onNaviga
                                                                 </span>
                                                             )}
                                                         </div>
-                                                        <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] font-medium mt-0.5">Lot {student.lot} • {student.attendancePct}% overall</p>
+                                                        <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] font-medium mt-0.5">{preferences.terminology?.cohortLabel || 'Lot'} {student.lot} • {student.attendancePct}% overall</p>
                                                     </div>
                                                 </div>
 

@@ -93,7 +93,7 @@ export interface GradeDistributionResult {
 
 export type AssessmentSystem = 'CBET' | 'KNEC'; // Competency Based vs Standard Grading
 
-export type GradeKNEC = 'Distinction' | 'Credit' | 'Pass' | 'Referral' | 'Fail';
+export type GradeKNEC = string;
 export type VerdictCBET = 'Competent' | 'Not Yet Competent';
 
 export interface AssessmentComponent {
@@ -149,10 +149,7 @@ export interface ScheduleSlot {
 }
 
 export interface AppData {
-  curriculum: {
-    solar: CurriculumUnit[];
-    ict: CurriculumUnit[];
-  };
+  curriculum: Record<string, CurriculumUnit[]>;
   students: Student[];
   schedule: ScheduleSlot[];
   holidays: Holiday[];
@@ -308,9 +305,9 @@ export const COMPETENCY_COLORS: Record<number, string> = {
 };
 
 // Settings types
-export type InstitutionType = 'tvet' | 'primary' | 'jss' | 'highschool' | 'university' | 'custom';
+export type InstitutionType = 'tvet' | 'primary' | 'jss' | 'highschool' | 'university' | 'nita' | 'custom';
 export type AssessmentSystemType = 'CBET' | 'KNEC';
-export type CurriculumType = 'CBC' | 'KNEC' | 'TVET_CDACC' | 'NITA';
+export type CurriculumType = 'CBC' | 'KNEC' | 'TVET_CDACC' | 'NITA' | 'UNIVERSITY';
 
 export interface AppPreferences {
   theme: 'light' | 'dark' | 'system';

@@ -168,7 +168,7 @@ export const StudentList: React.FC<StudentListProps> = ({
                                             {student.subject}
                                         </span>
                                         <span className="text-slate-300 dark:text-slate-600">•</span>
-                                        <span className="text-[10px] text-[var(--md-sys-color-secondary)]">Lot {student.lot}</span>
+                                        <span className="text-[10px] text-[var(--md-sys-color-secondary)]">{preferences.terminology?.cohortLabel || 'Lot'} {student.lot}</span>
                                     </div>
 
                                     {/* Mini Sparkline showing quick performance context */}

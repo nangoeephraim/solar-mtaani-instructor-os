@@ -4,6 +4,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
 import PageTransition from './PageTransition';
+import { useTheme } from '../contexts/ThemeContext';
+import { getLevelShortLabel } from '../constants/educationLevels';
 import {
     Wallet, Search, Plus, X, CreditCard, Banknote, Users, Filter, ChevronDown, 
     CheckCircle, Clock, Receipt, DollarSign, FileText, Smartphone, MessageSquare, 
@@ -146,6 +148,7 @@ interface StudentLedgerPassProps {
 }
 
 const StudentLedgerPass: React.FC<StudentLedgerPassProps> = ({ student, bal, onAddPay, onSendSMS, payments }) => {
+    const { preferences } = useTheme();
     const [expanded, setExpanded] = useState(false);
     const pctPaid = bal.totalFees > 0 ? (bal.totalPaid / bal.totalFees) * 100 : 0;
     
@@ -192,7 +195,9 @@ const StudentLedgerPass: React.FC<StudentLedgerPassProps> = ({ student, bal, onA
                 {/* Account Label */}
                 <div className="space-y-0.5">
                     <h4 className="font-bold text-slate-850 dark:text-slate-200 text-sm truncate">{student.name}</h4>
-                    <p className="text-[10px] text-slate-400 font-medium">Grade {student.grade} · Lot {student.lot}</p>
+                    <p className="text-[10px] text-slate-400 font-medium">
+                        {preferences.terminology?.classLabel || 'Level'} {getLevelShortLabel(student.studentGroup, String(student.grade))} · {preferences.terminology?.cohortLabel || 'Lot'} {student.lot}
+                    </p>
                 </div>
             </div>
 
@@ -270,6 +275,7 @@ const Fees: React.FC<FeesProps> = ({
     onDeleteFeeStructure, onInitiateMpesa, onSendReminder, onNavigate
 }) => {
     const { user } = useAuth();
+    const { preferences } = useTheme();
     const [search, setSearch] = useState('');
     const [filter, setFilter] = useState<'all' | 'completed' | 'pending' | 'failed'>('all');
     const [termFilter, setTermFilter] = useState<0 | 1 | 2 | 3>(0);
@@ -367,10 +373,11 @@ const Fees: React.FC<FeesProps> = ({
     }, [payments]);
 
     const termStatsData = useMemo(() => {
+        const period = preferences.terminology?.periodLabel || 'Term';
         const terms = [
-            { name: 'Term 1', collected: 0, expected: 0 },
-            { name: 'Term 2', collected: 0, expected: 0 },
-            { name: 'Term 3', collected: 0, expected: 0 },
+            { name: `${period} 1`, collected: 0, expected: 0 },
+            { name: `${period} 2`, collected: 0, expected: 0 },
+            { name: `${period} 3`, collected: 0, expected: 0 },
         ];
         terms.forEach((t, i) => {
             const termNum = (i + 1) as 1 | 2 | 3;
@@ -665,7 +672,7 @@ const Fees: React.FC<FeesProps> = ({
                         >
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                                 <div className="space-y-2">
-                                    <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Term Performance Comparison</h4>
+                                    <h4 className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">{preferences.terminology?.periodLabel || 'Term'} Performance Comparison</h4>
                                     <div className="h-44 w-full flex items-center justify-center">
                                         <ResponsiveContainer width="100%" height="100%">
                                             <BarChart data={termStatsData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -783,10 +790,10 @@ const Fees: React.FC<FeesProps> = ({
                                     onChange={e => setTermFilter(Number(e.target.value) as 0 | 1 | 2 | 3)}
                                     className="px-2.5 py-1.5 bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 outline-none cursor-pointer"
                                 >
-                                    <option value="0">All Terms</option>
-                                    <option value="1">Term 1</option>
-                                    <option value="2">Term 2</option>
-                                    <option value="3">Term 3</option>
+                                    <option value="0">All {preferences.terminology?.periodLabel || 'Term'}s</option>
+                                    <option value="1">{preferences.terminology?.periodLabel || 'Term'} 1</option>
+                                    <option value="2">{preferences.terminology?.periodLabel || 'Term'} 2</option>
+                                    <option value="3">{preferences.terminology?.periodLabel || 'Term'} 3</option>
                                 </select>
                                 <div className="flex bg-slate-100 dark:bg-slate-800/60 p-0.5 rounded-lg border border-slate-200/40 dark:border-slate-800">
                                     {(['all', 'completed', 'pending', 'failed'] as const).map(f => (
@@ -832,7 +839,7 @@ const Fees: React.FC<FeesProps> = ({
                         )}
                         {tab === 'payments' && termFilter > 0 && (
                             <span className="px-2 py-0.5 bg-slate-200/60 dark:bg-slate-800/60 text-slate-700 dark:text-slate-300 rounded-md">
-                                Term {termFilter}
+                                {preferences.terminology?.periodLabel || 'Term'} {termFilter}
                             </span>
                         )}
                         <button 
@@ -1030,7 +1037,7 @@ const Fees: React.FC<FeesProps> = ({
                                             </div>
 
                                             <div className="flex items-center gap-1.5 flex-wrap pt-1">
-                                                {fee.term && <span className="text-[9px] font-bold bg-white/10 border border-white/5 text-slate-350 px-2 py-0.5 rounded uppercase">Term {fee.term}</span>}
+                                                {fee.term && <span className="text-[9px] font-bold bg-white/10 border border-white/5 text-slate-350 px-2 py-0.5 rounded uppercase">{preferences.terminology?.periodLabel || 'Term'} {fee.term}</span>}
                                                 {fee.studentGroup && <span className="text-[9px] font-bold bg-white/10 border border-white/5 text-slate-355 px-2 py-0.5 rounded uppercase">{fee.studentGroup} Group</span>}
                                                 {fee.isRecurring && <span className="text-[9px] font-bold bg-white/10 border border-white/5 text-slate-355 px-2 py-0.5 rounded uppercase">Recurring</span>}
                                             </div>
@@ -1175,15 +1182,15 @@ const Fees: React.FC<FeesProps> = ({
                                             </select>
                                         </div>
                                         <div className="space-y-1">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Billed Term</label>
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Billed {preferences.terminology?.periodLabel || 'Term'}</label>
                                             <select 
                                                 value={payTerm.toString()} 
                                                 onChange={e => setPayTerm(Number(e.target.value) as 1 | 2 | 3)} 
                                                 className="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200/85 dark:border-slate-800 rounded-xl text-xs font-semibold outline-none text-slate-700 dark:text-slate-355 cursor-pointer"
                                             >
-                                                <option value="1">Term 1</option>
-                                                <option value="2">Term 2</option>
-                                                <option value="3">Term 3</option>
+                                                <option value="1">{preferences.terminology?.periodLabel || 'Term'} 1</option>
+                                                <option value="2">{preferences.terminology?.periodLabel || 'Term'} 2</option>
+                                                <option value="3">{preferences.terminology?.periodLabel || 'Term'} 3</option>
                                             </select>
                                         </div>
                                     </div>
@@ -1245,7 +1252,7 @@ const Fees: React.FC<FeesProps> = ({
                                             type="text" 
                                             value={feeName} 
                                             onChange={e => setFeeName(e.target.value)} 
-                                            placeholder="e.g. Tuition Fee Term 2"
+                                            placeholder={`e.g. Tuition Fee ${preferences.terminology?.periodLabel || 'Term'} 2`}
                                             className="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200/85 dark:border-slate-800 rounded-xl text-xs font-semibold text-slate-700 dark:text-slate-355 outline-none" 
                                         />
                                     </div>
@@ -1263,16 +1270,16 @@ const Fees: React.FC<FeesProps> = ({
 
                                     <div className="grid grid-cols-2 gap-3.5">
                                         <div className="space-y-1">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Target Term</label>
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">Target {preferences.terminology?.periodLabel || 'Term'}</label>
                                             <select 
                                                 value={feeTerm === undefined ? '' : feeTerm.toString()} 
                                                 onChange={e => setFeeTerm(e.target.value ? Number(e.target.value) as 1 | 2 | 3 : undefined)} 
                                                 className="w-full p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200/85 dark:border-slate-800 rounded-xl text-xs font-semibold outline-none text-slate-700 dark:text-slate-350 cursor-pointer"
                                             >
-                                                <option value="">All Terms</option>
-                                                <option value="1">Term 1</option>
-                                                <option value="2">Term 2</option>
-                                                <option value="3">Term 3</option>
+                                                <option value="">All {preferences.terminology?.periodLabel || 'Term'}s</option>
+                                                <option value="1">{preferences.terminology?.periodLabel || 'Term'} 1</option>
+                                                <option value="2">{preferences.terminology?.periodLabel || 'Term'} 2</option>
+                                                <option value="3">{preferences.terminology?.periodLabel || 'Term'} 3</option>
                                             </select>
                                         </div>
                                         <div className="space-y-1">

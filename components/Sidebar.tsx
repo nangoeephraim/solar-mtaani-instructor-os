@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect } from 'react';
-import { LayoutDashboard, Calendar, Users, ClipboardCheck, Settings, BarChart3, UserCheck, LineChart, Box, MessageSquare, Wallet, UsersRound, BookOpen } from 'lucide-react';
+import { LayoutDashboard, Calendar, Users, ClipboardCheck, Settings, BarChart3, UserCheck, LineChart, Box, MessageSquare, Wallet, UsersRound, BookOpen, Keyboard } from 'lucide-react';
 import clsx from 'clsx';
 import { motion } from 'framer-motion';
 import { AppData, UserRole } from '../types';
@@ -162,6 +162,20 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, data }) => {
           );
         })}
       </nav>
+
+      {/* Keyboard Shortcuts Trigger Button */}
+      <div className="px-3 mb-1 flex-shrink-0">
+        <button
+          onClick={() => {
+            window.dispatchEvent(new CustomEvent('prism-toggle-shortcuts'));
+          }}
+          className="w-full flex items-center gap-3.5 px-4 py-2.5 rounded-xl transition-all duration-200 text-[var(--md-sys-color-on-surface-variant)] hover:bg-[var(--md-sys-color-surface-variant)] hover:text-[var(--md-sys-color-on-surface)] font-medium"
+        >
+          <Keyboard size={20} strokeWidth={1.8} className="text-[var(--md-sys-color-secondary)]" />
+          <span className="text-[13px] font-google tracking-wide text-left flex-1">Shortcuts Guide</span>
+          <kbd className="px-1.5 py-0.5 bg-slate-200/50 dark:bg-white/5 text-[9px] font-black rounded border border-slate-350/50 dark:border-white/5 text-slate-500 dark:text-slate-400">?</kbd>
+        </button>
+      </div>
 
       {/* Status Footer */}
       <div className="p-4 mt-auto safe-area-bottom">

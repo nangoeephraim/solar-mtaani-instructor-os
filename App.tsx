@@ -42,6 +42,7 @@ import CommandPalette from './components/CommandPalette';
 import SplashScreen from './components/SplashScreen';
 import { AnimatedBackground } from './components/AnimatedBackground';
 import { SallyChat } from './components/SallyChat';
+import { KeyboardShortcutsModal } from './components/KeyboardShortcutsModal';
 import { EasterEgg } from './components/EasterEgg';
 import { useLocalStorage } from './hooks/useLocalStorage';
 import {
@@ -161,11 +162,9 @@ const INITIAL_MEET_CODE: string | null = (() => {
   }
 })();
 
-const resolveCurriculum = (curriculum?: Record<string, CurriculumUnit[]>): AppData['curriculum'] => ({
-  ...(curriculum || {}),
-  solar: curriculum?.solar || [],
-  ict: curriculum?.ict || [],
-});
+const resolveCurriculum = (curriculum?: Record<string, CurriculumUnit[]>): AppData['curriculum'] => {
+  return curriculum || {};
+};
 
 const AppContent: React.FC = () => {
   const { preferences } = useTheme();
@@ -197,6 +196,50 @@ const AppContent: React.FC = () => {
   const [selectedStudentId, setSelectedStudentId] = useState<number | undefined>(undefined);
   const [isLoading, setIsLoading] = useState(true);
   const { user } = useAuth();
+  const [showShortcuts, setShowShortcuts] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInput = target.tagName === 'INPUT' || 
+                      target.tagName === 'TEXTAREA' || 
+                      target.tagName === 'SELECT' || 
+                      target.isContentEditable;
+      
+      if (isInput) return;
+
+      if (e.key === '?') {
+        e.preventDefault();
+        setShowShortcuts(prev => !prev);
+        return;
+      }
+
+      if (e.altKey && !e.ctrlKey && !e.metaKey) {
+        const keyNum = parseInt(e.key);
+        if (keyNum >= 1 && keyNum <= 8) {
+          e.preventDefault();
+          const mappings: Record<number, string> = {
+            1: 'dashboard',
+            2: user?.role === 'admin' ? 'analytics' : 'schedule',
+            3: 'schedule',
+            4: 'students-manage',
+            5: 'attendance',
+            6: 'curriculum',
+            7: 'communications',
+            8: 'settings'
+          };
+          const targetView = mappings[keyNum];
+          if (targetView) {
+            setCurrentView(targetView);
+            setSelectedStudentId(undefined);
+          }
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [user]);
 
   const { showToast } = useToast();
 
@@ -348,11 +391,17 @@ const AppContent: React.FC = () => {
       }
     };
     
+    const handleToggleShortcuts = () => {
+      setShowShortcuts(prev => !prev);
+    };
+    
     window.addEventListener('navigate-to-communications', handleNavToCommunications);
     window.addEventListener('prepare-meeting', handlePrepareMeetingAtApp);
+    window.addEventListener('prism-toggle-shortcuts', handleToggleShortcuts);
     return () => {
       window.removeEventListener('navigate-to-communications', handleNavToCommunications);
       window.removeEventListener('prepare-meeting', handlePrepareMeetingAtApp);
+      window.removeEventListener('prism-toggle-shortcuts', handleToggleShortcuts);
     };
   }, [userLevel]);
 
@@ -1226,8 +1275,20 @@ const AppContent: React.FC = () => {
     }
   };
 
-  const handleDataReset = () => {
-    // Left empty. Admin tool for migrate is elsewhere.
+  const handleDataReset = async () => {
+    setIsLoading(true);
+    try {
+      const appData = await fetchAppData();
+      const currentPrefs = getSettings()?.preferences || DEFAULT_SETTINGS.preferences;
+      const activeCurr = currentPrefs.selectedCurriculum || 'TVET_CDACC';
+      appData.curriculum = resolveCurriculum(KENYAN_CURRICULA[activeCurr]);
+      setData(appData);
+    } catch (error) {
+      console.error('Failed to reload data:', error);
+      showToast('Failed to refresh data after configuration change.', 'error');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (isLoading) {
@@ -1328,6 +1389,8 @@ const AppContent: React.FC = () => {
             key="curriculum"
             data={data}
             onNavigate={handleNavigate}
+            onUpdateStudent={handleUpdateStudent}
+            onAddScheduleSlot={handleAddScheduleSlot}
           />
         </Suspense>
       )}
@@ -1435,6 +1498,9 @@ const AppContent: React.FC = () => {
 
         {/* Sally AI Companion */}
         <SallyChat currentView={currentView} />
+
+        {/* Keyboard Shortcuts Guide */}
+        <KeyboardShortcutsModal isOpen={showShortcuts} onClose={() => setShowShortcuts(false)} userRole={user?.role} />
       </div>
     </div>
   );

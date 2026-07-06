@@ -16,7 +16,7 @@ import {
     unassignInstructorFromClass,
     updateInstructorProfile,
 } from '../services/instructorService';
-import { getStudentGroups, getLevelsForGroup } from '../constants/educationLevels';
+import { getStudentGroups, getLevelsForGroup, getLevelShortLabel } from '../constants/educationLevels';
 import type { StudentGroup } from '../types';
 import { useTheme } from '../contexts/ThemeContext';
 
@@ -35,13 +35,25 @@ const InstructorManagement: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const { showToast } = useToast();
 
-    // Assignment form state
     const [assignForm, setAssignForm] = useState({
         grade: '',
-        subject: activeSubjects[0] as string,
-        studentGroup: activeGroups[0] as StudentGroup,
+        subject: '',
+        studentGroup: 'Academy' as StudentGroup,
         term: 1 as 1 | 2 | 3,
     });
+
+    useEffect(() => {
+        if (activeSubjects.length > 0 && activeGroups.length > 0) {
+            const firstGroup = activeGroups[0];
+            const levels = getLevelsForGroup(firstGroup, preferences.institutionType);
+            setAssignForm(prev => ({
+                ...prev,
+                subject: activeSubjects[0] as string,
+                studentGroup: firstGroup,
+                grade: prev.grade || levels[0]?.id || ''
+            }));
+        }
+    }, [activeSubjects, activeGroups, preferences.institutionType]);
 
     const loadData = useCallback(async () => {
         setLoading(true);
@@ -299,10 +311,10 @@ const InstructorManagement: React.FC = () => {
                                                     </div>
                                                     <div>
                                                         <p className="text-sm font-bold text-[var(--md-sys-color-on-surface)]">
-                                                            {asgn.grade} — {asgn.subject}
+                                                            {getLevelShortLabel((asgn.studentGroup || 'Academy') as StudentGroup, asgn.grade)} — {asgn.subject}
                                                         </p>
                                                         <p className="text-[10px] text-[var(--md-sys-color-secondary)] mt-0.5">
-                                                            {asgn.studentGroup || 'All groups'} • Term {asgn.term || 1}
+                                                            {asgn.studentGroup || 'All groups'} • {preferences.terminology?.periodLabel || 'Term'} {asgn.term || 1}
                                                         </p>
                                                     </div>
                                                 </div>
@@ -431,7 +443,7 @@ const InstructorManagement: React.FC = () => {
 
                                 {/* Term */}
                                 <div>
-                                    <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase block mb-1.5">Term</label>
+                                    <label className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase block mb-1.5">{preferences.terminology?.periodLabel || 'Term'}</label>
                                     <div className="flex bg-[var(--md-sys-color-surface-variant)]/60 rounded-xl p-1 border border-[var(--md-sys-color-outline)]">
                                         {([1, 2, 3] as const).map(t => (
                                             <button
@@ -444,7 +456,7 @@ const InstructorManagement: React.FC = () => {
                                                         : "text-[var(--md-sys-color-on-surface-variant)] hover:text-[var(--md-sys-color-on-surface)] hover:bg-white/5"
                                                 )}
                                             >
-                                                Term {t}
+                                                {preferences.terminology?.periodLabel || 'Term'} {t}
                                             </button>
                                         ))}
                                     </div>

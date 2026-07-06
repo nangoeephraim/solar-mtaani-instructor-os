@@ -2,6 +2,8 @@ import React from 'react';
 import { Mail, Phone, Calendar, MapPin, User, Shield, Building, Award, Book } from 'lucide-react';
 import { Student } from '../../types';
 import clsx from 'clsx';
+import { useTheme } from '../../contexts/ThemeContext';
+import { getLevelShortLabel } from '../../constants/educationLevels';
 
 interface OverviewTabProps {
     student: Student;
@@ -11,6 +13,7 @@ interface OverviewTabProps {
 }
 
 export const OverviewTab: React.FC<OverviewTabProps> = ({ student }) => {
+    const { preferences } = useTheme();
     return (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-fade-in relative z-10">
             {/* Left Column - Contact & Guardian */}
@@ -143,7 +146,9 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ student }) => {
                         </div>
                         <div>
                             <p className="text-sm font-bold text-[var(--md-sys-color-on-surface)]">Enrolled in {student.subject} Program</p>
-                            <p className="text-xs text-[var(--md-sys-color-secondary)] mt-0.5">Lot {student.lot} • {student.studentGroup} • Grade {student.grade}</p>
+                            <p className="text-xs text-[var(--md-sys-color-secondary)] mt-0.5">
+                                {preferences.terminology?.cohortLabel || 'Lot'} {student.lot} • {student.studentGroup} • {preferences.terminology?.classLabel || 'Level'} {getLevelShortLabel(student.studentGroup, String(student.grade))}
+                            </p>
                         </div>
                     </div>
                 </div>

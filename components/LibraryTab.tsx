@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from './Toast';
+import { useTheme } from '../contexts/ThemeContext';
 import { uploadFile, deleteFile } from '../services/cloudStorageService';
 import { incrementLibraryDownloadCount } from '../services/storageService';
 import clsx from 'clsx';
@@ -35,6 +36,7 @@ const CATEGORIES = [
 
 export default function LibraryTab({ data, onAddLibraryResource, onDeleteLibraryResource, onUpdateLibraryResource }: LibraryTabProps) {
     const { user } = useAuth();
+    const { preferences } = useTheme();
     const { showToast } = useToast();
 
     // Settings / Configuration
@@ -505,7 +507,7 @@ export default function LibraryTab({ data, onAddLibraryResource, onDeleteLibrary
                                             <div className="absolute top-2 left-2 right-2 flex justify-between items-center z-20 pointer-events-none">
                                                 {resource.academicTerm && (
                                                     <span className="bg-indigo-600/90 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full backdrop-blur-sm">
-                                                        Term {resource.academicTerm}
+                                                        {preferences.terminology?.periodLabel || 'Term'} {resource.academicTerm}
                                                     </span>
                                                 )}
                                                 {!resource.isApproved && (
@@ -683,7 +685,7 @@ export default function LibraryTab({ data, onAddLibraryResource, onDeleteLibrary
                                                     <td className="p-4">
                                                         {resource.academicTerm ? (
                                                             <span className="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-400 font-extrabold px-2 py-0.5 rounded-full">
-                                                                Term {resource.academicTerm}
+                                                                {preferences.terminology?.periodLabel || 'Term'} {resource.academicTerm}
                                                             </span>
                                                         ) : (
                                                             <span className="text-[var(--md-sys-color-secondary)] italic">-</span>
@@ -833,16 +835,16 @@ export default function LibraryTab({ data, onAddLibraryResource, onDeleteLibrary
                                                 </select>
                                             </div>
                                             <div>
-                                                <label className="block text-xs font-bold text-[var(--md-sys-color-on-surface)] mb-1 uppercase">Academic Term</label>
+                                                <label className="block text-xs font-bold text-[var(--md-sys-color-on-surface)] mb-1 uppercase">Academic {preferences.terminology?.periodLabel || 'Term'}</label>
                                                 <select
                                                     value={editTerm}
                                                     onChange={(e) => setEditTerm(e.target.value)}
                                                     className="w-full px-3 py-2 bg-[var(--md-sys-color-surface-variant)] border border-[var(--md-sys-color-outline)] rounded-xl outline-none focus:border-indigo-500 text-xs font-bold"
                                                 >
                                                     <option value="none">Unassigned</option>
-                                                    <option value="1">Term 1</option>
-                                                    <option value="2">Term 2</option>
-                                                    <option value="3">Term 3</option>
+                                                    <option value="1">{preferences.terminology?.periodLabel || 'Term'} 1</option>
+                                                    <option value="2">{preferences.terminology?.periodLabel || 'Term'} 2</option>
+                                                    <option value="3">{preferences.terminology?.periodLabel || 'Term'} 3</option>
                                                 </select>
                                             </div>
                                         </div>
@@ -914,14 +916,14 @@ export default function LibraryTab({ data, onAddLibraryResource, onDeleteLibrary
 
                                         {/* Academic Term */}
                                         <div>
-                                            <h5 className="text-xs font-black text-[var(--md-sys-color-on-surface)] mb-2 uppercase tracking-wide">Academic Term Connection</h5>
+                                            <h5 className="text-xs font-black text-[var(--md-sys-color-on-surface)] mb-2 uppercase tracking-wide">Academic {preferences.terminology?.periodLabel || 'Term'} Connection</h5>
                                             {selectedResource.academicTerm ? (
                                                 <div className="flex items-center gap-2 p-3 bg-indigo-50/50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-900 rounded-xl text-indigo-700 dark:text-indigo-400">
                                                     <Calendar size={16} />
-                                                    <span className="text-xs font-extrabold">Associated with Term {selectedResource.academicTerm} Curriculum</span>
+                                                    <span className="text-xs font-extrabold">Associated with {preferences.terminology?.periodLabel || 'Term'} {selectedResource.academicTerm} Curriculum</span>
                                                 </div>
                                             ) : (
-                                                <p className="text-xs text-[var(--md-sys-color-secondary)] italic">This resource is not tied to a specific academic term.</p>
+                                                <p className="text-xs text-[var(--md-sys-color-secondary)] italic">This resource is not tied to a specific academic {preferences.terminology?.periodLabel?.toLowerCase() || 'term'}.</p>
                                             )}
                                         </div>
 

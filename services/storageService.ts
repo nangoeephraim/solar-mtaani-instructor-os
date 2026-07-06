@@ -1,6 +1,7 @@
 import { AppData, Student, InstructorSettings, DEFAULT_SETTINGS, ScheduleSlot, Resource, ChatChannel, ChatMessage, LibraryResource, FeePayment, FeeStructure } from '../types';
 import { supabase } from './supabase';
 import { getCache, setCache, isOnline, enqueueMutation, syncQueue } from './offlineSyncService';
+import { SEED_DATA_PRESETS } from '../utils/seedData';
 
 const SETTINGS_KEY = 'prism_instructor_settings_v1';
 
@@ -178,7 +179,22 @@ export const formatStudentFromDB = (dbStudent: any): Student => ({
   assessment: dbStudent.assessment,
   attendanceHistory: dbStudent.attendance_history,
   notes: dbStudent.notes,
-  competencies: dbStudent.competencies
+  competencies: dbStudent.competencies,
+  phone: dbStudent.phone || undefined,
+  email: dbStudent.email || undefined,
+  dateOfBirth: dbStudent.date_of_birth || undefined,
+  guardianName: dbStudent.guardian_name || undefined,
+  guardianPhone: dbStudent.guardian_phone || undefined,
+  address: dbStudent.address || undefined,
+  admissionNumber: dbStudent.admission_number || undefined,
+  nemisNumber: dbStudent.nemis_number || undefined,
+  upi: dbStudent.upi || undefined,
+  kcpeMarks: dbStudent.kcpe_marks || undefined,
+  nationalId: dbStudent.national_id || undefined,
+  nitaNumber: dbStudent.nita_number || undefined,
+  epraLicenseStatus: dbStudent.epra_license_status || 'None',
+  kcseGrade: dbStudent.kcse_grade || undefined,
+  photo: dbStudent.photo || undefined,
 });
 
 
@@ -191,7 +207,7 @@ export const addStudent = async (studentData: Omit<Student, 'id'>): Promise<Stud
   }
 
   const { data: userData } = await supabase.auth.getUser();
-  const { data, error } = await supabase.from('students').insert({
+  let insertResult = await supabase.from('students').insert({
     name: studentData.name,
     grade: studentData.grade,
     subject: studentData.subject,
@@ -202,14 +218,46 @@ export const addStudent = async (studentData: Omit<Student, 'id'>): Promise<Stud
     attendance_history: studentData.attendanceHistory || [],
     notes: studentData.notes || [],
     competencies: studentData.competencies || {},
+    phone: studentData.phone || null,
+    email: studentData.email || null,
+    date_of_birth: studentData.dateOfBirth || null,
+    guardian_name: studentData.guardianName || null,
+    guardian_phone: studentData.guardianPhone || null,
+    address: studentData.address || null,
+    admission_number: studentData.admissionNumber || null,
+    nemis_number: studentData.nemisNumber || null,
+    upi: studentData.upi || null,
+    kcpe_marks: studentData.kcpeMarks || null,
+    national_id: studentData.nationalId || null,
+    nita_number: studentData.nitaNumber || null,
+    epra_license_status: studentData.epraLicenseStatus || 'None',
+    kcse_grade: studentData.kcseGrade || null,
+    photo: studentData.photo || null,
     created_by: userData.user?.id
   }).select().single();
 
-  if (error) {
-    console.error("Error adding student:", error);
+  if (insertResult.error) {
+    console.warn("Full insert failed, attempting fallback to core schema:", insertResult.error.message);
+    insertResult = await supabase.from('students').insert({
+      name: studentData.name,
+      grade: studentData.grade,
+      subject: studentData.subject,
+      lot: studentData.lot,
+      student_group: studentData.studentGroup,
+      attendance_pct: studentData.attendancePct || 0,
+      assessment: studentData.assessment,
+      attendance_history: studentData.attendanceHistory || [],
+      notes: studentData.notes || [],
+      competencies: studentData.competencies || {},
+      created_by: userData.user?.id
+    }).select().single();
+  }
+
+  if (insertResult.error) {
+    console.error("Error adding student:", insertResult.error);
     return null;
   }
-  return formatStudentFromDB(data);
+  return formatStudentFromDB(insertResult.data);
 };
 
 export const updateStudent = async (student: Student): Promise<boolean> => {
@@ -218,7 +266,7 @@ export const updateStudent = async (student: Student): Promise<boolean> => {
     return true; // Optimistic success
   }
 
-  const { error } = await supabase.from('students').update({
+  let updateResult = await supabase.from('students').update({
     name: student.name,
     grade: student.grade,
     subject: student.subject,
@@ -229,11 +277,43 @@ export const updateStudent = async (student: Student): Promise<boolean> => {
     attendance_history: student.attendanceHistory,
     notes: student.notes,
     competencies: student.competencies,
+    phone: student.phone || null,
+    email: student.email || null,
+    date_of_birth: student.dateOfBirth || null,
+    guardian_name: student.guardianName || null,
+    guardian_phone: student.guardianPhone || null,
+    address: student.address || null,
+    admission_number: student.admissionNumber || null,
+    nemis_number: student.nemisNumber || null,
+    upi: student.upi || null,
+    kcpe_marks: student.kcpeMarks || null,
+    national_id: student.nationalId || null,
+    nita_number: student.nitaNumber || null,
+    epra_license_status: student.epraLicenseStatus || 'None',
+    kcse_grade: student.kcseGrade || null,
+    photo: student.photo || null,
     updated_at: new Date().toISOString()
   }).eq('id', student.id);
 
-  if (error) {
-    console.error("Error updating student:", error);
+  if (updateResult.error) {
+    console.warn("Full update failed, attempting fallback to core schema:", updateResult.error.message);
+    updateResult = await supabase.from('students').update({
+      name: student.name,
+      grade: student.grade,
+      subject: student.subject,
+      lot: student.lot,
+      student_group: student.studentGroup,
+      attendance_pct: student.attendancePct,
+      assessment: student.assessment,
+      attendance_history: student.attendanceHistory,
+      notes: student.notes,
+      competencies: student.competencies,
+      updated_at: new Date().toISOString()
+    }).eq('id', student.id);
+  }
+
+  if (updateResult.error) {
+    console.error("Error updating student:", updateResult.error);
     return false;
   }
   return true;
@@ -770,6 +850,185 @@ export const importFullBackup = async (jsonString: string): Promise<boolean> => 
 export const resetData = async (): Promise<boolean> => {
   console.warn("resetData called. Factory reset is disabled while on Supabase.");
   return false;
+};
+
+export const reSeedWorkspaceData = async (nicheType: string): Promise<boolean> => {
+  if (!isOnline()) {
+    console.warn("Re-seeding is only supported in online mode.");
+    return false;
+  }
+
+  const preset = SEED_DATA_PRESETS[nicheType];
+  if (!preset) {
+    console.error(`Preset not found for niche type: ${nicheType}`);
+    return false;
+  }
+
+  try {
+    const { data: userData } = await supabase.auth.getUser();
+    const userId = userData.user?.id;
+
+    // 1. Delete existing rows
+    await supabase.from('fee_payments').delete().neq('status', '___NON_EXISTENT___');
+    await supabase.from('fee_structures').delete().neq('name', '___NON_EXISTENT___');
+    await supabase.from('schedule_slots').delete().neq('grade', '___NON_EXISTENT___');
+    await supabase.from('resources').delete().neq('name', '___NON_EXISTENT___');
+    await supabase.from('students').delete().neq('name', '___NON_EXISTENT___');
+
+    // 2. Insert new resources
+    if (preset.resources && preset.resources.length > 0) {
+      const { error: resErr } = await supabase.from('resources').insert(
+        preset.resources.map(r => ({
+          id: r.id,
+          name: r.name,
+          type: r.type,
+          status: r.status || 'available',
+          capacity: r.capacity || null,
+          location: r.location || '',
+          notes: r.notes || '',
+          usage_history: r.usageHistory || []
+        }))
+      );
+      if (resErr) throw resErr;
+    }
+
+    // 3. Insert new fee structures
+    if (preset.feeStructures && preset.feeStructures.length > 0) {
+      const { error: structErr } = await supabase.from('fee_structures').insert(
+        preset.feeStructures.map(f => ({
+          name: f.name,
+          amount: f.amount,
+          term: f.term || 1,
+          student_group: f.studentGroup,
+          is_recurring: f.isRecurring,
+          description: f.description || '',
+          created_by: userId
+        }))
+      );
+      if (structErr) throw structErr;
+    }
+
+    // Fetch the inserted fee structures to map their generated IDs for the payments
+    const { data: dbFeeStructures, error: fetchErr } = await supabase.from('fee_structures').select('*');
+    if (fetchErr) throw fetchErr;
+
+    const feeStructureIdMap: Record<string, string> = {};
+    if (dbFeeStructures) {
+      dbFeeStructures.forEach((dfs: any) => {
+        feeStructureIdMap[dfs.name] = dfs.id;
+      });
+    }
+
+    // 4. Insert students
+    const studentNameIdMap: Record<string, string> = {};
+    for (const studentData of preset.students) {
+      let insertResult = await supabase.from('students').insert({
+        name: studentData.name,
+        grade: studentData.grade,
+        subject: studentData.subject,
+        lot: studentData.lot,
+        student_group: studentData.studentGroup,
+        attendance_pct: studentData.attendancePct || 0,
+        assessment: studentData.assessment,
+        attendance_history: studentData.attendanceHistory || [],
+        notes: studentData.notes || [],
+        competencies: studentData.competencies || {},
+        phone: studentData.phone || null,
+        email: studentData.email || null,
+        date_of_birth: studentData.dateOfBirth || null,
+        guardian_name: studentData.guardianName || null,
+        guardian_phone: studentData.guardianPhone || null,
+        address: studentData.address || null,
+        admission_number: studentData.admissionNumber || null,
+        nemis_number: studentData.nemisNumber || null,
+        upi: studentData.upi || null,
+        kcpe_marks: studentData.kcpeMarks || null,
+        national_id: studentData.nationalId || null,
+        nita_number: studentData.nitaNumber || null,
+        epra_license_status: studentData.epraLicenseStatus || 'None',
+        kcse_grade: studentData.kcseGrade || null,
+        photo: studentData.photo || null,
+        created_by: userId
+      }).select().single();
+
+      // Fallback if schema hasn't been migrated yet (missing column error)
+      if (insertResult.error) {
+        console.warn("Full insert failed, attempting fallback to core schema:", insertResult.error.message);
+        insertResult = await supabase.from('students').insert({
+          name: studentData.name,
+          grade: studentData.grade,
+          subject: studentData.subject,
+          lot: studentData.lot,
+          student_group: studentData.studentGroup,
+          attendance_pct: studentData.attendancePct || 0,
+          assessment: studentData.assessment,
+          attendance_history: studentData.attendanceHistory || [],
+          notes: studentData.notes || [],
+          competencies: studentData.competencies || {},
+          created_by: userId
+        }).select().single();
+      }
+
+      if (insertResult.error) throw insertResult.error;
+      const sData = insertResult.data;
+      if (sData) {
+        studentNameIdMap[sData.name] = sData.id;
+      }
+    }
+
+    // 5. Insert schedule slots
+    if (preset.schedule && preset.schedule.length > 0) {
+      const { error: schedErr } = await supabase.from('schedule_slots').insert(
+        preset.schedule.map(s => ({
+          day_of_week: s.dayOfWeek,
+          start_time: s.startTime,
+          duration_minutes: s.durationMinutes,
+          grade: s.grade,
+          student_group: s.studentGroup,
+          subject: s.subject,
+          status: s.status || 'Pending',
+          resource_ids: [],
+          created_by: userId
+        }))
+      );
+      if (schedErr) throw schedErr;
+    }
+
+    // 6. Insert payments
+    if (preset.feePayments && preset.feePayments.length > 0) {
+      const paymentsToInsert = preset.feePayments.map(p => {
+        const studentId = studentNameIdMap[p.studentName] || null;
+        const feeStructureId = feeStructureIdMap[p.feeName] || null;
+        return {
+          student_name: p.studentName,
+          student_id: studentId,
+          fee_structure_id: feeStructureId,
+          amount: p.amount,
+          method: p.method,
+          status: p.status,
+          mpesa_receipt_number: p.mpesaReceiptNumber || null,
+          mpesa_phone_number: p.mpesaPhoneNumber || null,
+          transaction_date: p.transactionDate || new Date().toISOString(),
+          recorded_by: p.recordedBy || 'System',
+          notes: p.notes || '',
+          term: p.term || 1,
+          created_by: userId
+        };
+      });
+
+      const { error: payErr } = await supabase.from('fee_payments').insert(paymentsToInsert);
+      if (payErr) throw payErr;
+    }
+
+    // Clear cache
+    localStorage.removeItem('prism_app_data_cache');
+    await setCache('app_data', null);
+
+    return true;
+  } catch (err) {
+    console.error("Error during re-seeding workspace:", err);
+    return false;
+  }
 };
 
 // --- RESOURCES & LIBRARY ---

@@ -294,13 +294,35 @@ const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
       }
    }, [selectedStudentId, activeUnit]);
 
-   const calculateKNECGrade = (score: number): GradeKNEC => {
-      if (score >= 80) return 'Distinction';
-      if (score >= 60) return 'Credit';
-      if (score >= 40) return 'Pass';
-      if (score >= 30) return 'Referral';
-      return 'Fail';
-   };
+    const calculateKNECGrade = (score: number): GradeKNEC => {
+       const instType = preferences?.institutionType || 'tvet';
+       if (instType === 'highschool') {
+          if (score >= 80) return 'A';
+          if (score >= 75) return 'A-';
+          if (score >= 70) return 'B+';
+          if (score >= 65) return 'B';
+          if (score >= 60) return 'B-';
+          if (score >= 55) return 'C+';
+          if (score >= 50) return 'C';
+          if (score >= 45) return 'C-';
+          if (score >= 40) return 'D+';
+          if (score >= 35) return 'D';
+          if (score >= 30) return 'D-';
+          return 'E';
+       } else if (instType === 'university') {
+          if (score >= 70) return 'A';
+          if (score >= 60) return 'B';
+          if (score >= 50) return 'C';
+          if (score >= 40) return 'D';
+          return 'F';
+       } else {
+          if (score >= 80) return 'Distinction';
+          if (score >= 60) return 'Credit';
+          if (score >= 40) return 'Pass';
+          if (score >= 30) return 'Referral';
+          return 'Fail';
+       }
+    };
 
    const handleSaveAssessment = () => {
       if (!selectedStudent || !activeUnit) return;
@@ -377,12 +399,26 @@ const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
       setActiveUnit(null);
    };
 
+   const instType = preferences?.institutionType || 'tvet';
+   let cbetLabel = 'CBC / CBET';
+   let knecLabel = 'KNEC Exam';
+   if (instType === 'primary' || instType === 'jss') {
+      cbetLabel = 'CBC Progress';
+      knecLabel = 'Rubric Grading';
+   } else if (instType === 'university') {
+      cbetLabel = 'Course Outcomes';
+      knecLabel = 'Exam Grading';
+   } else if (instType === 'tvet' || instType === 'nita') {
+      cbetLabel = 'CBET Checklist';
+      knecLabel = 'KNEC standard';
+   }
+
    return (
       <div className="max-w-7xl mx-auto animate-fade-in space-y-6 pb-10">
          {/* Header */}
          <PageHeader
             title="Academic Assessment"
-            subtitle={assessmentSystem === 'KNEC' ? 'KNEC Standard Grading' : 'Competency Based Assessment (CBC/CBET)'}
+            subtitle={assessmentSystem === 'KNEC' ? `${knecLabel} Standard Grading` : `Competency Based Assessment (${cbetLabel})`}
             icon={Award}
             color="bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-blue-500/20"
             action={
@@ -394,7 +430,7 @@ const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
                         assessmentSystem === 'CBET' ? "bg-[var(--md-sys-color-surface)] shadow text-violet-600" : "text-[var(--md-sys-color-secondary)] hover:text-[var(--md-sys-color-on-surface)]"
                      )}
                   >
-                     <CheckCircle2 size={14} /> CBC / CBET
+                     <CheckCircle2 size={14} /> {cbetLabel}
                   </button>
                   <button
                      onClick={() => setAssessmentSystem('KNEC')}
@@ -403,7 +439,7 @@ const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
                         assessmentSystem === 'KNEC' ? "bg-[var(--md-sys-color-surface)] shadow text-blue-600" : "text-[var(--md-sys-color-secondary)] hover:text-[var(--md-sys-color-on-surface)]"
                      )}
                   >
-                     <Scale size={14} /> KNEC Exam
+                     <Scale size={14} /> {knecLabel}
                   </button>
                </div>
             }
@@ -681,7 +717,7 @@ const Assessment: React.FC<AssessmentProps> = ({ data, onUpdateStudent }) => {
                            (() => {
                               const liveScore = Math.round((marks.cat1 * 0.15) + (marks.cat2 * 0.15) + (marks.practical * 0.40) + (marks.exam * 0.30));
                               const liveGrade = calculateKNECGrade(liveScore);
-                              const liveColor = liveGrade === 'Distinction' ? 'bg-green-500' : liveGrade === 'Credit' ? 'bg-blue-500' : liveGrade === 'Pass' ? 'bg-yellow-500' : liveGrade === 'Referral' ? 'bg-orange-500' : 'bg-red-500';
+                              const liveColor = liveScore >= 70 ? 'bg-green-500' : liveScore >= 55 ? 'bg-blue-500' : liveScore >= 40 ? 'bg-yellow-500' : liveScore >= 30 ? 'bg-orange-500' : 'bg-red-500';
 
                               return (
                                  <div className="space-y-8">

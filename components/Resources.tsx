@@ -12,6 +12,8 @@ import clsx from 'clsx';
 import { useToast } from './Toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
+import { getLevelShortLabel } from '../constants/educationLevels';
 import LibraryTab from './LibraryTab';
 import { getSubjectPill } from '../utils/subjectUtils';
 import { calculateResourceUtilization, timeToMinutes, doTimesOverlap } from '../utils/scheduling';
@@ -84,6 +86,8 @@ export default function Resources({
     onUpdateLibraryResource,
     onUpdateScheduleSlot
 }: ResourcesProps) {
+    const { user } = useAuth();
+    const { preferences } = useTheme();
     const [mainTab, setMainTab] = useState<MainTab>('physical');
     const [showAddModal, setShowAddModal] = useState(false);
     const [showAssignModal, setShowAssignModal] = useState(false);
@@ -103,7 +107,6 @@ export default function Resources({
     });
 
     const { showToast } = useToast();
-    const { user } = useAuth();
 
     // Generate unique ID
     const generateId = () => `log_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -945,7 +948,7 @@ export default function Resources({
                                                                                 <div className="flex items-center gap-2">
                                                                                     <div className={clsx("w-2 h-2 rounded-full", getSubjectPill(slot.subject || '').bg)} />
                                                                                     <div>
-                                                                                        <p className="font-bold">{slot.subject} (Grade {slot.grade})</p>
+                                                                                        <p className="font-bold">{slot.subject} ({preferences.terminology?.classLabel || 'Level'} {getLevelShortLabel(slot.studentGroup || 'Academy', slot.grade)})</p>
                                                                                         <p className="text-[10px] text-[var(--md-sys-color-secondary)] mt-0.5">{slot.startTime} · {slot.durationMinutes} min</p>
                                                                                     </div>
                                                                                 </div>
@@ -1074,7 +1077,7 @@ export default function Resources({
                                                                         {slot.subject}
                                                                     </span>
                                                                     <span className="font-bold text-[11px] text-[var(--md-sys-color-on-surface)]">
-                                                                        Grade {slot.grade}
+                                                                        {preferences.terminology?.classLabel || 'Level'} {getLevelShortLabel(slot.studentGroup || 'Academy', slot.grade)}
                                                                     </span>
                                                                     <span className="text-[10px] text-[var(--md-sys-color-secondary)]">
                                                                         · {studentCount} students

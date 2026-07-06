@@ -17,6 +17,7 @@ import { analyzeData } from '../services/intelligenceService';
 import { getPendingMutations } from '../services/offlineSyncService';
 import PageTransition from './PageTransition';
 import WordRotator from './WordRotator';
+import { getLevelShortLabel } from '../constants/educationLevels';
 
 /* ─────────────────────────────────────────────
    Hooks
@@ -581,7 +582,7 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onNavigate }) => {
                           {isActive && <span className="flex h-2 w-2 relative"><span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[var(--md-sys-color-primary)] opacity-75"></span><span className="relative inline-flex rounded-full h-2 w-2 bg-[var(--md-sys-color-primary)]"></span></span>}
                         </div>
                         <p className={clsx("font-bold text-xs truncate", isActive ? "text-[var(--md-sys-color-primary)]" : "text-[var(--md-sys-color-on-surface)]")}>
-                          G{slot.grade} {slot.subject}
+                          {getLevelShortLabel(slot.studentGroup, slot.grade)} {slot.subject}
                         </p>
                       </div>
                     </div>
@@ -889,7 +890,9 @@ const Dashboard: React.FC<DashboardProps> = ({ data, onNavigate }) => {
                               <ChevronRight size={14} />
                             </span>
                           </h4>
-                          <p className="text-[9px] font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-widest mt-1">Grade {student.grade} · {student.subject}</p>
+                          <p className="text-[9px] font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-widest mt-1">
+                            {preferences.terminology?.classLabel || 'Level'} {getLevelShortLabel(student.studentGroup, String(student.grade))} · {student.subject}
+                          </p>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <div className="flex flex-col items-end">

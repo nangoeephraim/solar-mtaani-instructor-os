@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { InstructorSettings, DEFAULT_SETTINGS, AppPreferences } from '../types';
-import { getSettings, saveSettings, resetData, exportDataAsCSV, exportFullBackup, importFullBackup } from '../services/storageService';
+import { getSettings, saveSettings, resetData, exportDataAsCSV, exportFullBackup, importFullBackup, reSeedWorkspaceData } from '../services/storageService';
 import { useToast } from './Toast';
 import { useTheme } from '../contexts/ThemeContext';
 import PageHeader from './PageHeader';
@@ -14,7 +14,7 @@ import {
     Bell, Upload, Database, Eye, Shield, LogOut, Users, ChevronRight,
     Laptop, Check, Info, Keyboard, HardDrive,
     Zap, Activity, Camera, Phone, Building2, FileText, X, Trash2, BellRing,
-    GraduationCap, School, BookOpen, Briefcase, Sliders, Plus
+    GraduationCap, School, BookOpen, Briefcase, Sliders, Plus, Award
 } from 'lucide-react';
 import { ToggleSwitch } from './ToggleSwitch';
 import clsx from 'clsx';
@@ -101,6 +101,8 @@ const Settings: React.FC<SettingsProps> = ({ onDataReset }) => {
     const [showResetConfirm, setShowResetConfirm] = useState(false);
     const [showUserManagement, setShowUserManagement] = useState(false);
     const { showToast } = useToast();
+    const [pendingNicheConfig, setPendingNicheConfig] = useState<string | null>(null);
+    const [isSeeding, setIsSeeding] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const avatarInputRef = useRef<HTMLInputElement>(null);
     const [uploadLimitMB, setUploadLimitMB] = useLocalStorage<number>('admin_upload_limit_mb', 2);
@@ -172,7 +174,7 @@ const Settings: React.FC<SettingsProps> = ({ onDataReset }) => {
 
     const INSTITUTION_CONFIGS: Record<string, {
         assessmentSystem: 'CBET' | 'KNEC';
-        selectedCurriculum: 'CBC' | 'KNEC' | 'TVET_CDACC' | 'NITA';
+        selectedCurriculum: 'CBC' | 'KNEC' | 'TVET_CDACC' | 'NITA' | 'UNIVERSITY';
         customSubjects: string[];
         terminology: { cohortLabel: string; classLabel: string; periodLabel: string; };
         enabledFields: {
@@ -272,6 +274,23 @@ const Settings: React.FC<SettingsProps> = ({ onDataReset }) => {
                 admissionNumber: true,
             }
         },
+        university: {
+            assessmentSystem: 'KNEC',
+            selectedCurriculum: 'UNIVERSITY',
+            customSubjects: ['Computer Science', 'Business Administration', 'Mechanical Engineering', 'Medicine & Surgery'],
+            terminology: { cohortLabel: 'Cohort', classLabel: 'Course', periodLabel: 'Semester' },
+            enabledFields: {
+                nemisNumber: false,
+                upi: false,
+                nitaNumber: false,
+                epraLicenseStatus: false,
+                kcseGrade: true,
+                kcpeMarks: false,
+                nationalId: true,
+                guardianDetails: true,
+                admissionNumber: true,
+            }
+        },
         custom: {
             assessmentSystem: 'CBET',
             selectedCurriculum: 'TVET_CDACC',
@@ -292,18 +311,56 @@ const Settings: React.FC<SettingsProps> = ({ onDataReset }) => {
     };
 
     const handleConfigureInstitution = (type: string) => {
+        setPendingNicheConfig(type);
+    };
+
+    const handleApplyNicheAndSeed = async (type: string, shouldSeed: boolean) => {
         const config = INSTITUTION_CONFIGS[type];
         if (!config) return;
 
-        setPreference('institutionType', type as any);
-        setPreference('assessmentSystem', config.assessmentSystem);
-        setPreference('selectedCurriculum', config.selectedCurriculum);
-        setPreference('customSubjects', config.customSubjects);
-        setPreference('terminology', config.terminology);
-        setPreference('enabledFields', config.enabledFields);
-        setPreference('defaultSubject', config.customSubjects[0] || 'All');
+        if (shouldSeed) {
+            setIsSeeding(true);
+            try {
+                const success = await reSeedWorkspaceData(type);
+                if (success) {
+                    setPreference('institutionType', type as any);
+                    setPreference('assessmentSystem', config.assessmentSystem);
+                    setPreference('selectedCurriculum', config.selectedCurriculum);
+                    setPreference('customSubjects', config.customSubjects);
+                    setPreference('terminology', config.terminology);
+                    setPreference('enabledFields', config.enabledFields);
+                    setPreference('defaultSubject', config.customSubjects[0] || 'All');
 
-        showToast(`Workspace configured for ${type.toUpperCase()} standards!`, 'success');
+                    showToast(`Workspace database successfully populated with ${type.toUpperCase()} mock data!`, 'success');
+                    onDataReset();
+                } else {
+                    showToast('Failed to populate workspace with mock data. Standard applied only.', 'warning');
+                    setPreference('institutionType', type as any);
+                    setPreference('assessmentSystem', config.assessmentSystem);
+                    setPreference('selectedCurriculum', config.selectedCurriculum);
+                    setPreference('customSubjects', config.customSubjects);
+                    setPreference('terminology', config.terminology);
+                    setPreference('enabledFields', config.enabledFields);
+                    setPreference('defaultSubject', config.customSubjects[0] || 'All');
+                }
+            } catch (err: any) {
+                showToast(`Seeding failed: ${err.message}`, 'error');
+            } finally {
+                setIsSeeding(false);
+                setPendingNicheConfig(null);
+            }
+        } else {
+            setPreference('institutionType', type as any);
+            setPreference('assessmentSystem', config.assessmentSystem);
+            setPreference('selectedCurriculum', config.selectedCurriculum);
+            setPreference('customSubjects', config.customSubjects);
+            setPreference('terminology', config.terminology);
+            setPreference('enabledFields', config.enabledFields);
+            setPreference('defaultSubject', config.customSubjects[0] || 'All');
+
+            showToast(`Workspace configured for ${type.toUpperCase()} standards!`, 'success');
+            setPendingNicheConfig(null);
+        }
     };
 
     const handleAddSubject = () => {
@@ -850,6 +907,7 @@ const Settings: React.FC<SettingsProps> = ({ onDataReset }) => {
                                 { id: 'highschool', label: 'High School', desc: 'Form 1 to 4, KNEC Exam Grades, KCPE/KCSE Fields, Form/Stream terminology', icon: <GraduationCap size={20} className="text-purple-500" /> },
                                 { id: 'tvet', label: 'TVET College', desc: 'KNQF Levels, CBET Competencies, NITA/EPRA/National ID, Course/Lot terminology', icon: <Briefcase size={20} className="text-orange-500" /> },
                                 { id: 'nita', label: 'Industrial Training (NITA)', desc: 'Industrial Trades, Practical/Theory %, NITA/EPRA/National ID, Trade/Cohort terminology', icon: <Building2 size={20} className="text-indigo-500" /> },
+                                { id: 'university', label: 'University / Higher Ed', desc: 'Degree Courses, Semesters, Admission Numbers, KCSE Grade, Course/Cohort terminology', icon: <Award size={20} className="text-red-500" /> },
                                 { id: 'custom', label: 'Custom / Generic', desc: 'Fully customizable trade school, custom subjects, and field toggles', icon: <Sliders size={20} className="text-pink-500" /> },
                             ].map(niche => {
                                 const isSelected = preferences.institutionType === niche.id;
@@ -1400,7 +1458,7 @@ const Settings: React.FC<SettingsProps> = ({ onDataReset }) => {
                 </div>
             </motion.div>
 
-            {/* ─── Reset Confirmation Modal ─── */}
+            {/* ─── Modals ─── */}
             <AnimatePresence>
                 {showResetConfirm && (
                     <motion.div className="fixed inset-0 z-50 flex items-center justify-center p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
@@ -1414,6 +1472,47 @@ const Settings: React.FC<SettingsProps> = ({ onDataReset }) => {
                             <div className="flex gap-3">
                                 <button type="button" onClick={() => setShowResetConfirm(false)} className="flex-1 py-3 rounded-2xl bg-[var(--md-sys-color-surface-variant)] text-[var(--md-sys-color-on-surface)] font-bold text-sm hover:brightness-95 transition-all">Cancel</button>
                                 <button type="button" onClick={handleReset} className="flex-1 py-3 rounded-2xl bg-rose-500 text-white font-bold text-sm hover:bg-rose-600 transition-colors shadow-md">Reset All</button>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+
+                {pendingNicheConfig && (
+                    <motion.div className="fixed inset-0 z-50 flex items-center justify-center p-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => !isSeeding && setPendingNicheConfig(null)} />
+                        <motion.div className="relative bg-[var(--md-sys-color-surface)] rounded-3xl shadow-2xl w-full max-w-md p-6" initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }} transition={{ type: 'spring', stiffness: 400, damping: 25 }}>
+                            <div className="flex items-center gap-3 text-[var(--accent-primary)] mb-4">
+                                <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center"><Award size={20} /></div>
+                                <h3 className="font-google font-bold text-lg">Configure Standard</h3>
+                            </div>
+                            <p className="text-[var(--md-sys-color-on-surface-variant)] text-sm mb-6 leading-relaxed">
+                                Would you like to clear the workspace database and seed it with realistic <strong>{pendingNicheConfig.toUpperCase()}</strong> mock data (students, classes, and payment records)?
+                            </p>
+                            <div className="flex flex-col gap-2">
+                                <button
+                                    type="button"
+                                    disabled={isSeeding}
+                                    onClick={() => handleApplyNicheAndSeed(pendingNicheConfig, true)}
+                                    className="w-full py-3 rounded-2xl bg-[var(--accent-primary)] text-white font-bold text-sm hover:brightness-110 transition-all shadow-md flex items-center justify-center gap-2 disabled:opacity-50"
+                                >
+                                    {isSeeding ? 'Populating Workspace...' : 'Populate Workspace'}
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={isSeeding}
+                                    onClick={() => handleApplyNicheAndSeed(pendingNicheConfig, false)}
+                                    className="w-full py-3 rounded-2xl bg-[var(--md-sys-color-surface-variant)] text-[var(--md-sys-color-on-surface)] font-bold text-sm hover:brightness-95 transition-all"
+                                >
+                                    Apply Configuration Standard Only
+                                </button>
+                                <button
+                                    type="button"
+                                    disabled={isSeeding}
+                                    onClick={() => setPendingNicheConfig(null)}
+                                    className="w-full py-2.5 rounded-xl border border-[var(--md-sys-color-outline)] text-[var(--md-sys-color-secondary)] font-bold text-xs hover:bg-black/5 dark:hover:bg-white/5 transition-colors mt-2"
+                                >
+                                    Cancel
+                                </button>
                             </div>
                         </motion.div>
                     </motion.div>
