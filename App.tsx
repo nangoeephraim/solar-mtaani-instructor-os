@@ -1363,6 +1363,7 @@ const AppContent: React.FC = () => {
           onAddStudent={handleAddStudent}
           onDeleteStudent={handleDeleteStudent}
           selectedStudentId={selectedStudentId}
+          onNavigate={handleNavigate}
         />
       )}
 

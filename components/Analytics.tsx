@@ -613,10 +613,69 @@ Try clicking one of the quick analysis chips below to begin!`
                 throw new Error('Failed to communicate with Sally.');
             }
 
-            const result = await response.json();
-            const textResponse = result?.message?.content || result?.responseMessage?.content || result?.text || 'I analyzed the data but could not formulate a response.';
-            
-            setChatMessages(prev => [...prev, { role: 'assistant', content: textResponse }]);
+            if (!response.body) {
+                throw new Error('Stream reader not supported.');
+            }
+
+            // Create placeholder assistant message
+            setChatMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let accumulatedText = '';
+            let buffer = '';
+            let finished = false;
+
+            while (!finished) {
+                const { value, done } = await reader.read();
+                if (done) {
+                    finished = true;
+                }
+
+                const chunk = value ? decoder.decode(value, { stream: !finished }) : '';
+                buffer += chunk;
+
+                const lines = buffer.split('\n');
+                buffer = finished ? '' : (lines.pop() || '');
+
+                for (const line of lines) {
+                    const cleanLine = line.trim();
+                    if (!cleanLine) continue;
+
+                    // AI SDK text protocol chunks start with 0:
+                    if (cleanLine.startsWith('0:')) {
+                        try {
+                            const jsonStr = cleanLine.substring(2);
+                            const textVal = JSON.parse(jsonStr);
+                            if (typeof textVal === 'string') {
+                                accumulatedText += textVal;
+                            }
+                        } catch (e) {
+                            const match = cleanLine.match(/^0:"(.*)"$/);
+                            if (match) {
+                                accumulatedText += match[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+                            }
+                        }
+                    } else if (cleanLine.startsWith('data:')) {
+                        try {
+                            const data = JSON.parse(cleanLine.substring(5).trim());
+                            if (data.text) {
+                                accumulatedText += data.text;
+                            }
+                        } catch (e) {}
+                    }
+                }
+
+                if (accumulatedText) {
+                    setChatMessages(prev => {
+                        const newMsgs = [...prev];
+                        if (newMsgs.length > 0) {
+                            newMsgs[newMsgs.length - 1] = { role: 'assistant', content: accumulatedText };
+                        }
+                        return newMsgs;
+                    });
+                }
+            }
         } catch (err: any) {
             showToast(err.message || 'Error communicating with Sally.', 'error');
             setChatMessages(prev => [...prev, { 
