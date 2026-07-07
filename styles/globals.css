@@ -1210,3 +1210,12 @@ body.keyboard-visible .app-view-container {
   animation: voiceWave 2s linear infinite;
   transform-origin: center;
 }
+
+/* Futuristic Dot-Matrix Background Grid */
+.bg-grid-pattern {
+  background-size: 24px 24px;
+  background-image: radial-gradient(circle, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
+}
+[data-theme="dark"] .bg-grid-pattern {
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+}

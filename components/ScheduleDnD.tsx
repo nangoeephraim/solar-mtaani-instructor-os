@@ -53,7 +53,7 @@ export const DraggableSlot = ({
             }}
             className={clsx(
                 className,
-                "transition-[box-shadow,transform,filter] outline-none",
+                "transition-[box-shadow,transform,filter] duration-200 outline-none hover:scale-[1.02] hover:z-30 backdrop-blur-md",
                 // Focus styling for keyboard accessibility
                 "focus-visible:ring-4 focus-visible:ring-violet-500 focus-visible:ring-offset-2",
                 isDragging ? "z-50 shadow-2xl scale-[1.03] ring-2 ring-violet-500/50 cursor-grabbing" : "z-10 cursor-grab"
@@ -83,13 +83,15 @@ export const DroppableDayColumn = ({
     dateIdx,
     children,
     hourHeight,
-    holiday
+    holiday,
+    hoursCount = 24
 }: {
     date: Date;
     dateIdx: number;
     children: React.ReactNode;
     hourHeight: number;
     holiday?: Holiday;
+    hoursCount?: number;
 }) => {
     const { setNodeRef, isOver } = useDroppable({
         id: `day-${date.getDay()}`, // Use day of week (0-6) as ID
@@ -105,14 +107,23 @@ export const DroppableDayColumn = ({
                 isOver ? "bg-[var(--md-sys-color-primary-container)]/30 ring-2 ring-inset ring-[var(--md-sys-color-primary)]/50" : ""
             )}
             // eslint-disable-next-line react/forbid-dom-props
-            style={{ height: 24 * hourHeight }} // 24 slots (00:00 - 23:00)
+            style={{ height: hoursCount * hourHeight }} // dynamic slots count
         >
             {holiday ? (
-                <div className="absolute inset-0 bg-[var(--md-sys-color-surface-variant)]/80 flex flex-col items-center justify-center z-20 backdrop-blur-[2px]">
-                    <span className="text-3xl mb-3 drop-shadow-sm">🎉</span>
-                    <span className="font-bold text-[var(--md-sys-color-on-surface-variant)] transform -rotate-12 uppercase border-2 border-[var(--md-sys-color-on-surface-variant)] p-2.5 rounded-xl opacity-80 shadow-sm text-sm tracking-wider">
-                        {holiday.name}
-                    </span>
+                <div 
+                    className="absolute inset-0 flex flex-col items-center justify-center z-20 backdrop-blur-[3px] p-4 text-center select-none"
+                    style={{
+                        backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(148, 163, 184, 0.04) 10px, rgba(148, 163, 184, 0.04) 20px)',
+                        backgroundColor: 'rgba(241, 245, 249, 0.4)'
+                    }}
+                >
+                    <div className="bg-[var(--md-sys-color-surface)]/90 dark:bg-slate-900/90 backdrop-blur-md px-4 py-3 rounded-2xl border border-[var(--md-sys-color-outline-variant)] shadow-lg flex flex-col items-center max-w-[90%] transform hover:scale-105 transition-all">
+                        <span className="text-2xl mb-1 select-none animate-bounce">🎉</span>
+                        <span className="text-[10px] font-black text-violet-600 dark:text-violet-400 uppercase tracking-widest mb-0.5">Public Holiday</span>
+                        <span className="font-bold text-xs text-[var(--md-sys-color-on-surface)] truncate w-full" title={holiday.name}>
+                            {holiday.name}
+                        </span>
+                    </div>
                 </div>
             ) : children}
         </div>

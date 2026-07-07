@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { AppData, CurriculumUnit, Student, ScheduleSlot } from '../types';
 import { useTheme } from '../contexts/ThemeContext';
 import PageHeader from './PageHeader';
@@ -8,7 +8,8 @@ import {
   GraduationCap, ShieldAlert, Zap, Layers, Calendar, ClipboardList,
   CheckCircle2, Circle, PlayCircle, PlusCircle, Trash2, Edit2, Brain,
   FileText, CheckSquare, Square, Users, Award, BookOpenCheck, Clock, 
-  Plus, ExternalLink, HelpCircle, Save, Check, RefreshCw
+  Plus, ExternalLink, HelpCircle, Send, ArrowRight, Flame, Check, RefreshCw,
+  Download, Copy, Wifi, ClipboardCheck, ThumbsUp, HelpCircle as HelpIcon
 } from 'lucide-react';
 import { getSubjectEmoji, getSubjectIconBg } from '../utils/subjectUtils';
 import clsx from 'clsx';
@@ -18,6 +19,13 @@ interface CurriculumProps {
   onNavigate: (view: string) => void;
   onUpdateStudent?: (student: Student, notify?: boolean) => Promise<void> | void;
   onAddScheduleSlot?: (slot: Omit<ScheduleSlot, 'id'>) => Promise<void> | void;
+}
+
+interface ChatMessage {
+  id: string;
+  sender: 'user' | 'ai';
+  text: string;
+  timestamp: string;
 }
 
 // Visual layout mappings
@@ -38,6 +46,37 @@ const cardVariants = {
   }
 };
 
+// 4-level competency styling
+const COMPETENCY_LEVELS = {
+  1: { label: 'Emerging', bg: 'bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/20' },
+  2: { label: 'Developing', bg: 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20' },
+  3: { label: 'Competent', bg: 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20' },
+  4: { label: 'Mastered', bg: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20' }
+};
+
+// Vocational Practical Lab task sheets pre-configured
+const LAB_TASKS_PRESETS: Record<string, string[]> = {
+  // Solar PV
+  'Workplace Safety & Tools': ['Inspect harness & lanyard safety', 'Perform mock electrical shock response', 'Identify insulated vs non-insulated tools'],
+  'Electrical Principles': ['Measure current on direct circuit', 'Calculate total load sizing for workshop', 'Verify resistor code values'],
+  'Solar Panels & Battery Sizing': ['Wire two 12V batteries in series', 'Crimp male/female MC4 connectors', 'Test Voc of PV module under sun'],
+  'Controllers & Inverters': ['Mount PWM charge controller', 'Configure low-voltage disconnect values', 'Test pure sine inverter waveform output'],
+  'Basic Electronics': ['Test rectifier diodes with multimeter', 'Solder simple voltage divider', 'Measure solar cell irradiance angles'],
+  'PV Module Sizing & Mounting': ['Assemble aluminum L-bracket roof mounts', 'Measure compass roof azimuth orientation', 'Solder bypass diodes'],
+  'Trade Test Practical': ['Connect complete off-grid system board', 'Diagnose open circuit terminal fault', 'Verify grounding rod impedance'],
+  
+  // ICT
+  'Hardware & OS': ['Assemble RAM & CPU on motherboard', 'Create bootable OS installation flash disk', 'Install local device driver packages'],
+  'Networking & Web': ['Crimp RJ-45 cable under EIA/TIA 568B', 'Verify network routing using ping/tracert', 'Setup SSID security on wireless access point'],
+  'Intro to Programming': ['Write standard Python while-loop', 'Define a custom class with parameters', 'Implement linear search algorithm'],
+  'Data Structures': ['Implement a stack using arrays', 'Contrast binary tree search traversal time', 'Analyze bubble sort O(n^2) outputs'],
+  'Database Systems': ['Draw Entity-Relationship diagrams', 'Write SQL SELECT statement with INNER JOIN', 'Normalize database to 3NF'],
+  'Microsoft Word': ['Insert table of contents & footnotes', 'Perform mail merge from spreadsheet', 'Format pages with custom headers'],
+  'Microsoft Excel': ['Write nested IF & VLOOKUP formulas', 'Generate scatter plot graphs', 'Perform filter & pivot sorting'],
+  'Microsoft PowerPoint': ['Setup automated slide timings', 'Embed video media & animations', 'Export slides to PDF handbooks'],
+  'Microsoft Access': ['Build data entry form layout', 'Write query checking date ranges', 'Generate terminal progress report']
+};
+
 const getMappedCompetencyKey = (title: string, subject: string): string => {
   const lowerTitle = title.toLowerCase();
   const lowerSubject = subject.toLowerCase();
@@ -51,7 +90,7 @@ const getMappedCompetencyKey = (title: string, subject: string): string => {
     return 'safetyProtocols'; // default fallback for solar
   }
   
-  if (lowerSubject.includes('ict') || lowerSubject.includes('computer') || lowerSubject.includes('software') || lowerSubject.includes('web') || lowerSubject.includes('network')) {
+  if (lowerSubject.includes('ict') || lowerSubject.includes('computer') || lowerSubject.includes('software') || lowerSubject.includes('web') || lowerSubject.includes('network') || lowerSubject.includes('program')) {
     if (lowerTitle.includes('word') || lowerTitle.includes('document') || lowerTitle.includes('format')) return 'msWord';
     if (lowerTitle.includes('excel') || lowerTitle.includes('spreadsheet') || lowerTitle.includes('formula') || lowerTitle.includes('chart')) return 'msExcel';
     if (lowerTitle.includes('powerpoint') || lowerTitle.includes('presentation') || lowerTitle.includes('slide')) return 'msPowerPoint';
@@ -105,31 +144,39 @@ export const Curriculum: React.FC<CurriculumProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedUnits, setExpandedUnits] = useState<Record<string, boolean>>({});
 
-  // Curriculum State Management (Progress, Notes, Attached Resources, Checked Outcomes, Custom Units)
+  // Feedback trackers
+  const [copiedUnitTitle, setCopiedUnitTitle] = useState<string | null>(null);
+
+  // Curriculum State Management
   const [progressState, setProgressState] = useState<{
     status: Record<string, 'Not Started' | 'In Progress' | 'Completed'>;
     notes: Record<string, string>;
     attachedResources: Record<string, string[]>;
     completedOutcomes: Record<string, Record<number, boolean>>;
     customUnits: CurriculumUnit[];
+    completedLabTasks: Record<string, Record<number, boolean>>;
   }>({
     status: {},
     notes: {},
     attachedResources: {},
     completedOutcomes: {},
-    customUnits: []
+    customUnits: [],
+    completedLabTasks: {}
   });
+
+  // Copilot sandbox chat states
+  const [isCopilotOpen, setIsCopilotOpen] = useState(false);
+  const [copilotUnit, setCopilotUnit] = useState<CurriculumUnit | null>(null);
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [isAiTyping, setIsAiTyping] = useState(false);
+  const chatBottomRef = useRef<HTMLDivElement>(null);
 
   // Modals management
   const [activeAssessUnit, setActiveAssessUnit] = useState<CurriculumUnit | null>(null);
   const [activeScheduleUnit, setActiveScheduleUnit] = useState<CurriculumUnit | null>(null);
-  const [activeAIUnit, setActiveAIUnit] = useState<CurriculumUnit | null>(null);
   const [activeResourceUnit, setActiveResourceUnit] = useState<CurriculumUnit | null>(null);
   const [isCustomUnitModalOpen, setIsCustomUnitModalOpen] = useState(false);
-
-  // Loading indicator for simulated AI generation
-  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
-  const [aiResult, setAiResult] = useState<{ plan: string; quiz: { q: string; a: string[] }[] } | null>(null);
 
   // Local schedule form state
   const [scheduleDay, setScheduleDay] = useState(1);
@@ -143,7 +190,6 @@ export const Curriculum: React.FC<CurriculumProps> = ({
   const [customUnitOutcomes, setCustomUnitOutcomes] = useState('');
   const [customUnitActivities, setCustomUnitActivities] = useState('');
 
-  // Assessment scores mapping
   const activeStudents = useMemo(() => {
     return data.students.filter(s => s.subject === activeSubject);
   }, [data.students, activeSubject]);
@@ -151,8 +197,8 @@ export const Curriculum: React.FC<CurriculumProps> = ({
   // Load customizations from localStorage
   useEffect(() => {
     if (!activeSubject || !activeCurriculum) return;
-    const progressKey = `prism_curr_progress_${activeCurriculum}_${activeSubject}`;
-    const customKey = `prism_curr_custom_units_${activeCurriculum}_${activeSubject}`;
+    const progressKey = `prism_curr_progress_v4_${activeCurriculum}_${activeSubject}`;
+    const customKey = `prism_curr_custom_units_v4_${activeCurriculum}_${activeSubject}`;
 
     const storedProgress = localStorage.getItem(progressKey);
     const storedCustom = localStorage.getItem(customKey);
@@ -162,41 +208,38 @@ export const Curriculum: React.FC<CurriculumProps> = ({
       notes: storedProgress ? JSON.parse(storedProgress).notes || {} : {},
       attachedResources: storedProgress ? JSON.parse(storedProgress).attachedResources || {} : {},
       completedOutcomes: storedProgress ? JSON.parse(storedProgress).completedOutcomes || {} : {},
+      completedLabTasks: storedProgress ? JSON.parse(storedProgress).completedLabTasks || {} : {},
       customUnits: storedCustom ? JSON.parse(storedCustom) : []
     });
   }, [activeSubject, activeCurriculum]);
 
-  // Reset active subject when subjects list changes
+  // Scroll chat to bottom
   useEffect(() => {
-    if (subjects.length > 0 && !subjects.includes(activeSubject)) {
-      setActiveSubject(subjects[0]);
-    }
-  }, [subjects, activeSubject]);
+    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatHistory, isAiTyping]);
 
   // Save changes to localStorage
   const saveProgress = (updates: Partial<typeof progressState>) => {
     const nextState = { ...progressState, ...updates };
     setProgressState(nextState);
 
-    const progressKey = `prism_curr_progress_${activeCurriculum}_${activeSubject}`;
+    const progressKey = `prism_curr_progress_v4_${activeCurriculum}_${activeSubject}`;
     localStorage.setItem(progressKey, JSON.stringify({
       status: nextState.status,
       notes: nextState.notes,
       attachedResources: nextState.attachedResources,
-      completedOutcomes: nextState.completedOutcomes
+      completedOutcomes: nextState.completedOutcomes,
+      completedLabTasks: nextState.completedLabTasks
     }));
 
     if (updates.customUnits !== undefined) {
-      const customKey = `prism_curr_custom_units_${activeCurriculum}_${activeSubject}`;
+      const customKey = `prism_curr_custom_units_v4_${activeCurriculum}_${activeSubject}`;
       localStorage.setItem(customKey, JSON.stringify(nextState.customUnits));
     }
   };
 
   const toggleUnit = (unitTitle: string) => {
-    setExpandedUnits(prev => ({
-      ...prev,
-      [unitTitle]: !prev[unitTitle]
-    }));
+    setExpandedUnits(prev => ({ ...prev, [unitTitle]: !prev[unitTitle] }));
   };
 
   const updateUnitStatus = (unitTitle: string, status: 'Not Started' | 'In Progress' | 'Completed') => {
@@ -216,7 +259,14 @@ export const Curriculum: React.FC<CurriculumProps> = ({
     saveProgress({ completedOutcomes: nextCompletedOutcomes });
   };
 
-  // Compile combined units (default preset + custom added ones)
+  const toggleLabTaskChecked = (unitTitle: string, taskIdx: number) => {
+    const unitTasks = progressState.completedLabTasks[unitTitle] || {};
+    const nextUnitTasks = { ...unitTasks, [taskIdx]: !unitTasks[taskIdx] };
+    const nextCompletedLabTasks = { ...progressState.completedLabTasks, [unitTitle]: nextUnitTasks };
+    saveProgress({ completedLabTasks: nextCompletedLabTasks });
+  };
+
+  // Compile combined units
   const allUnits = useMemo(() => {
     const defaults = data.curriculum?.[activeSubject] || [];
     return [...defaults, ...progressState.customUnits];
@@ -259,6 +309,33 @@ export const Curriculum: React.FC<CurriculumProps> = ({
     };
   }, [allUnits, progressState.status]);
 
+  // Dynamic syllabus velocity & completion date predictor
+  const velocityPrediction = useMemo(() => {
+    const subjectSlots = data.schedule.filter(s => s.subject === activeSubject);
+    const classesPerWeek = Math.max(subjectSlots.length, 1);
+    const velocityPerWeek = classesPerWeek; 
+    const remainingUnits = stats.total - stats.completed;
+    
+    if (remainingUnits <= 0) {
+      return { msg: 'Syllabus successfully completed! 🎉', isDelayed: false };
+    }
+
+    const weeksNeeded = Math.ceil(remainingUnits / velocityPerWeek);
+    const estimatedDate = new Date();
+    estimatedDate.setDate(estimatedDate.getDate() + (weeksNeeded * 7));
+
+    const formattedDate = estimatedDate.toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' });
+    const deadlineDate = new Date('2026-11-20');
+    const isDelayed = estimatedDate > deadlineDate;
+
+    return {
+      msg: `Finished in ${weeksNeeded} weeks (~${formattedDate})`,
+      detail: `Velocity: ${velocityPerWeek} module/week (${classesPerWeek} classes scheduled)`,
+      isDelayed,
+      formattedDate
+    };
+  }, [data.schedule, activeSubject, stats]);
+
   // Calculate class average competency score across all units mapped for this course
   const overallClassMastery = useMemo(() => {
     if (activeStudents.length === 0) return null;
@@ -282,7 +359,7 @@ export const Curriculum: React.FC<CurriculumProps> = ({
     switch (activeCurriculum) {
       case 'CBC':
         return {
-          title: 'CBC (Competency Based Curriculum)',
+          title: 'CBC Framework',
           subtitle: 'Kenya Institute of Curriculum Development (KICD)',
           desc: 'Formative competencies focusing on learner outcomes, value-based education, and core competencies (e.g., communication, critical thinking, citizenship).',
           badgeBg: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20',
@@ -290,7 +367,7 @@ export const Curriculum: React.FC<CurriculumProps> = ({
         };
       case 'KNEC':
         return {
-          title: 'KNEC (Kenya National Examinations Council)',
+          title: 'KNEC Framework',
           subtitle: 'Traditional Academic Framework (8-4-4 Standards)',
           desc: 'Continuous Assessment Tests (CATs) and summative examinations mapped to terminal performance grades.',
           badgeBg: 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-500/20',
@@ -298,7 +375,7 @@ export const Curriculum: React.FC<CurriculumProps> = ({
         };
       case 'TVET_CDACC':
         return {
-          title: 'TVET CDACC (Curriculum Development, Assessment & Certification Council)',
+          title: 'TVET CDACC CBET',
           subtitle: 'Competency-Based Education and Training (CBET)',
           desc: 'Occupational standards designed for vocational mastery. Focuses on hand-on practice, safety portfolios, and workplace execution checklists.',
           badgeBg: 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20',
@@ -306,7 +383,7 @@ export const Curriculum: React.FC<CurriculumProps> = ({
         };
       case 'NITA':
         return {
-          title: 'NITA (National Industrial Training Authority)',
+          title: 'NITA Standards',
           subtitle: 'Industrial Skills Testing and Certification',
           desc: 'Trade testing structure (Grade III, II, I) for commercial trades. Heavy emphasis on safety code execution and timed trade test practical tasks.',
           badgeBg: 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20',
@@ -325,19 +402,21 @@ export const Curriculum: React.FC<CurriculumProps> = ({
 
   const isVocationalContext = activeCurriculum === 'TVET_CDACC' || activeCurriculum === 'NITA';
 
-  // Calculate stats for a single unit
+  // Calculate diagnostics stats for a single unit
   const getUnitClassMastery = (unitTitle: string) => {
     const compKey = getMappedCompetencyKey(unitTitle, activeSubject);
-    if (activeStudents.length === 0) return { avg: null, percentCompetent: 0, count: 0 };
+    if (activeStudents.length === 0) return { avg: null, percentCompetent: 0, count: 0, levels: { 1: 0, 2: 0, 3: 0, 4: 0 } };
     
     let totalScore = 0;
     let gradedCount = 0;
+    const levels = { 1: 0, 2: 0, 3: 0, 4: 0 };
 
     activeStudents.forEach(s => {
-      const score = s.competencies?.[compKey];
+      const score = s.competencies?.[compKey] as 1 | 2 | 3 | 4;
       if (score !== undefined) {
         totalScore += score;
         gradedCount++;
+        levels[score] = (levels[score] || 0) + 1;
       }
     });
 
@@ -348,8 +427,136 @@ export const Curriculum: React.FC<CurriculumProps> = ({
     return {
       avg,
       percentCompetent,
-      count: gradedCount
+      count: gradedCount,
+      levels
     };
+  };
+
+  // Peer Pairing Recommendation calculation
+  const getPeerPairings = (unitTitle: string) => {
+    const compKey = getMappedCompetencyKey(unitTitle, activeSubject);
+    const competent = activeStudents.filter(s => (s.competencies?.[compKey] || 0) >= 3);
+    const needingHelp = activeStudents.filter(s => (s.competencies?.[compKey] || 1) <= 2);
+    
+    // Sort competent descending (Mastered first)
+    competent.sort((a, b) => (b.competencies?.[compKey] || 0) - (a.competencies?.[compKey] || 0));
+    // Sort needingHelp ascending (Emerging first)
+    needingHelp.sort((a, b) => (a.competencies?.[compKey] || 0) - (b.competencies?.[compKey] || 0));
+
+    const pairings: Array<{ tutor: Student; learner: Student }> = [];
+    const minLen = Math.min(competent.length, needingHelp.length);
+
+    for (let i = 0; i < minLen; i++) {
+      pairings.push({ tutor: competent[i], learner: needingHelp[i] });
+    }
+
+    return pairings;
+  };
+
+  // NITA Trade Test Readiness Audit calculator
+  const getStudentReadiness = (student: Student, unit: CurriculumUnit) => {
+    const compKey = getMappedCompetencyKey(unit.title, activeSubject);
+    const score = student.competencies?.[compKey] || 1;
+    
+    // Safety check is paramount
+    const safetyScore = student.competencies?.['safetyProtocols'] || 1;
+    const hasSafetyRisk = safetyScore < 3;
+    
+    // Practical task completion check
+    const practicalTasks = LAB_TASKS_PRESETS[unit.title] || LAB_TASKS_PRESETS[unit.unit] || ['Review components', 'Perform checks'];
+    const completedTasks = progressState.completedLabTasks[unit.title] || {};
+    const completedCount = Object.values(completedTasks).filter(Boolean).length;
+    const isLabFullyDone = completedCount >= practicalTasks.length;
+
+    let readiness: 'ready' | 'developing' | 'risk' = 'developing';
+    let detail = '';
+
+    if (hasSafetyRisk) {
+      readiness = 'risk';
+      detail = 'Safety Protocols failed/unassessed. PPE Audit required!';
+    } else if (score >= 3 && isLabFullyDone) {
+      readiness = 'ready';
+      detail = '100% Practical and Competency targets achieved.';
+    } else if (!isLabFullyDone) {
+      readiness = 'developing';
+      detail = `Practical task sheet incomplete (${completedCount}/${practicalTasks.length} tasks done).`;
+    } else {
+      readiness = 'developing';
+      detail = 'Requires higher competency rating (Emerging/Developing).';
+    }
+
+    return { readiness, detail };
+  };
+
+  // Local backups JSON exporter
+  const handleExportBackup = () => {
+    const exportData = {
+      curriculumFramework: activeCurriculum,
+      subject: activeSubject,
+      stats,
+      savedProgress: {
+        status: progressState.status,
+        notes: progressState.notes,
+        attachedResources: progressState.attachedResources,
+        completedOutcomes: progressState.completedOutcomes,
+        completedLabTasks: progressState.completedLabTasks
+      },
+      customUnits: progressState.customUnits,
+      exportTimestamp: new Date().toISOString()
+    };
+
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(exportData, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", `PRISM_CurriculumBackup_${activeSubject}_${activeCurriculum}.json`);
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  };
+
+  // Official KICD/CBC Scheme of work exporter
+  const handleCopySchemeOfWork = (unit: CurriculumUnit) => {
+    const compKey = getMappedCompetencyKey(unit.title, activeSubject);
+    const outcomesList = unit.outcomes.map(o => `* ${o}`).join('\n');
+    const linkedResources = getAttachedResourceObjects(unit.title).map(doc => doc.title).join(', ') || 'PRISM Course Manual, local handouts';
+    const notesText = progressState.notes[unit.title] || 'None recorded.';
+    
+    const template = `===========================================================
+PRISM INSTRUCTOR SUITE - KENYAN SYLLABUS SCHEME OF WORK
+===========================================================
+Subject: ${activeSubject}
+Module / Lesson: ${unit.title} (${unit.unit})
+Framework: ${activeCurriculum} (CBC/TVET)
+
+1. SPECIFIC LEARNING OUTCOMES:
+${outcomesList}
+
+2. CORE COMPETENCIES MAPPED:
+* ${getCompetencyLabel(compKey)} (${compKey})
+* Critical Thinking & Problem Solving
+* Collaboration and Team Dynamics
+
+3. KEY INQUIRY QUESTIONS (KIQ):
+* What are the primary safety rules during ${unit.title}?
+* How do we execute the lab practical tasks effectively?
+* Why is accuracy critical in workshop testing?
+
+4. LEARNING RESOURCES:
+* Mapped manuals: ${linkedResources}
+* Locally sourced items: Scrap metal/wire blocks, irradiance screens
+
+5. SUGGESTED LEARNING ACTIVITIES:
+* ${unit.activities}
+* Group practical challenge & peer tutor inspection sheets.
+
+6. ASSESSMENT & REFLECTION:
+* Diagnostic Average score target: 3.0/4.0
+* Teacher Reflection: ${notesText}
+===========================================================`;
+
+    navigator.clipboard.writeText(template);
+    setCopiedUnitTitle(unit.title);
+    setTimeout(() => setCopiedUnitTitle(null), 2000);
   };
 
   // Schedule slot creation handler
@@ -360,7 +567,6 @@ export const Curriculum: React.FC<CurriculumProps> = ({
     const desc = isWeekMode ? `Week ${activeScheduleUnit.week}` : `Session ${activeScheduleUnit.session}`;
     const slotTitle = `${activeSubject}: ${activeScheduleUnit.title} (${desc})`;
 
-    // Get default values for grade and studentGroup from current subject
     const dummyStudent = activeStudents[0];
     const grade = dummyStudent?.grade || 'L3';
     const studentGroup = dummyStudent?.studentGroup || 'Academy';
@@ -409,7 +615,6 @@ export const Curriculum: React.FC<CurriculumProps> = ({
     const nextCustomList = [...progressState.customUnits, newUnit];
     saveProgress({ customUnits: nextCustomList });
 
-    // Reset form & close
     setCustomUnitTitle('');
     setCustomUnitCode('');
     setCustomUnitNumber(allUnits.length + 1);
@@ -423,77 +628,27 @@ export const Curriculum: React.FC<CurriculumProps> = ({
     if (window.confirm(`Are you sure you want to delete the custom unit "${unitTitle}"?`)) {
       const nextCustomList = progressState.customUnits.filter(u => u.title !== unitTitle);
       
-      // Clean up local progress storage for this unit
       const nextStatus = { ...progressState.status };
       const nextNotes = { ...progressState.notes };
       const nextResources = { ...progressState.attachedResources };
       const nextCompletedOutcomes = { ...progressState.completedOutcomes };
+      const nextLabTasks = { ...progressState.completedLabTasks };
 
       delete nextStatus[unitTitle];
       delete nextNotes[unitTitle];
       delete nextResources[unitTitle];
       delete nextCompletedOutcomes[unitTitle];
+      delete nextLabTasks[unitTitle];
 
       saveProgress({
         status: nextStatus,
         notes: nextNotes,
         attachedResources: nextResources,
         completedOutcomes: nextCompletedOutcomes,
+        completedLabTasks: nextLabTasks,
         customUnits: nextCustomList
       });
     }
-  };
-
-  // Trigger simulated AI lesson planning guide
-  const handleGenerateAILessonGuide = (unit: CurriculumUnit) => {
-    setActiveAIUnit(unit);
-    setIsGeneratingAI(true);
-    setAiResult(null);
-
-    // Simulate standard streaming layout generator
-    setTimeout(() => {
-      const mappedComp = getCompetencyLabel(getMappedCompetencyKey(unit.title, activeSubject));
-      const outcomesList = unit.outcomes.map(o => `• ${o}`).join('\n');
-      
-      const plan = `
-### 📚 5E LESSON PLAN OUTLINE
-**Topic**: ${unit.title} (${unit.unit})
-**Core Competency Focus**: ${mappedComp}
-
-#### 1. Engage (5-10 Mins)
-* **Hook Question**: Ask students if they've ever seen a real installation/application of this concept in local shops or enterprises.
-* **Demonstration**: Show a primary hand tool or schematic and ask learners to troubleshoot a common failure.
-
-#### 2. Explore (15-20 Mins)
-* **Group Task**: Divide class into groups of 3-4 students.
-* **Hands-on Lab**: Perform a mock exercise matching: *"${unit.activities}"*. Encourage teamwork.
-
-#### 3. Explain (15 Mins)
-* **Key Theory**: Explain safety practices, circuit parameters, or software commands.
-* **Outcomes Alignment**: Cover outcomes:
-${outcomesList}
-
-#### 4. Elaborate (15 Mins)
-* **Contextual Application**: Connect with Kenyan occupational standards (e.g. Energy Act guidelines or KICD CBC frameworks). Explain how this trade or theory drives local job creation (Mtaani).
-
-#### 5. Evaluate (5 Mins)
-* **Check for Understanding**: Conduct a rapid oral review of outcomes or check student logs.
-      `.trim();
-
-      const quiz = [
-        {
-          q: `Which of the following is a primary safety standard/best practice related to ${unit.title}?`,
-          a: ['Wear correct PPE & check line voltage', 'Ignore structural checks', 'Proceed without testing', 'Use incorrect wire sizing']
-        },
-        {
-          q: `What is the expected outcome of masterfully completing this unit?`,
-          a: ['Achieving occupational competency in the standard task', 'Scribbling random notes', 'Skiping practical tasks', 'Memorizing formulas without practice']
-        }
-      ];
-
-      setAiResult({ plan, quiz });
-      setIsGeneratingAI(false);
-    }, 1500);
   };
 
   // Link/unlink resources to a unit
@@ -513,12 +668,87 @@ ${outcomesList}
     return data.library.filter(doc => ids.includes(doc.id));
   };
 
+  // Copilot message sending simulated handler
+  const handleSendCopilotMessage = (textToSend?: string) => {
+    const msgText = textToSend || chatInput;
+    if (!msgText.trim() || !copilotUnit) return;
+
+    const userMsg: ChatMessage = {
+      id: Math.random().toString(),
+      sender: 'user',
+      text: msgText,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+
+    setChatHistory(prev => [...prev, userMsg]);
+    if (!textToSend) setChatInput('');
+    setIsAiTyping(true);
+
+    setTimeout(() => {
+      let aiText = '';
+      const t = msgText.toLowerCase();
+
+      if (t.includes('analogy') || t.includes('analogia')) {
+        aiText = `💡 **Mtaani Lesson Analogy for: "${copilotUnit.title}"**\n\nTo explain this in simple terms, compare it to a **local water supply system**:\n\n* **Voltage (Volt)** is like the water pressure in your roof tank. The higher the tank, the more force the water pushes with down the pipes.\n* **Current (Amps)** is the speed and amount of water actually flowing inside the pipe.\n* **Resistance (Ohms)** is like a narrow bend or a tap partially closed, blocking the flow.\n\n*Class Hack*: Bring a plastic bottle and pierce different sized holes to demonstrate pressure vs flow rate in real time!`;
+      } else if (t.includes('swahili') || t.includes('kiswahili')) {
+        aiText = `🇰🇪 **Bilingual Swahili/English Workshop Cribsheet**\n\nHere is a list of terms you can use during the lesson to bridge the understanding gap for students:\n\n* **Multimeter** ➜ Kipimo cha nguvu za umeme (mita)\n* **MC4 Connector** ➜ Kiunganishi cha waya za sola\n* **Safety harness** ➜ Mshipi wa usalama (wakati wa kupanda paa)\n* **Circuit Board** ➜ Ubao wa nyaya/seketi\n* **Inverter** ➜ Kigeuza nguvu ya umeme (kutoka DC hadi AC)\n* **Battery Bank** ➜ Mlundiko wa betri za kuhifadhi umeme\n\n*Teaching Tip*: Use these terms interchangeably when students look confused by the English technical names.`;
+      } else if (t.includes('challenge') || t.includes('practical') || t.includes('mtihani')) {
+        aiText = `⚡ **5-Min Practical Challenge: "${copilotUnit.title}"**\n\n**Instructions for Students**:\n1. Divide into teams of two.\n2. One student must blindfold themselves, and the other must guide them purely by verbal instruction to correctly inspect safety gear / connect cables.\n3. **Goal**: Check off the inspection list in under 180 seconds.\n\n**Evaluation Criteria**: Did the team follow safety directives? (Checks the PPE outcomes for this module).`;
+      } else if (t.includes('materials') || t.includes('low cost') || t.includes('vifaa')) {
+        aiText = `🪵 **Low-Cost Local Materials Guide**\n\nInstead of buying expensive demo rigs, ask students to source these items locally:\n\n* **For mounting demos**: Scrap metal brackets or wood blocks from local carpentry shops.\n* **For wiring principles**: Discarded copper wire pieces from electrician yards.\n* **For solar test shading**: Cardboard sheets or umbrellas to block sunlight during Voc testing.\n\n*Benefit*: Teaches learners resourcefulness (Mtaani resilience).`;
+      } else {
+        aiText = `Habari! I am your PRISM Syllabus Co-pilot. I can help you deliver a masterclass on **${copilotUnit.title}**.\n\nTry clicking one of the quick query buttons below to generate local analogies, Swahili translations, or low-cost workshop materials guide.`;
+      }
+
+      const aiMsg: ChatMessage = {
+        id: Math.random().toString(),
+        sender: 'ai',
+        text: aiText,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      
+      setChatHistory(prev => [...prev, aiMsg]);
+      setIsAiTyping(false);
+    }, 1200);
+  };
+
+  const openCopilotDrawer = (unit: CurriculumUnit) => {
+    setCopilotUnit(unit);
+    setChatHistory([
+      {
+        id: 'welcome',
+        sender: 'ai',
+        text: `Habari Mwalimu! I am your PRISM Co-pilot. Let's design a lesson plan or practical task sheet for **${unit.title}** (${unit.unit}). How can I support you today?`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }
+    ]);
+    setIsCopilotOpen(true);
+  };
+
   return (
-    <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-6 custom-scrollbar space-y-6 bg-[var(--md-sys-color-background)]">
-      <PageHeader 
-        title="Curriculum Hub" 
-        subtitle="Manage and audit active syllabus modules, lessons, and student competency outcomes"
-      />
+    <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-6 custom-scrollbar space-y-6 bg-[var(--md-sys-color-background)] relative">
+      
+      {/* Header with Offline Status Indicator & JSON Backup Exporter */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--md-sys-color-outline-variant)] pb-4">
+        <PageHeader 
+          title="Curriculum Hub" 
+          subtitle="Manage and audit active syllabus modules, lessons, and student competency outcomes"
+        />
+
+        {/* Offline indicator & Export Buttons */}
+        <div className="flex items-center gap-3 self-start sm:self-center">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 text-[10.5px] font-black uppercase tracking-wider">
+            <Wifi size={12} className="animate-pulse" /> Offline Active
+          </div>
+          <button
+            onClick={handleExportBackup}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[var(--md-sys-color-surface-container)] hover:bg-[var(--md-sys-color-surface-variant)] text-[var(--md-sys-color-on-surface)] border border-[var(--md-sys-color-outline-variant)] text-[10px] font-bold transition-all active:scale-95 shadow-sm"
+            title="Download JSON progress report backup"
+          >
+            <Download size={12} /> Export Backup
+          </button>
+        </div>
+      </div>
 
       {/* Curriculum Banner and Progress widgets */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -562,7 +792,7 @@ ${outcomesList}
           </div>
         </div>
 
-        {/* Right Column: Dynamic Progress & Class Mastery widgets */}
+        {/* Right Column: Velocity & Coverage */}
         <div className="relative overflow-hidden rounded-3xl border border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container)] p-6 shadow-sm flex flex-col justify-between">
           <div className="space-y-4">
             <h3 className="text-xs font-black uppercase tracking-wider text-[var(--md-sys-color-secondary)]">Syllabus Coverage</h3>
@@ -581,19 +811,18 @@ ${outcomesList}
               </div>
             </div>
 
-            {/* Badges Breakdown */}
-            <div className="grid grid-cols-3 gap-2 text-center pt-2">
-              <div className="p-2 rounded-xl bg-emerald-500/5 border border-emerald-500/10">
-                <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400">{stats.completed}</div>
-                <div className="text-[9px] text-[var(--md-sys-color-secondary)] mt-0.5">Completed</div>
-              </div>
-              <div className="p-2 rounded-xl bg-amber-500/5 border border-amber-500/10">
-                <div className="text-xs font-bold text-amber-600 dark:text-amber-400">{stats.inProgress}</div>
-                <div className="text-[9px] text-[var(--md-sys-color-secondary)] mt-0.5">In Progress</div>
-              </div>
-              <div className="p-2 rounded-xl bg-slate-500/5 border border-slate-500/10">
-                <div className="text-xs font-bold text-slate-600 dark:text-slate-400">{stats.notStarted}</div>
-                <div className="text-[9px] text-[var(--md-sys-color-secondary)] mt-0.5">Pending</div>
+            {/* Velocity Predictor Card */}
+            <div className="p-3 rounded-2xl bg-indigo-500/[0.03] border border-indigo-500/10 flex items-start gap-2.5">
+              <Clock size={16} className={clsx("flex-shrink-0 mt-0.5", velocityPrediction.isDelayed ? "text-red-500 animate-pulse" : "text-indigo-600 dark:text-indigo-400")} />
+              <div>
+                <h4 className="text-[10px] font-bold text-[var(--md-sys-color-on-surface)]">Syllabus Velocity Estimate</h4>
+                <p className="text-[11px] font-black text-[var(--md-sys-color-primary)] mt-0.5 leading-none">{velocityPrediction.msg}</p>
+                <p className="text-[8.5px] text-[var(--md-sys-color-on-surface-variant)] mt-1">{velocityPrediction.detail}</p>
+                {velocityPrediction.isDelayed && (
+                  <span className="inline-block mt-1 px-1.5 py-0.5 rounded text-[7.5px] font-black uppercase bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20">
+                    Warning: Completion delayed past Term end
+                  </span>
+                )}
               </div>
             </div>
           </div>
@@ -700,7 +929,20 @@ ${outcomesList}
             
             // Dynamic competency scores stats
             const mastery = getUnitClassMastery(u.title);
+            const peerPairings = getPeerPairings(u.title);
             
+            // Resolve Practical Tasks checklist
+            const practicalTasks = LAB_TASKS_PRESETS[u.title] || LAB_TASKS_PRESETS[u.unit] || [
+              'Review theoretical components',
+              'Perform visual checks',
+              'Draft terminal sketch plan'
+            ];
+            const completedTasks = progressState.completedLabTasks[u.title] || {};
+            const completedTasksCount = Object.values(completedTasks).filter(Boolean).length;
+            const tasksPct = Math.round((completedTasksCount / practicalTasks.length) * 100);
+
+            const isCopied = copiedUnitTitle === u.title;
+
             return (
               <motion.div
                 key={u.title}
@@ -773,6 +1015,28 @@ ${outcomesList}
 
                   {/* Right Header: Interactive status selector & action buttons */}
                   <div className="flex items-center gap-3 mt-3 sm:mt-0 ml-12 sm:ml-4" onClick={e => e.stopPropagation()}>
+                    {/* Exporter Scheme button */}
+                    <button
+                      onClick={() => handleCopySchemeOfWork(u)}
+                      className={clsx(
+                        "flex items-center justify-center gap-1 px-3 py-1.5 rounded-xl border text-[9.5px] font-black uppercase tracking-wider transition-all",
+                        isCopied 
+                          ? "bg-emerald-500 text-white border-emerald-500"
+                          : "bg-[var(--md-sys-color-surface-container)] hover:bg-[var(--md-sys-color-surface-variant)] text-[var(--md-sys-color-secondary)] border-[var(--md-sys-color-outline-variant)] active:scale-95"
+                      )}
+                      title="Copy KICD scheme of work lesson plan to clipboard"
+                    >
+                      {isCopied ? (
+                        <>
+                          <ClipboardCheck size={11} /> Copied!
+                        </>
+                      ) : (
+                        <>
+                          <Copy size={11} /> Export Lesson Plan
+                        </>
+                      )}
+                    </button>
+
                     {/* Status Pill switcher */}
                     <div className="flex bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)] rounded-xl p-0.5 shadow-inner">
                       {(['Not Started', 'In Progress', 'Completed'] as const).map(s => {
@@ -822,13 +1086,14 @@ ${outcomesList}
                       transition={{ duration: 0.2, ease: "easeInOut" }}
                     >
                       <div className="p-5 space-y-5 bg-[var(--md-sys-color-surface-container-low)]/30 border-t border-[var(--md-sys-color-outline-variant)]/60">
-                        {/* Upper row: Outcomes & Suggested Activities */}
+                        
+                        {/* FIRST ROW: Outcomes (Syllabus) vs Practical Tasks checklist */}
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                           
-                          {/* Outcomes List with Checkboxes */}
+                          {/* Outcomes Checklist */}
                           <div className="space-y-2.5">
                             <h4 className="text-[10px] font-black uppercase tracking-widest text-[var(--md-sys-color-secondary)] flex items-center gap-1.5">
-                              <ClipboardList size={12} /> Sub-Competency Outcomes checklist
+                              <ClipboardList size={12} /> Syllabus Sub-Outcomes checklist
                             </h4>
                             <div className="grid grid-cols-1 gap-2">
                               {u.outcomes.map((outcome, oIdx) => {
@@ -857,97 +1122,201 @@ ${outcomesList}
                             </div>
                           </div>
 
-                          {/* Suggested Activities */}
-                          <div className="space-y-4 flex flex-col justify-between">
-                            <div className="space-y-2">
+                          {/* Vocational Practical tasks checklist */}
+                          <div className="space-y-2.5">
+                            <div className="flex justify-between items-baseline">
                               <h4 className="text-[10px] font-black uppercase tracking-widest text-[var(--md-sys-color-secondary)] flex items-center gap-1.5">
-                                <Sparkles size={12} /> Recommended Lesson Execution
+                                <Zap size={12} /> Workshop Practical Task Sheet
                               </h4>
-                              <div className="p-4 rounded-2xl bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)]">
-                                <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] leading-relaxed">
-                                  {u.activities}
-                                </p>
-                              </div>
+                              <span className="text-[10px] font-bold text-[var(--md-sys-color-primary)]">{tasksPct}% complete</span>
                             </div>
-
-                            {/* Timetable schedule action & AI lesson planner triggers */}
-                            <div className="flex flex-wrap gap-2.5 pt-2">
-                              {onAddScheduleSlot && (
-                                <button
-                                  onClick={() => setActiveScheduleUnit(u)}
-                                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline)] hover:bg-[var(--md-sys-color-surface-variant)] active:scale-95 text-xs text-[var(--md-sys-color-on-surface)] font-bold transition-all shadow-sm"
-                                >
-                                  <Calendar size={13} className="text-[var(--md-sys-color-primary)]" /> Schedule Class
-                                </button>
-                              )}
-
-                              {preferences.enableAI && (
-                                <button
-                                  onClick={() => handleGenerateAILessonGuide(u)}
-                                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-900/40 text-indigo-700 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-950/40 active:scale-95 text-xs font-bold transition-all shadow-sm"
-                                >
-                                  <Brain size={13} className="animate-pulse" /> AI Lesson Guide
-                                </button>
-                              )}
+                            
+                            <div className="grid grid-cols-1 gap-2 bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)]/60 rounded-2xl p-4 space-y-2">
+                              {practicalTasks.map((task, tIdx) => {
+                                const isChecked = !!completedTasks[tIdx];
+                                return (
+                                  <div 
+                                    key={tIdx}
+                                    className="flex gap-2.5 items-start text-xs text-[var(--md-sys-color-on-surface)] cursor-pointer"
+                                    onClick={() => toggleLabTaskChecked(u.title, tIdx)}
+                                  >
+                                    <div className="mt-0.5 flex-shrink-0 text-[var(--md-sys-color-primary)]">
+                                      {isChecked ? <CheckSquare size={15} /> : <Square size={15} />}
+                                    </div>
+                                    <span className={clsx(isChecked && "opacity-60 line-through")}>{task}</span>
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
                         </div>
 
-                        {/* Lower row: Class competency status, attached resources & lesson notes */}
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-4 border-t border-[var(--md-sys-color-outline-variant)]/60">
-                          
-                          {/* Unit Mastery Status */}
-                          <div className="p-4 rounded-2xl bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)] flex flex-col justify-between space-y-4">
-                            <div className="space-y-2">
-                              <div className="flex justify-between items-start">
-                                <h4 className="text-[10px] font-black uppercase tracking-widest text-[var(--md-sys-color-secondary)] leading-none">Class Competency Details</h4>
-                                <span className="text-[8.5px] font-black uppercase tracking-wider text-[var(--md-sys-color-primary)] font-mono">
-                                  {getMappedCompetencyKey(u.title, activeSubject)}
-                                </span>
-                              </div>
-                              <p className="text-[9.5px] text-[var(--md-sys-color-on-surface-variant)]">Mapped skill graded on the Assessment tab</p>
+                        {/* SECOND ROW: Class diagnostics Heatmap and peer pairing recommendations */}
+                        <div className="p-4 rounded-2xl bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)] space-y-4">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[var(--md-sys-color-outline-variant)]/50 pb-3">
+                            <div>
+                              <h4 className="text-[10px] font-black uppercase tracking-widest text-[var(--md-sys-color-secondary)] flex items-center gap-1.5">
+                                <Users size={12} /> Class Diagnostics & Tutor pairing recommendations
+                              </h4>
+                              <p className="text-[9.5px] text-[var(--md-sys-color-on-surface-variant)] mt-0.5">
+                                Mapped target skill: <strong className="text-[var(--md-sys-color-primary)] font-mono">{getMappedCompetencyKey(u.title, activeSubject)}</strong>
+                              </p>
                             </div>
-
-                            <div className="space-y-1.5">
-                              {mastery.avg !== null ? (
-                                <>
-                                  <div className="flex items-baseline justify-between">
-                                    <span className="text-lg font-black font-google text-[var(--md-sys-color-on-surface)]">{mastery.avg} / 4.0</span>
-                                    <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400">{mastery.percentCompetent}% Competent</span>
-                                  </div>
-                                  <div className="w-full bg-[var(--md-sys-color-outline-variant)]/40 rounded-full h-1.5 overflow-hidden">
-                                    <div 
-                                      className={clsx(
-                                        "h-full rounded-full transition-all duration-300",
-                                        mastery.avg >= 3.0 ? "bg-emerald-500" : mastery.avg >= 2.0 ? "bg-amber-500" : "bg-red-500"
-                                      )}
-                                      style={{ width: `${(mastery.avg / 4) * 100}%` }} 
-                                    />
-                                  </div>
-                                  <p className="text-[9px] text-[var(--md-sys-color-on-surface-variant)]">Based on {mastery.count} active student grades</p>
-                                </>
-                              ) : (
-                                <div className="py-2 text-center text-xs text-[var(--md-sys-color-on-surface-variant)] italic bg-[var(--md-sys-color-surface-container-low)] rounded-lg">
-                                  No student grades registered yet
-                                </div>
+                            
+                            <div className="flex items-center gap-3">
+                              {mastery.avg !== null && (
+                                <span className="px-2.5 py-1 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-[10.5px] font-black text-indigo-700 dark:text-indigo-400">
+                                  Class average: {mastery.avg} / 4.0
+                                </span>
+                              )}
+                              {onUpdateStudent && (
+                                <button
+                                  onClick={() => setActiveAssessUnit(u)}
+                                  className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[var(--md-sys-color-primary)] text-white text-[10px] font-bold transition-all active:scale-95 hover:opacity-90 shadow-sm"
+                                >
+                                  <Edit2 size={11} /> Quick Grade / Assess
+                                </button>
                               )}
                             </div>
-
-                            {onUpdateStudent && (
-                              <button
-                                onClick={() => setActiveAssessUnit(u)}
-                                className="w-full flex items-center justify-center gap-1 py-2 rounded-xl bg-[var(--md-sys-color-primary)]/10 hover:bg-[var(--md-sys-color-primary)]/20 text-[var(--md-sys-color-primary)] text-[11px] font-bold transition-colors active:scale-95"
-                              >
-                                <Users size={12} /> Grade / Assess Unit
-                              </button>
-                            )}
                           </div>
 
-                          {/* Attached Resources */}
+                          {/* Student diagnostics list & peer recommendations */}
+                          {activeStudents.length === 0 ? (
+                            <p className="text-[11px] text-[var(--md-sys-color-on-surface-variant)] italic text-center py-4">No student records registered for this subject.</p>
+                          ) : (
+                            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                              {/* Student Grid (2 cols) */}
+                              <div className="xl:col-span-2 space-y-2">
+                                <h5 className="text-[9px] font-black uppercase tracking-wider text-[var(--md-sys-color-secondary)]">Student Mastery Heatmap</h5>
+                                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                                  {activeStudents.map(student => {
+                                    const compKey = getMappedCompetencyKey(u.title, activeSubject);
+                                    const score = (student.competencies?.[compKey] || 1) as 1 | 2 | 3 | 4;
+                                    const levelStyle = COMPETENCY_LEVELS[score];
+                                    
+                                    return (
+                                      <div 
+                                        key={student.id}
+                                        className="p-2 rounded-xl bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)]/60 flex flex-col justify-between"
+                                      >
+                                        <span className="text-[10.5px] font-bold text-[var(--md-sys-color-on-surface)] truncate leading-tight">{student.name}</span>
+                                        <span className={clsx("mt-1.5 px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wide border text-center", levelStyle.bg)}>
+                                          {levelStyle.label}
+                                        </span>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+
+                              {/* Peer tutoring recommendation (1 col) */}
+                              <div className="p-3 rounded-2xl bg-indigo-500/[0.02] border border-indigo-500/10 space-y-2.5">
+                                <h5 className="text-[9px] font-black uppercase tracking-wider text-indigo-700 dark:text-indigo-400 flex items-center gap-1.5">
+                                  <Flame size={12} className="text-orange-500" /> Peer-Tutoring Pairs
+                                </h5>
+                                
+                                <div className="space-y-1.5 max-h-[140px] overflow-y-auto custom-scrollbar">
+                                  {peerPairings.length === 0 ? (
+                                    <p className="text-[10px] text-[var(--md-sys-color-on-surface-variant)] italic py-4 text-center">
+                                      All students are at matching competency levels. No tutoring pairs needed!
+                                    </p>
+                                  ) : (
+                                    peerPairings.map((pair, pIdx) => (
+                                      <div 
+                                        key={pIdx}
+                                        className="p-2 rounded-xl bg-[var(--md-sys-color-surface-container-low)] border border-[var(--md-sys-color-outline-variant)]/50 text-[10.5px] leading-tight flex items-center justify-between"
+                                      >
+                                        <div className="truncate flex-1 pr-1">
+                                          <span className="font-bold text-emerald-600 dark:text-emerald-400">{pair.tutor.name}</span>
+                                          <span className="block text-[8px] text-[var(--md-sys-color-secondary)]">Mastered Tutor</span>
+                                        </div>
+                                        <ArrowRight size={10} className="text-[var(--md-sys-color-secondary)] mx-1 flex-shrink-0" />
+                                        <div className="truncate flex-1 pl-1 text-right">
+                                          <span className="font-bold text-amber-600 dark:text-amber-400">{pair.learner.name}</span>
+                                          <span className="block text-[8px] text-[var(--md-sys-color-secondary)]">Developing Learner</span>
+                                        </div>
+                                      </div>
+                                    ))
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* NITA / CDACC Trade Test Readiness Panel */}
+                        <div className="p-4 rounded-2xl bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)] space-y-3">
+                          <h4 className="text-[10px] font-black uppercase tracking-widest text-[var(--md-sys-color-secondary)] flex items-center gap-1.5">
+                            <GraduationCap size={13} /> Trade Test & Assessment Grade Readiness Audit
+                          </h4>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                            {activeStudents.map(student => {
+                              const audit = getStudentReadiness(student, u);
+                              return (
+                                <div 
+                                  key={student.id}
+                                  className={clsx(
+                                    "p-3 rounded-xl border text-xs leading-relaxed flex flex-col justify-between space-y-1.5",
+                                    audit.readiness === 'ready' ? "bg-emerald-500/[0.02] border-emerald-500/20 text-[var(--md-sys-color-on-surface)]" :
+                                    audit.readiness === 'risk' ? "bg-red-500/[0.02] border-red-500/20 text-[var(--md-sys-color-on-surface)] animate-pulse" :
+                                    "bg-[var(--md-sys-color-surface-container-low)] border-[var(--md-sys-color-outline-variant)]/60 text-[var(--md-sys-color-on-surface)]"
+                                  )}
+                                >
+                                  <div className="flex justify-between items-baseline gap-2">
+                                    <span className="font-bold truncate">{student.name}</span>
+                                    <span className={clsx(
+                                      "px-1.5 py-0.5 rounded text-[8.5px] font-black uppercase tracking-wide",
+                                      audit.readiness === 'ready' ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400" :
+                                      audit.readiness === 'risk' ? "bg-red-500/10 text-red-700 dark:text-red-400" :
+                                      "bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                                    )}>
+                                      {audit.readiness === 'ready' ? 'Ready' : audit.readiness === 'risk' ? 'Critical Risk' : 'Developing'}
+                                    </span>
+                                  </div>
+                                  <p className="text-[9.5px] text-[var(--md-sys-color-on-surface-variant)] leading-tight">{audit.detail}</p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* THIRD ROW: Attached resources, lesson notes, schedule slot booking & AI drawer triggers */}
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-4 border-t border-[var(--md-sys-color-outline-variant)]/60">
+                          
+                          {/* Timetable / scheduling card */}
                           <div className="p-4 rounded-2xl bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)] flex flex-col justify-between space-y-4">
                             <div className="space-y-1">
-                              <h4 className="text-[10px] font-black uppercase tracking-widest text-[var(--md-sys-color-secondary)]">Lesson Resources</h4>
-                              <p className="text-[9.5px] text-[var(--md-sys-color-on-surface-variant)]">Study guides & reference sheets</p>
+                              <h4 className="text-[10px] font-black uppercase tracking-widest text-[var(--md-sys-color-secondary)]">Calendar Scheduling</h4>
+                              <p className="text-[9.5px] text-[var(--md-sys-color-on-surface-variant)]">Book class sessions directly to the system timetable</p>
+                            </div>
+
+                            {onAddScheduleSlot ? (
+                              <button
+                                onClick={() => setActiveScheduleUnit(u)}
+                                className="w-full flex items-center justify-center gap-1.5 py-3 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-[11px] font-black uppercase tracking-wide active:scale-95 shadow shadow-violet-500/10 hover:opacity-95 transition-all"
+                              >
+                                <Calendar size={13} /> Schedule New Session
+                              </button>
+                            ) : (
+                              <div className="py-2 text-center text-xs text-[var(--md-sys-color-on-surface-variant)] italic">
+                                Timetable integrations disabled
+                              </div>
+                            )}
+
+                            <button
+                              onClick={() => openCopilotDrawer(u)}
+                              className="w-full flex items-center justify-center gap-1 py-2 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-700 dark:text-indigo-400 text-[11px] font-bold transition-colors active:scale-95"
+                            >
+                              <Brain size={12} /> Open AI Delivery Assistant
+                            </button>
+                          </div>
+
+                          {/* Link files resources */}
+                          <div className="p-4 rounded-2xl bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)] flex flex-col justify-between space-y-4">
+                            <div className="space-y-1">
+                              <h4 className="text-[10px] font-black uppercase tracking-widest text-[var(--md-sys-color-secondary)]">Attached Resources</h4>
+                              <p className="text-[9.5px] text-[var(--md-sys-color-on-surface-variant)]">Study notes and manuals linked to unit</p>
                             </div>
 
                             <div className="flex-1 overflow-y-auto max-h-[85px] space-y-1.5 py-1 custom-scrollbar">
@@ -979,7 +1348,7 @@ ${outcomesList}
 
                           {/* Instructor Notes */}
                           <div className="p-4 rounded-2xl bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)] flex flex-col justify-between space-y-2">
-                            <h4 className="text-[10px] font-black uppercase tracking-widest text-[var(--md-sys-color-secondary)] leading-none">Instructor Notes</h4>
+                            <h4 className="text-[10px] font-black uppercase tracking-widest text-[var(--md-sys-color-secondary)] leading-none">Lesson Notes</h4>
                             <textarea
                               placeholder="Type reminders or materials to bring for this lesson..."
                               value={unitNotes}
@@ -999,6 +1368,127 @@ ${outcomesList}
           })
         )}
       </motion.div>
+
+      {/* SIDEBAR AI CHAT DRAWER SANDBOX */}
+      <AnimatePresence>
+        {isCopilotOpen && copilotUnit && (
+          <>
+            {/* Backdrop filter */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.5 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsCopilotOpen(false)}
+              className="fixed inset-0 bg-black z-40"
+            />
+            {/* Drawer */}
+            <motion.div 
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed right-0 top-0 bottom-0 w-full sm:w-[450px] bg-[var(--md-sys-color-surface)] border-l border-[var(--md-sys-color-outline)] shadow-2xl z-50 flex flex-col overflow-hidden"
+            >
+              {/* Header */}
+              <div className="bg-gradient-to-r from-indigo-600 to-violet-600 p-6 text-white flex-shrink-0 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Brain size={22} className="animate-pulse" />
+                  <div>
+                    <h3 className="text-sm font-bold font-google leading-none">PRISM Syllabus Co-pilot</h3>
+                    <p className="text-[10px] text-indigo-200 mt-1 truncate max-w-[280px]">{copilotUnit.title}</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setIsCopilotOpen(false)}
+                  className="px-2.5 py-1 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold text-white transition-all"
+                >
+                  Close
+                </button>
+              </div>
+
+              {/* Chat Messages */}
+              <div className="flex-1 p-5 overflow-y-auto custom-scrollbar space-y-4">
+                {chatHistory.map(msg => (
+                  <div 
+                    key={msg.id}
+                    className={clsx(
+                      "flex flex-col max-w-[85%] rounded-2xl p-3 text-xs leading-relaxed",
+                      msg.sender === 'user' 
+                        ? "bg-[var(--md-sys-color-primary)] text-white ml-auto rounded-tr-none" 
+                        : "bg-[var(--md-sys-color-surface-container)] text-[var(--md-sys-color-on-surface)] border border-[var(--md-sys-color-outline-variant)]/60 mr-auto rounded-tl-none whitespace-pre-wrap"
+                    )}
+                  >
+                    <div>{msg.text}</div>
+                    <span className={clsx(
+                      "block text-[8px] text-right mt-1 font-mono leading-none",
+                      msg.sender === 'user' ? "text-white/70" : "text-[var(--md-sys-color-secondary)]"
+                    )}>
+                      {msg.timestamp}
+                    </span>
+                  </div>
+                ))}
+                {isAiTyping && (
+                  <div className="bg-[var(--md-sys-color-surface-container)] text-[var(--md-sys-color-on-surface)] border border-[var(--md-sys-color-outline-variant)]/60 mr-auto rounded-2xl rounded-tl-none p-3 text-xs flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--md-sys-color-primary)] animate-bounce" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--md-sys-color-primary)] animate-bounce delay-100" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--md-sys-color-primary)] animate-bounce delay-200" />
+                  </div>
+                )}
+                <div ref={chatBottomRef} />
+              </div>
+
+              {/* Preset suggestion query buttons */}
+              <div className="p-4 border-t border-[var(--md-sys-color-outline-variant)]/60 bg-[var(--md-sys-color-surface-container-low)] space-y-1.5 flex-shrink-0">
+                <p className="text-[9px] font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-wider">Quick Prompts Suggestions</p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => handleSendCopilotMessage('Explain this using a simple local analogy')}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] text-[10px] font-semibold text-[var(--md-sys-color-on-surface)] hover:bg-[var(--md-sys-color-surface-variant)] transition-all shadow-sm"
+                  >
+                    ⚡ Simple Analogy
+                  </button>
+                  <button
+                    onClick={() => handleSendCopilotMessage('Generate a Swahili/English tool cheat sheet')}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] text-[10px] font-semibold text-[var(--md-sys-color-on-surface)] hover:bg-[var(--md-sys-color-surface-variant)] transition-all shadow-sm"
+                  >
+                    🇰🇪 Swahili Vocab
+                  </button>
+                  <button
+                    onClick={() => handleSendCopilotMessage('Create a 5-minute hands-on class challenge')}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] text-[10px] font-semibold text-[var(--md-sys-color-on-surface)] hover:bg-[var(--md-sys-color-surface-variant)] transition-all shadow-sm"
+                  >
+                    ⏱️ 5-Min Challenge
+                  </button>
+                  <button
+                    onClick={() => handleSendCopilotMessage('List low-cost materials for practical exercise')}
+                    className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[var(--md-sys-color-surface)] border border-[var(--md-sys-color-outline)] text-[10px] font-semibold text-[var(--md-sys-color-on-surface)] hover:bg-[var(--md-sys-color-surface-variant)] transition-all shadow-sm"
+                  >
+                    🪵 Low-Cost Materials
+                  </button>
+                </div>
+              </div>
+
+              {/* Chat Input */}
+              <div className="p-4 border-t border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface-container)] flex-shrink-0 flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Ask a question about lesson delivery..."
+                  value={chatInput}
+                  onChange={e => setChatInput(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSendCopilotMessage()}
+                  className="flex-1 px-3 py-2 text-xs rounded-xl border border-[var(--md-sys-color-outline-variant)] bg-[var(--md-sys-color-surface)] text-[var(--md-sys-color-on-surface)] focus:outline-none focus:border-[var(--md-sys-color-primary)] transition-all"
+                />
+                <button
+                  onClick={() => handleSendCopilotMessage()}
+                  className="p-2.5 rounded-xl bg-[var(--md-sys-color-primary)] text-white hover:opacity-90 transition-all active:scale-95"
+                >
+                  <Send size={14} />
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
       {/* MODAL 1: Quick Student Assessment */}
       {activeAssessUnit && (
@@ -1189,94 +1679,6 @@ ${outcomesList}
                 className="px-5 py-2.5 rounded-xl bg-[var(--md-sys-color-primary)] text-white text-xs font-bold active:scale-95 shadow-md shadow-indigo-500/10 hover:opacity-90 transition-all flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Calendar size={13} /> Book to Timetable
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL 3: AI Lesson Guide & Quiz */}
-      {activeAIUnit && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[var(--md-sys-color-surface)] rounded-3xl border border-[var(--md-sys-color-outline)] shadow-2xl w-full max-w-2xl animate-fade-in flex flex-col max-h-[85vh] overflow-hidden">
-            <div className="bg-gradient-to-r from-indigo-500 to-violet-600 p-6 text-white flex-shrink-0 flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-white/10 rounded-xl">
-                  <Brain size={22} className="animate-pulse text-white" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold font-google">
-                    PRISM AI Lesson Guide
-                  </h3>
-                  <p className="text-[10px] text-indigo-100 font-medium">
-                    Syllabus Co-Pilot • {activeAIUnit.title}
-                  </p>
-                </div>
-              </div>
-              <button 
-                onClick={() => setActiveAIUnit(null)}
-                className="px-3 py-1 bg-white/10 hover:bg-white/20 rounded-lg text-xs font-bold transition-all text-white active:scale-95"
-              >
-                Close
-              </button>
-            </div>
-
-            <div className="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-6">
-              {isGeneratingAI ? (
-                <div className="flex flex-col items-center justify-center py-16 space-y-4">
-                  <RefreshCw className="animate-spin text-indigo-600" size={32} />
-                  <p className="text-xs text-[var(--md-sys-color-on-surface-variant)] font-bold animate-pulse">
-                    Analyzing syllabus guidelines and structuring class pedagogy...
-                  </p>
-                </div>
-              ) : aiResult ? (
-                <div className="space-y-6">
-                  {/* Lesson plan text */}
-                  <div className="prose prose-sm dark:prose-invert max-w-none text-xs leading-relaxed text-[var(--md-sys-color-on-surface-variant)] whitespace-pre-wrap">
-                    {aiResult.plan}
-                  </div>
-
-                  {/* Formative assessment quiz */}
-                  <div className="space-y-3 pt-4 border-t border-[var(--md-sys-color-outline-variant)]">
-                    <h4 className="text-[10px] font-black uppercase tracking-widest text-[var(--md-sys-color-secondary)] flex items-center gap-1">
-                      <HelpCircle size={13} /> Classroom Concept Evaluation Quiz
-                    </h4>
-                    
-                    <div className="space-y-4">
-                      {aiResult.quiz.map((q, idx) => (
-                        <div key={idx} className="p-4 rounded-2xl bg-[var(--md-sys-color-surface-container)] border border-[var(--md-sys-color-outline-variant)] space-y-2.5">
-                          <h5 className="text-xs font-bold text-[var(--md-sys-color-on-surface)] leading-normal">
-                            Q{idx + 1}: {q.q}
-                          </h5>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[10.5px]">
-                            {q.a.map((ans, aIdx) => (
-                              <div 
-                                key={aIdx} 
-                                className={clsx(
-                                  "p-2.5 rounded-xl border transition-colors leading-tight",
-                                  aIdx === 0 
-                                    ? "bg-emerald-500/5 border-emerald-500/20 text-emerald-800 dark:text-emerald-400 font-bold" 
-                                    : "bg-[var(--md-sys-color-surface-container-low)] border-[var(--md-sys-color-outline-variant)]/60 text-[var(--md-sys-color-on-surface-variant)]"
-                                )}
-                              >
-                                {ans} {aIdx === 0 && '✓'}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-
-            <div className="bg-[var(--md-sys-color-surface-container-highest)] p-4 border-t border-[var(--md-sys-color-outline-variant)] flex justify-end">
-              <button 
-                onClick={() => setActiveAIUnit(null)}
-                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-500 to-violet-600 text-white text-xs font-bold active:scale-95 shadow-md shadow-indigo-500/10 hover:opacity-90 transition-all"
-              >
-                Copy to Lesson Planner
               </button>
             </div>
           </div>

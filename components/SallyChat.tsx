@@ -698,9 +698,42 @@ export function SallyChat({ currentView }: { currentView?: string }) {
       next[idx] = updated;
       
       localStorage.setItem('sally_conversations_list_v1', JSON.stringify(next));
+      window.dispatchEvent(new CustomEvent('sally-history-sync', { detail: { sender: 'companion' } }));
       return next;
     });
   }, [messages, activeConversationId, hasAttemptedRestore]);
+
+  // Listen to synchronizations from the Command Center integrated console
+  useEffect(() => {
+    const handleSync = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail?.sender === 'command-center') {
+        try {
+          const storedActiveId = localStorage.getItem('sally_active_conversation_id_v1');
+          const storedList = localStorage.getItem('sally_conversations_list_v1');
+          if (storedActiveId && storedList) {
+            const list = JSON.parse(storedList);
+            const active = list.find((c: any) => c.id === storedActiveId);
+            if (active) {
+              const historical = active.messages.map((m: any) => ({ ...m, isHistorical: true }));
+              setMessages(historical);
+            }
+          }
+        } catch (err) {
+          console.warn('[SallyChat] Failed to sync messages from command-center event:', err);
+        }
+      }
+    };
+    window.addEventListener('sally-history-sync', handleSync);
+    return () => window.removeEventListener('sally-history-sync', handleSync);
+  }, [setMessages]);
+
+  // Auto-close floating panel when routing to views with integrated chat interfaces
+  useEffect(() => {
+    if (currentView === 'icon-gallery' || currentView === 'communications') {
+      setIsOpen(false);
+    }
+  }, [currentView]);
 
   const startNewConversation = useCallback(() => {
     const newId = 'chat_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
@@ -1712,7 +1745,7 @@ export function SallyChat({ currentView }: { currentView?: string }) {
   return (
     <>
       {/* 1. Floating Action Orb Trigger Button */}
-      {!isOpen && currentView !== 'communications' && (
+      {!isOpen && currentView !== 'communications' && currentView !== 'icon-gallery' && (
         <div className="fixed bottom-24 right-6 md:bottom-6 z-40 group">
           <motion.div 
             whileHover={{ scale: 1.08 }}

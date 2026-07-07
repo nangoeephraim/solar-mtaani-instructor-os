@@ -3,7 +3,7 @@ import { AppData, Student, InstructorSettings, DEFAULT_SETTINGS } from '../types
 import { getLevelShortLabel } from '../constants/educationLevels';
 import { getSettings } from '../services/storageService';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, Legend, RadarChart, PolarGrid, PolarAngleAxis, Radar } from 'recharts';
-import { TrendingUp, TrendingDown, Users, Award, AlertTriangle, ChevronRight, BarChart3, PieChart as PieChartIcon, Activity, Zap, Monitor, Star, Target, Clock, ArrowUpRight, Sparkles, Download, Lightbulb, Calendar, RefreshCw, FileText, ChevronDown, PartyPopper, Brain, Printer, GitCompare, X } from 'lucide-react';
+import { TrendingUp, TrendingDown, Users, Award, AlertTriangle, ChevronRight, BarChart3, PieChart as PieChartIcon, Activity, Zap, Monitor, Star, Target, Clock, ArrowUpRight, Sparkles, Download, Lightbulb, Calendar, RefreshCw, FileText, ChevronDown, PartyPopper, Brain, Printer, GitCompare, X, Send, Loader2 } from 'lucide-react';
 import clsx from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
 import { analyzeData } from '../services/intelligenceService';
@@ -15,10 +15,12 @@ import { supabase } from '../services/supabase';
 import { useToast } from './Toast';
 import { useTheme } from '../contexts/ThemeContext';
 import { getSubjectHex, getSubjectEmoji } from '../utils/subjectUtils';
+import { Sally3DBrain } from './Sally3DBrain';
+import { getAuthHeaders } from '../services/authHeaders';
 
 interface AnalyticsProps {
     data: AppData;
-    onNavigate: (view: string) => void;
+    onNavigate: (view: string, studentId?: number) => void;
 }
 
 const GOOGLE_COLORS = ['#4285f4', '#ea4335', '#fbbc04', '#34a853', '#9333ea', '#f97316'];
@@ -235,6 +237,11 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
     const analyticsRef = useRef<HTMLDivElement>(null);
     const [settings, setSettings] = useState<InstructorSettings>(DEFAULT_SETTINGS);
 
+    // --- Dynamic Selector Filter States ---
+    const [selectedSubject, setSelectedSubject] = useState<string>('all');
+    const [selectedGrade, setSelectedGrade] = useState<string>('all');
+    const [selectedLot, setSelectedLot] = useState<string>('all');
+
     // --- Server-Side Analytics State ---
     const [classAvg, setClassAvg] = useState<ClassAveragesResult>({ overall_avg_score: 0, overall_avg_attendance: 0, total_students: 0 });
     const [subjectComp, setSubjectComp] = useState<SubjectComparisonResult[]>([]);
@@ -243,6 +250,32 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
     const [isLoadingStats, setIsLoadingStats] = useState(true);
     const [isGeneratingCloud, setIsGeneratingCloud] = useState(false);
     const { showToast } = useToast();
+
+    // --- Sally AI Integration State ---
+    const [chatInput, setChatInput] = useState('');
+    const [isSallyThinking, setIsSallyThinking] = useState(false);
+    const chatEndRef = useRef<HTMLDivElement>(null);
+    const [chatMessages, setChatMessages] = useState<Array<{ role: 'user' | 'assistant', content: string }>>(() => {
+        try {
+            const saved = localStorage.getItem('sally_analytics_chat_v1');
+            if (saved) return JSON.parse(saved);
+        } catch (e) {}
+        return [
+            {
+                role: 'assistant',
+                content: `Hello! I'm Sally, your PRISM AI Analytics Copilot. I can run deep queries on your class database, identify at-risk students, predict future term scores, or analyze cohort gaps. 
+
+Try clicking one of the quick analysis chips below to begin!`
+            }
+        ];
+    });
+
+    useEffect(() => {
+        try {
+            localStorage.setItem('sally_analytics_chat_v1', JSON.stringify(chatMessages));
+        } catch (e) {}
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [chatMessages]);
 
     useEffect(() => {
         const loadStats = async () => {
@@ -266,33 +299,154 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
         }
     }, []);
 
+    // Helper to calculate student averages
+    const getAvgCompetency = useMemo(() => (students: Student[]) => {
+        if (students.length === 0) return 0;
+        const total = students.reduce((acc, s) => {
+            const vals = Object.values(s.competencies);
+            return acc + (vals.reduce((a, b) => a + b, 0) / Math.max(vals.length, 1));
+        }, 0);
+        return parseFloat((total / students.length).toFixed(2));
+    }, []);
+
+    // Filter lists
+    const subjectOptions = useMemo(() => {
+        const set = new Set<string>();
+        data.students.forEach(s => { if (s.subject) set.add(s.subject); });
+        return ['all', ...Array.from(set)];
+    }, [data.students]);
+
+    const gradeOptions = useMemo(() => {
+        const set = new Set<string>();
+        data.students.forEach(s => { if (s.grade) set.add(String(s.grade)); });
+        return ['all', ...Array.from(set).sort()];
+    }, [data.students]);
+
+    const lotOptions = useMemo(() => {
+        const set = new Set<string>();
+        data.students.forEach(s => { if (s.lot) set.add(s.lot); });
+        return ['all', ...Array.from(set)];
+    }, [data.students]);
+
+    const isFiltered = selectedSubject !== 'all' || selectedGrade !== 'all' || selectedLot !== 'all';
+
+    // Locally filtered student lists
+    const filteredStudents = useMemo(() => {
+        return data.students.filter(s => {
+            if (selectedSubject !== 'all' && s.subject !== selectedSubject) return false;
+            if (selectedGrade !== 'all' && String(s.grade) !== selectedGrade) return false;
+            if (selectedLot !== 'all' && s.lot !== selectedLot) return false;
+            return true;
+        });
+    }, [data.students, selectedSubject, selectedGrade, selectedLot]);
+
+    // Local stats computation based on filtered list
+    const localStats = useMemo(() => {
+        if (filteredStudents.length === 0) {
+            return {
+                overallAvg: 0,
+                overallAttendance: 0,
+                totalStudents: 0,
+                atRiskStudents: [],
+                subjectComp: [],
+                gradeDist: []
+            };
+        }
+
+        const overallAvg = getAvgCompetency(filteredStudents);
+        const overallAttendance = Math.round(filteredStudents.reduce((acc, s) => acc + s.attendancePct, 0) / filteredStudents.length);
+        const totalStudents = filteredStudents.length;
+
+        // Calculate at-risk locally
+        const localRisk = filteredStudents.map(s => {
+            const avg = Object.values(s.competencies).reduce((a, b) => a + b, 0) / Math.max(Object.values(s.competencies).length, 1);
+            return {
+                id: s.id,
+                name: s.name,
+                subject: s.subject,
+                avg_score: avg,
+                attendance_pct: s.attendancePct
+            };
+        }).filter(s => s.avg_score < 2.0 || s.attendance_pct < 85);
+
+        // Subject aggregates
+        const subjectsMap = new Map<string, { totalScore: number, count: number }>();
+        filteredStudents.forEach(s => {
+            const avg = Object.values(s.competencies).reduce((a, b) => a + b, 0) / Math.max(Object.values(s.competencies).length, 1);
+            const current = subjectsMap.get(s.subject) || { totalScore: 0, count: 0 };
+            subjectsMap.set(s.subject, {
+                totalScore: current.totalScore + avg,
+                count: current.count + 1
+            });
+        });
+        const subjectCompLocal = Array.from(subjectsMap.entries()).map(([subj, stat]) => ({
+            subject: subj,
+            avg_score: stat.totalScore / stat.count,
+            student_count: stat.count
+        }));
+
+        // Grade aggregates
+        const gradesMap = new Map<string, { totalScore: number, totalAtt: number, count: number }>();
+        filteredStudents.forEach(s => {
+            const avg = Object.values(s.competencies).reduce((a, b) => a + b, 0) / Math.max(Object.values(s.competencies).length, 1);
+            const current = gradesMap.get(String(s.grade)) || { totalScore: 0, totalAtt: 0, count: 0 };
+            gradesMap.set(String(s.grade), {
+                totalScore: current.totalScore + avg,
+                totalAtt: current.totalAtt + s.attendancePct,
+                count: current.count + 1
+            });
+        });
+        const gradeDistLocal = Array.from(gradesMap.entries()).map(([grd, stat]) => ({
+            grade: grd,
+            student_count: stat.count,
+            avg_score: stat.totalScore / stat.count,
+            avg_attendance: stat.totalAtt / stat.count
+        }));
+
+        return {
+            overallAvg,
+            overallAttendance,
+            totalStudents,
+            atRiskStudents: localRisk,
+            subjectComp: subjectCompLocal,
+            gradeDist: gradeDistLocal
+        };
+    }, [filteredStudents, getAvgCompetency]);
+
+    // Use local computations if filtered, otherwise use database stats
+    const currentOverallAvg = isFiltered ? localStats.overallAvg : classAvg.overall_avg_score;
+    const currentOverallAttendance = isFiltered ? localStats.overallAttendance : classAvg.overall_avg_attendance;
+    const currentTotalStudents = isFiltered ? localStats.totalStudents : classAvg.total_students;
+    const currentAtRiskStudents = isFiltered ? localStats.atRiskStudents : atRiskList.map(s => ({
+        id: s.id,
+        name: s.name,
+        subject: s.subject,
+        avg_score: s.avg_score,
+        attendance_pct: s.attendance_pct
+    }));
+
+    const atRiskStudents = currentAtRiskStudents;
+
+    const currentGradeDist = isFiltered ? localStats.gradeDist : gradeDist;
+    const currentSubjectComp = isFiltered ? localStats.subjectComp : subjectComp;
+
     // Grade distribution mapping for Recharts (memoized)
-    const gradeData = useMemo(() => gradeDist.map(g => ({
+    const gradeData = useMemo(() => currentGradeDist.map(g => ({
         grade: `${g.grade}`,
         shortGrade: `${g.grade}`,
         students: g.student_count,
         avgScore: g.avg_score,
         attendance: g.avg_attendance
-    })), [gradeDist]);
+    })), [currentGradeDist]);
 
-    // Subject data mapping for Recharts (memoized) — dynamic color via hash
-    const subjectData = useMemo(() => subjectComp.map(s => ({
+    // Subject data mapping for Recharts (memoized)
+    const subjectData = useMemo(() => currentSubjectComp.map(s => ({
         name: s.subject,
         score: s.avg_score,
         students: s.student_count,
         color: getSubjectHex(s.subject),
         icon: getSubjectEmoji(s.subject)
-    })), [subjectComp]);
-
-    // Competency helper (memoized callback)
-    const getAvgCompetency = useMemo(() => (students: Student[]) => {
-        if (students.length === 0) return 0;
-        const total = students.reduce((acc, s) => {
-            const vals = Object.values(s.competencies);
-            return acc + (vals.reduce((a, b) => a + b, 0) / vals.length);
-        }, 0);
-        return parseFloat((total / students.length).toFixed(2));
-    }, []);
+    })), [currentSubjectComp]);
 
     // Attendance trend (memoized)
     const attendanceTrend = useMemo(() => [
@@ -300,62 +454,192 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
         { week: 'W2', fullWeek: 'Week 2', rate: 88, target: 90 },
         { week: 'W3', fullWeek: 'Week 3', rate: 95, target: 90 },
         { week: 'W4', fullWeek: 'Week 4', rate: 91, target: 90 },
-        { week: 'W5', fullWeek: 'Week 5', rate: data.students.length > 0 ? Math.round(data.students.reduce((acc, s) => acc + s.attendancePct, 0) / data.students.length) : 0, target: 90 }
-    ], [data.students]);
+        { week: 'W5', fullWeek: 'Week 5', rate: currentOverallAttendance, target: 90 }
+    ], [currentOverallAttendance]);
 
     // Sparkline data (memoized)
-    const performanceSparkline = useMemo(() => [2.8, 3.0, 2.9, 3.1, 3.2, getAvgCompetency(data.students)], [data.students, getAvgCompetency]);
+    const performanceSparkline = useMemo(() => [2.8, 3.0, 2.9, 3.1, 3.2, currentOverallAvg], [currentOverallAvg]);
     const attendanceSparkline = useMemo(() => attendanceTrend.map(w => w.rate), [attendanceTrend]);
-    const studentsSparkline = useMemo(() => [8, 10, 12, 14, 16, classAvg.total_students], [classAvg.total_students]);
-    const atRiskSparkline = useMemo(() => [5, 4, 3, 4, 2, atRiskList.length], [atRiskList.length]);
+    const studentsSparkline = useMemo(() => [8, 10, 12, 14, 16, currentTotalStudents], [currentTotalStudents]);
+    const atRiskSparkline = useMemo(() => [5, 4, 3, 4, 2, currentAtRiskStudents.length], [currentAtRiskStudents.length]);
 
     // Top performers (memoized)
-    const topPerformers = useMemo(() => [...data.students]
+    const topPerformers = useMemo(() => [...filteredStudents]
         .map(student => ({
             ...student,
-            avgScore: Object.values(student.competencies).reduce((x, y) => x + y, 0) / Object.values(student.competencies).length
+            avgScore: Object.values(student.competencies).reduce((x, y) => x + y, 0) / Math.max(Object.values(student.competencies).length, 1)
         }))
         .sort((a, b) => b.avgScore - a.avgScore)
-        .slice(0, 5), [data.students]);
-
-    // At-risk students
-    const atRiskStudents = atRiskList;
+        .slice(0, 5), [filteredStudents]);
 
     // Competency distribution (memoized)
     const competencyDistribution = useMemo(() => [
-        { name: 'Mastery (3.5-4)', value: data.students.filter(s => getAvgCompetency([s]) >= 3.5).length, color: '#22c55e' },
-        { name: 'Proficient (2.5-3.4)', value: data.students.filter(s => getAvgCompetency([s]) >= 2.5 && getAvgCompetency([s]) < 3.5).length, color: '#3b82f6' },
-        { name: 'Developing (1.5-2.4)', value: data.students.filter(s => getAvgCompetency([s]) >= 1.5 && getAvgCompetency([s]) < 2.5).length, color: '#f59e0b' },
-        { name: 'Needs Support (<1.5)', value: data.students.filter(s => getAvgCompetency([s]) < 1.5).length, color: '#ef4444' }
-    ], [data.students, getAvgCompetency]);
-
-    // Overall stats
-    const overallAvg = classAvg.overall_avg_score;
-    const overallAttendance = classAvg.overall_avg_attendance;
-
-    // Calculate comparisons
-    const prevAttendance = 82; // Mock previous week data
+        { name: 'Mastery (3.5-4)', value: filteredStudents.filter(s => getAvgCompetency([s]) >= 3.5).length, color: '#22c55e' },
+        { name: 'Proficient (2.5-3.4)', value: filteredStudents.filter(s => getAvgCompetency([s]) >= 2.5 && getAvgCompetency([s]) < 3.5).length, color: '#3b82f6' },
+        { name: 'Developing (1.5-2.4)', value: filteredStudents.filter(s => getAvgCompetency([s]) >= 1.5 && getAvgCompetency([s]) < 2.5).length, color: '#f59e0b' },
+        { name: 'Needs Support (<1.5)', value: filteredStudents.filter(s => getAvgCompetency([s]) < 1.5).length, color: '#ef4444' }
+    ], [filteredStudents, getAvgCompetency]);
 
     // Derived Metrics
     const activeData = useMemo(() => {
         if (settings.preferences?.enableAI === false) return [];
-        return analyzeData(data);
-    }, [data, settings.preferences?.enableAI]);
+        return analyzeData({ ...data, students: filteredStudents });
+    }, [data, filteredStudents, settings.preferences?.enableAI]);
 
-    const primaryInsight = activeData.length > 0 ? activeData[0] : null;
+    // Action Click Handler for Sally Chat tags
+    const handleActionClick = (action: { type: 'filter' | 'profile', target: string }) => {
+        if (action.type === 'filter') {
+            const val = action.target.toLowerCase();
+            
+            // Try to match subject
+            const matchingSubject = subjectOptions.find(s => s.toLowerCase() === val);
+            if (matchingSubject) {
+                setSelectedSubject(matchingSubject);
+                showToast(`Applied subject filter: ${matchingSubject}`, 'success');
+                return;
+            }
+
+            // Try to match grade
+            const matchingGrade = gradeOptions.find(g => g.toLowerCase() === val);
+            if (matchingGrade) {
+                setSelectedGrade(matchingGrade);
+                showToast(`Applied grade filter: Grade ${matchingGrade}`, 'success');
+                return;
+            }
+
+            // Try to match lot
+            const matchingLot = lotOptions.find(l => l.toLowerCase() === val);
+            if (matchingLot) {
+                setSelectedLot(matchingLot);
+                showToast(`Applied cohort filter: Lot ${matchingLot}`, 'success');
+                return;
+            }
+            
+            showToast(`Could not resolve filter: ${action.target}`, 'warning');
+        } else if (action.type === 'profile') {
+            const student = data.students.find(s => s.name.toLowerCase().includes(action.target.toLowerCase()));
+            if (student) {
+                onNavigate('students', student.id);
+            } else {
+                showToast(`Student profile "${action.target}" not found`, 'error');
+            }
+        }
+    };
+
+    // Render Sally Message with interactive tags
+    const renderMessageWithActions = (text: string) => {
+        if (!text) return null;
+        
+        const actionRegex = /\[(Filter|View Profile):\s*([^\]]+)\]/g;
+        const matches: Array<{ type: 'filter' | 'profile', target: string, raw: string }> = [];
+        let match;
+        
+        while ((match = actionRegex.exec(text)) !== null) {
+            matches.push({
+                type: match[1] === 'Filter' ? 'filter' : 'profile',
+                target: match[2].trim(),
+                raw: match[0]
+            });
+        }
+
+        const cleanText = text.replace(actionRegex, '').trim();
+
+        return (
+            <div className="space-y-3">
+                <p className="whitespace-pre-line">{cleanText}</p>
+                {matches.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2 pt-2 border-t border-white/5">
+                        {matches.map((m, idx) => (
+                            <button
+                                key={idx}
+                                onClick={() => handleActionClick(m)}
+                                className={clsx(
+                                    "px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all hover:scale-105 active:scale-95 cursor-pointer flex items-center gap-1",
+                                    m.type === 'filter'
+                                        ? "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 hover:bg-indigo-500 hover:text-white"
+                                        : "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500 hover:text-white"
+                                )}
+                            >
+                                <Sparkles size={10} />
+                                {m.type === 'filter' ? `Apply Filter: ${m.target}` : `Open Profile: ${m.target}`}
+                            </button>
+                        ))}
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    // Sally Send Message Handler
+    const handleSendSallyMessage = async (messageText: string) => {
+        if (!messageText.trim()) return;
+
+        const newUserMsg = { role: 'user' as const, content: messageText };
+        const updatedMsgs = [...chatMessages, newUserMsg];
+        setChatMessages(updatedMsgs);
+        setChatInput('');
+        setIsSallyThinking(true);
+
+        try {
+            const bodyPayload = {
+                messages: updatedMsgs.map(m => ({ role: m.role, content: m.content })),
+                institutionType: preferences?.institutionType || 'tvet',
+                context: {
+                    currentFilters: {
+                        subject: selectedSubject,
+                        grade: selectedGrade,
+                        lot: selectedLot
+                    },
+                    filteredStudentCount: filteredStudents.length,
+                    overallAverageScore: currentOverallAvg,
+                    overallAverageAttendance: currentOverallAttendance,
+                    atRiskCount: currentAtRiskStudents.length,
+                    subjectsPerformance: currentSubjectComp,
+                    gradesDistribution: currentGradeDist
+                }
+            };
+
+            const authHeaders = await getAuthHeaders();
+            const response = await fetch('/api/ai/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...authHeaders
+                },
+                body: JSON.stringify(bodyPayload)
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to communicate with Sally.');
+            }
+
+            const result = await response.json();
+            const textResponse = result?.message?.content || result?.responseMessage?.content || result?.text || 'I analyzed the data but could not formulate a response.';
+            
+            setChatMessages(prev => [...prev, { role: 'assistant', content: textResponse }]);
+        } catch (err: any) {
+            showToast(err.message || 'Error communicating with Sally.', 'error');
+            setChatMessages(prev => [...prev, { 
+                role: 'assistant', 
+                content: `Sorry, I encountered an error. Details: ${err.message || 'Unknown network error'}` 
+            }]);
+        } finally {
+            setIsSallyThinking(false);
+        }
+    };
 
     // Export Functions
     const exportToCSV = () => {
         const cohortLabel = preferences.terminology?.cohortLabel || 'Lot';
         const classLabel  = preferences.terminology?.classLabel  || 'Grade';
         const headers = ['Name', 'Subject', classLabel, cohortLabel, 'Attendance %', 'Avg Competency'];
-        const rows = data.students.map(s => [
+        const rows = filteredStudents.map(s => [
             s.name,
             s.subject,
             s.grade,
             s.lot,
             s.attendancePct,
-            (Object.values(s.competencies).reduce((a, b) => a + b, 0) / Object.values(s.competencies).length).toFixed(2)
+            (Object.values(s.competencies).reduce((a, b) => a + b, 0) / Math.max(Object.values(s.competencies).length, 1)).toFixed(2)
         ]);
 
         const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
@@ -363,7 +647,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `slyc_analytics_${new Date().toISOString().split('T')[0]}.csv`;
+        a.download = `prism_analytics_${new Date().toISOString().split('T')[0]}.csv`;
         a.click();
         setShowExportMenu(false);
     };
@@ -409,14 +693,13 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
         window.print();
     };
 
-    // Cloud Report Generation â€” fast data-driven PDF + cloud upload w/ local fallback
-    // Cloud Report Generation — Server-side via Edge Function, client-side fallback
+    // Cloud Report Generation
     const handleCloudReportGeneration = async () => {
         setIsGeneratingCloud(true);
         try {
             // ── Try server-side generation first (Edge Function) ──
             const { data, error } = await supabase.functions.invoke('generate-report', {
-                body: { reportType: 'cohort_summary', filters: { dateRange, timePeriod } }
+                body: { reportType: 'cohort_summary', filters: { dateRange, timePeriod, selectedSubject, selectedGrade, selectedLot } }
             });
 
             if (!error && data?.downloadUrl) {
@@ -429,7 +712,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
             console.warn('[CloudReport] Edge Function unavailable, falling back to client-side:', error?.message || 'No download URL');
             const pdf = new jsPDF('p', 'mm', 'a4');
             const W = pdf.internal.pageSize.getWidth();
-            let y = 14;
+            let y = 46;
 
             // Header
             pdf.setFillColor(15, 23, 42);
@@ -444,7 +727,6 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
             pdf.setFont('helvetica', 'normal');
             pdf.setTextColor(148, 163, 184);
             pdf.text('Generated: ' + new Date().toLocaleDateString() + '  |  Period: ' + dateRange.start + ' to ' + dateRange.end, 14, 30);
-            y = 46;
 
             // Key Metrics
             pdf.setTextColor(30, 30, 30);
@@ -453,10 +735,10 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
             pdf.text('KEY METRICS', 14, y);
             y += 6;
             const metricsArr = [
-                { label: 'Class Average', value: (classAvg.overall_avg_score || 0).toFixed(2) + ' / 4.0' },
-                { label: 'Attendance', value: (classAvg.overall_avg_attendance || 0) + '%' },
-                { label: 'Total Students', value: '' + classAvg.total_students },
-                { label: 'At-Risk', value: '' + atRiskStudents.length },
+                { label: 'Class Average', value: (currentOverallAvg || 0).toFixed(2) + ' / 4.0' },
+                { label: 'Attendance', value: (currentOverallAttendance || 0) + '%' },
+                { label: 'Total Students', value: '' + currentTotalStudents },
+                { label: 'At-Risk', value: '' + currentAtRiskStudents.length },
             ];
             const bxW = (W - 28 - 12) / 4;
             metricsArr.forEach((m, i) => {
@@ -471,14 +753,14 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
             y += 30;
 
             // Subject Performance
-            if (subjectComp.length > 0) {
+            if (currentSubjectComp.length > 0) {
                 pdf.setFontSize(12); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(30, 30, 30);
                 pdf.text('SUBJECT PERFORMANCE', 14, y); y += 6;
                 pdf.setFillColor(59, 130, 246); pdf.rect(14, y, W - 28, 8, 'F');
                 pdf.setFontSize(9); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(255, 255, 255);
                 pdf.text('Subject', 18, y + 5.5); pdf.text('Students', 80, y + 5.5); pdf.text('Avg Score', 120, y + 5.5);
                 y += 8;
-                subjectComp.forEach((s, idx) => {
+                currentSubjectComp.forEach((s, idx) => {
                     const bg = idx % 2 === 0 ? [255, 255, 255] : [245, 247, 250];
                     pdf.setFillColor(bg[0], bg[1], bg[2]); pdf.rect(14, y, W - 28, 7, 'F');
                     pdf.setFontSize(9); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(40, 40, 40);
@@ -489,14 +771,14 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
             }
 
             // Grade Distribution
-            if (gradeDist.length > 0) {
+            if (currentGradeDist.length > 0) {
                 pdf.setFontSize(12); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(30, 30, 30);
                 pdf.text('GRADE DISTRIBUTION', 14, y); y += 6;
                 pdf.setFillColor(59, 130, 246); pdf.rect(14, y, W - 28, 8, 'F');
                 pdf.setFontSize(9); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(255, 255, 255);
                 pdf.text('Grade', 18, y + 5.5); pdf.text('Students', 60, y + 5.5); pdf.text('Avg Score', 100, y + 5.5); pdf.text('Attendance', 140, y + 5.5);
                 y += 8;
-                gradeDist.forEach((g, idx) => {
+                currentGradeDist.forEach((g, idx) => {
                     const bg = idx % 2 === 0 ? [255, 255, 255] : [245, 247, 250];
                     pdf.setFillColor(bg[0], bg[1], bg[2]); pdf.rect(14, y, W - 28, 7, 'F');
                     pdf.setFontSize(9); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(40, 40, 40);
@@ -508,7 +790,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
             }
 
             // At-Risk
-            if (atRiskStudents.length > 0) {
+            if (currentAtRiskStudents.length > 0) {
                 if (y > 230) { pdf.addPage(); y = 14; }
                 pdf.setFontSize(12); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(239, 68, 68);
                 pdf.text('AT-RISK STUDENTS', 14, y); y += 6;
@@ -516,7 +798,7 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                 pdf.setFontSize(9); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(255, 255, 255);
                 pdf.text('Name', 18, y + 5.5); pdf.text('Avg Score', 90, y + 5.5); pdf.text('Attendance', 140, y + 5.5);
                 y += 8;
-                atRiskStudents.forEach((s, idx) => {
+                currentAtRiskStudents.forEach((s, idx) => {
                     if (y > 275) { pdf.addPage(); y = 14; }
                     const bg = idx % 2 === 0 ? [255, 255, 255] : [254, 242, 242];
                     pdf.setFillColor(bg[0], bg[1], bg[2]); pdf.rect(14, y, W - 28, 7, 'F');
@@ -532,15 +814,15 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                 pdf.setPage(p);
                 pdf.setDrawColor(229, 231, 235); pdf.line(14, 284, W - 14, 284);
                 pdf.setFontSize(7); pdf.setFont('helvetica', 'normal'); pdf.setTextColor(156, 163, 175);
-                pdf.text('PRISM OS  |  Client-Generated Fallback', 14, 289);
+                pdf.text('PRISM OS  |  Cloud Report Fallback', 14, 289);
                 pdf.text('Page ' + p + ' of ' + pageCount, W - 14, 289, { align: 'right' });
             }
 
             pdf.save('PRISM_Analytics_Report_' + new Date().toISOString().split('T')[0] + '.pdf');
-            showToast('Report saved locally (server unavailable)', 'info');
+            showToast('Saved PDF report locally', 'success');
         } catch (err) {
             console.error('[CloudReport] Generation failed:', err);
-            showToast('Report generation failed. Please try again.', 'error');
+            showToast('Report generation failed.', 'error');
         } finally {
             setIsGeneratingCloud(false);
         }
@@ -671,6 +953,81 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                 </div>
             </div>
 
+            {/* Dynamic Filter Controls */}
+            <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+                className="bg-[var(--glass-bg)] backdrop-blur-md p-4 rounded-2xl border border-white/5 flex flex-wrap items-center justify-between gap-4 shadow-md"
+            >
+                <div className="flex flex-wrap items-center gap-4 w-full sm:w-auto">
+                    <span className="text-xs font-bold text-[var(--md-sys-color-secondary)] uppercase tracking-wider flex items-center gap-1.5">
+                        <GitCompare size={14} className="text-indigo-400" /> Filters:
+                    </span>
+                    
+                    {/* Subject Filter */}
+                    <div className="flex flex-col gap-1">
+                        <label className="text-[8px] font-black uppercase text-slate-400 tracking-widest pl-1">Subject</label>
+                        <select
+                            value={selectedSubject}
+                            onChange={(e) => setSelectedSubject(e.target.value)}
+                            className="bg-slate-900/40 dark:bg-black/40 text-xs font-bold text-[var(--md-sys-color-on-surface)] px-3 py-1.5 rounded-xl border border-white/5 outline-none cursor-pointer focus:border-indigo-500/50 min-w-[120px]"
+                        >
+                            <option value="all">All Subjects</option>
+                            {subjectOptions.filter(o => o !== 'all').map(opt => (
+                                <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Grade Filter */}
+                    <div className="flex flex-col gap-1">
+                        <label className="text-[8px] font-black uppercase text-slate-400 tracking-widest pl-1">Grade</label>
+                        <select
+                            value={selectedGrade}
+                            onChange={(e) => setSelectedGrade(e.target.value)}
+                            className="bg-slate-900/40 dark:bg-black/40 text-xs font-bold text-[var(--md-sys-color-on-surface)] px-3 py-1.5 rounded-xl border border-white/5 outline-none cursor-pointer focus:border-indigo-500/50 min-w-[120px]"
+                        >
+                            <option value="all">All Grades</option>
+                            {gradeOptions.filter(o => o !== 'all').map(opt => (
+                                <option key={opt} value={opt}>Grade {opt}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Lot Filter */}
+                    <div className="flex flex-col gap-1">
+                        <label className="text-[8px] font-black uppercase text-slate-400 tracking-widest pl-1">Cohort / Lot</label>
+                        <select
+                            value={selectedLot}
+                            onChange={(e) => setSelectedLot(e.target.value)}
+                            className="bg-slate-900/40 dark:bg-black/40 text-xs font-bold text-[var(--md-sys-color-on-surface)] px-3 py-1.5 rounded-xl border border-white/5 outline-none cursor-pointer focus:border-indigo-500/50 min-w-[120px]"
+                        >
+                            <option value="all">All Cohorts</option>
+                            {lotOptions.filter(o => o !== 'all').map(opt => (
+                                <option key={opt} value={opt}>Lot {opt}</option>
+                            ))}
+                        </select>
+                    </div>
+                </div>
+
+                {/* Reset Filters */}
+                {isFiltered && (
+                    <motion.button
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        onClick={() => {
+                            setSelectedSubject('all');
+                            setSelectedGrade('all');
+                            setSelectedLot('all');
+                        }}
+                        className="flex items-center gap-1 px-3.5 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/20 rounded-xl text-xs font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer ml-auto sm:ml-0"
+                    >
+                        <X size={14} /> Clear Filters
+                    </motion.button>
+                )}
+            </motion.div>
+
             {/* Quick Insights Panel */}
             {activeData.length > 0 && (
                 <motion.div
@@ -689,10 +1046,10 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <MetricCard
                     title="Class Average"
-                    value={Math.round(overallAvg * 100) / 100}
+                    value={Math.round(currentOverallAvg * 100) / 100}
                     suffix="/4"
                     subtitle="Competency Score"
-                    trend={overallAvg >= 2.5 ? 'up' : 'down'}
+                    trend={currentOverallAvg >= 2.5 ? 'up' : 'down'}
                     color="blue"
                     icon={<Award size={20} />}
                     delay={0}
@@ -700,19 +1057,19 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                 />
                 <MetricCard
                     title="Attendance"
-                    value={overallAttendance}
+                    value={currentOverallAttendance}
                     suffix="%"
-                    subtitle="Monthly Average"
-                    trend={overallAttendance >= 85 ? 'up' : 'down'}
+                    subtitle="Cohort Average"
+                    trend={currentOverallAttendance >= 85 ? 'up' : 'down'}
                     color="green"
                     icon={<Users size={20} />}
                     delay={0.1}
                     sparklineData={attendanceSparkline}
                 />
                 <MetricCard
-                    title="Total Students"
-                    value={classAvg.total_students}
-                    subtitle="Currently Enrolled"
+                    title="Total Enrolled"
+                    value={currentTotalStudents}
+                    subtitle="Active Students"
                     color="purple"
                     icon={<Star size={20} />}
                     delay={0.2}
@@ -720,9 +1077,9 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                 />
                 <MetricCard
                     title="At-Risk"
-                    value={atRiskStudents.length}
-                    subtitle="Need Attention"
-                    trend={atRiskStudents.length > 3 ? 'down' : 'up'}
+                    value={currentAtRiskStudents.length}
+                    subtitle="Needs Intervention"
+                    trend={currentAtRiskStudents.length > 3 ? 'down' : 'up'}
                     color="red"
                     icon={<AlertTriangle size={20} />}
                     delay={0.3}
@@ -791,37 +1148,43 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                     >
                         {/* Subject Performance Comparison */}
                         <ChartCard title="Program Performance" icon={<Zap size={18} />} delay={0.1} className="lg:col-span-2">
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-                                {subjectData.map((subject, idx) => (
-                                    <motion.div
-                                        key={subject.name}
-                                        initial={{ opacity: 0, scale: 0.9 }}
-                                        animate={{ opacity: 1, scale: 1 }}
-                                        transition={{ delay: 0.2 + idx * 0.1 }}
-                                        className="p-4 rounded-xl border border-[var(--md-sys-color-outline)] bg-[var(--md-sys-color-surface-variant)] hover:bg-[var(--md-sys-color-surface)] hover:shadow-md transition-all cursor-pointer"
-                                    >
-                                        <div className="flex items-center gap-3 mb-3">
-                                            <div className="w-10 h-10 rounded-lg flex items-center justify-center text-xl" style={{ backgroundColor: subject.color + '20' }}>
-                                                {subject.icon}
+                            {subjectData.length === 0 ? (
+                                <div className="py-12 text-center text-xs text-slate-400">
+                                    No performance data available for current filters.
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                                    {subjectData.map((subject, idx) => (
+                                        <motion.div
+                                            key={subject.name}
+                                            initial={{ opacity: 0, scale: 0.9 }}
+                                            animate={{ opacity: 1, scale: 1 }}
+                                            transition={{ delay: 0.2 + idx * 0.1 }}
+                                            className="p-4 rounded-xl border border-white/5 bg-slate-900/10 dark:bg-black/15 hover:bg-slate-900/20 hover:shadow-md transition-all cursor-pointer"
+                                        >
+                                            <div className="flex items-center gap-3 mb-3">
+                                                <div className="w-10 h-10 rounded-lg flex items-center justify-center text-xl" style={{ backgroundColor: subject.color + '20' }}>
+                                                    {subject.icon}
+                                                </div>
+                                                <div className="text-left">
+                                                    <p className="font-bold text-[var(--md-sys-color-on-surface)] text-sm">{subject.name}</p>
+                                                    <p className="text-xs text-[var(--md-sys-color-on-surface-variant)]">{subject.students} students</p>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <p className="font-bold text-[var(--md-sys-color-on-surface)] text-sm">{subject.name}</p>
-                                                <p className="text-xs text-[var(--md-sys-color-on-surface-variant)]">{subject.students} students</p>
+                                            <div className="relative h-3 bg-slate-950/20 rounded-full overflow-hidden">
+                                                <motion.div
+                                                    initial={{ width: 0 }}
+                                                    animate={{ width: `${(subject.score / 4) * 100}%` }}
+                                                    transition={{ delay: 0.4, duration: 1, ease: "easeOut" }}
+                                                    className="absolute inset-y-0 left-0 rounded-full"
+                                                    style={{ backgroundColor: subject.color }}
+                                                />
                                             </div>
-                                        </div>
-                                        <div className="relative h-3 bg-[var(--md-sys-color-surface)] rounded-full overflow-hidden">
-                                            <motion.div
-                                                initial={{ width: 0 }}
-                                                animate={{ width: `${(subject.score / 4) * 100}%` }}
-                                                transition={{ delay: 0.4, duration: 1, ease: "easeOut" }}
-                                                className="absolute inset-y-0 left-0 rounded-full"
-                                                style={{ backgroundColor: subject.color }}
-                                            />
-                                        </div>
-                                        <p className="text-right text-sm font-bold mt-2" style={{ color: subject.color }}>{subject.score.toFixed(1)}/4.0</p>
-                                    </motion.div>
-                                ))}
-                            </div>
+                                            <p className="text-right text-sm font-bold mt-2" style={{ color: subject.color }}>{subject.score.toFixed(1)}/4.0</p>
+                                        </motion.div>
+                                    ))}
+                                </div>
+                            )}
 
                             <div className="h-48 overflow-x-auto hide-scrollbar custom-scrollbar w-full">
                                 <div className="min-w-[500px] h-full">
@@ -889,18 +1252,195 @@ const Analytics: React.FC<AnalyticsProps> = ({ data, onNavigate }) => {
                                     </PieChart>
                                 </ResponsiveContainer>
                             </div>
-                            <div className="space-y-2 mt-4">
+                            <div className="space-y-2 mt-4 text-left">
                                 {competencyDistribution.map((item, idx) => (
                                     <div key={idx} className="flex items-center justify-between text-xs">
                                         <div className="flex items-center gap-2">
                                             <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                                            <span className="text-gray-600 font-medium">{item.name}</span>
+                                            <span className="text-[var(--md-sys-color-secondary)] font-semibold">{item.name}</span>
                                         </div>
-                                        <span className="font-bold text-gray-900">{item.value}</span>
+                                        <span className="font-bold text-[var(--md-sys-color-on-surface)]">{item.value}</span>
                                     </div>
                                 ))}
                             </div>
                         </ChartCard>
+
+                        {/* Sally AI Analytics Hub Row */}
+                        <div className="lg:col-span-3 grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            {/* Sally Chat Card */}
+                            <ChartCard 
+                                title="Sally AI Analytics Copilot" 
+                                icon={<Brain size={18} className="text-purple-500" />} 
+                                delay={0.3} 
+                                className="lg:col-span-2 glassmorphic-card-premium relative overflow-hidden"
+                            >
+                                <div className="absolute inset-0 bg-radial-gradient pointer-events-none opacity-[0.04] -z-10"
+                                     style={{ background: `radial-gradient(400px circle at 50% 50%, #8b5cf6, transparent)` }} />
+                                
+                                <div className="grid grid-cols-1 md:grid-cols-5 gap-6 h-[400px] relative z-10">
+                                    {/* 3D Core Visualizer and Action chips */}
+                                    <div className="md:col-span-2 flex flex-col justify-between border-r border-white/5 pr-0 md:pr-6 pb-6 md:pb-0 h-full">
+                                        <div className="space-y-4">
+                                            <div className="h-[180px] w-full rounded-2xl bg-slate-900/10 dark:bg-black/25 border border-white/5 flex items-center justify-center relative overflow-hidden shadow-inner">
+                                                <Sally3DBrain 
+                                                    morphTarget={isSallyThinking ? 'helix' : chatInput ? 'wave' : 'sphere'} 
+                                                    active={isSallyThinking}
+                                                    accentColor={preferences?.accentColor || '#6366f1'} 
+                                                />
+                                            </div>
+                                            <div className="text-center">
+                                                <h4 className="text-xs font-bold text-[var(--md-sys-color-on-surface)]">Holographic Intelligence Core</h4>
+                                                <p className="text-[10px] text-[var(--md-sys-color-secondary)] mt-0.5">Mouseover to rotate, type to warp waves</p>
+                                            </div>
+                                        </div>
+
+                                        {/* Prompt Chips */}
+                                        <div className="space-y-2 mt-4 md:mt-0 text-left">
+                                            <span className="text-[9px] font-black uppercase text-[var(--md-sys-color-secondary)] tracking-widest">Suggested Queries</span>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {[
+                                                    { label: 'Identify At-Risk', prompt: 'Who are the at-risk students in this cohort and why?' },
+                                                    { label: 'Mastery Profile', prompt: 'Analyze the competency mastery levels and program performance.' },
+                                                    { label: 'Grade Prediction', prompt: 'Predict our next term grade and attendance trend.' }
+                                                ].map((chip, idx) => (
+                                                    <button
+                                                        key={idx}
+                                                        onClick={() => handleSendSallyMessage(chip.prompt)}
+                                                        className="text-[10px] text-left font-bold px-2.5 py-1.5 bg-slate-900/10 dark:bg-black/20 hover:bg-indigo-500/10 hover:text-indigo-400 rounded-xl border border-white/5 transition-all text-[var(--md-sys-color-on-surface)] active:scale-95 cursor-pointer"
+                                                    >
+                                                        {chip.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Chat Conversation Area */}
+                                    <div className="md:col-span-3 flex flex-col justify-between h-full bg-slate-900/5 dark:bg-black/10 rounded-2xl border border-white/5 p-4 shadow-inner">
+                                        {/* Messages Log */}
+                                        <div className="flex-1 overflow-y-auto space-y-3 pr-1 custom-scrollbar text-left max-h-[280px]">
+                                            {chatMessages.map((msg, idx) => {
+                                                const isAss = msg.role === 'assistant';
+                                                return (
+                                                    <div key={idx} className={clsx("flex w-full", isAss ? "justify-start" : "justify-end")}>
+                                                        <div className={clsx(
+                                                            "max-w-[85%] rounded-2xl p-3 text-xs leading-relaxed shadow-sm",
+                                                            isAss 
+                                                                ? "bg-slate-900/10 dark:bg-white/5 text-slate-200 rounded-tl-none border-l-2 border-l-indigo-500 border border-white/5"
+                                                                : "bg-indigo-650 text-white rounded-tr-none"
+                                                        )}>
+                                                            {isAss ? renderMessageWithActions(msg.content) : <p className="whitespace-pre-line">{msg.content}</p>}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                            {isSallyThinking && (
+                                                <div className="flex justify-start">
+                                                    <div className="bg-slate-900/10 dark:bg-white/5 border border-white/5 rounded-2xl rounded-tl-none p-3 shadow-sm flex items-center gap-2">
+                                                        <Loader2 size={12} className="animate-spin text-indigo-400" />
+                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider animate-pulse">Analyzing...</span>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            <div ref={chatEndRef} />
+                                        </div>
+
+                                        {/* Input Box */}
+                                        <div className="flex items-center gap-2 mt-4 pt-3 border-t border-white/5">
+                                            <input
+                                                type="text"
+                                                placeholder="Ask Sally about this analytics state..."
+                                                value={chatInput}
+                                                onChange={(e) => setChatInput(e.target.value)}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') handleSendSallyMessage(chatInput);
+                                                }}
+                                                className="flex-1 bg-slate-900/10 dark:bg-black/20 text-xs font-bold text-[var(--md-sys-color-on-surface)] px-4 py-2.5 rounded-xl border border-white/5 outline-none focus:border-indigo-500/50 transition-all font-sans placeholder-slate-450 shadow-inner"
+                                            />
+                                            <button
+                                                onClick={() => handleSendSallyMessage(chatInput)}
+                                                disabled={isSallyThinking || !chatInput.trim()}
+                                                className="p-2.5 bg-indigo-600 text-white rounded-xl hover:scale-105 active:scale-95 transition-all shadow-md cursor-pointer disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center"
+                                            >
+                                                <Send size={14} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </ChartCard>
+
+                            {/* Deep Insights Quick Action Panel */}
+                            <ChartCard 
+                                title="Insights & Deep-Links" 
+                                icon={<Lightbulb size={18} className="text-amber-500" />} 
+                                delay={0.4}
+                                className="glassmorphic-card-premium relative"
+                            >
+                                <div className="space-y-4 text-left h-[400px] overflow-y-auto pr-1 custom-scrollbar">
+                                    <div className="pb-3 border-b border-white/5">
+                                        <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest block mb-2">Performance Spotlights</span>
+                                        <div className="space-y-2">
+                                            {topPerformers.slice(0, 3).map((student, idx) => (
+                                                <div 
+                                                    key={student.id} 
+                                                    onClick={() => onNavigate('students', student.id)}
+                                                    className="flex items-center justify-between p-2 rounded-xl bg-white/5 dark:bg-black/10 border border-white/5 hover:border-indigo-500/20 cursor-pointer transition-all hover:scale-[1.02]"
+                                                >
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                        <span className="text-[10px] font-black px-1.5 py-0.5 bg-emerald-500/10 text-emerald-400 rounded-md">Top {idx+1}</span>
+                                                        <span className="text-xs font-bold text-[var(--md-sys-color-on-surface)] truncate">{student.name}</span>
+                                                    </div>
+                                                    <span className="text-xs font-black text-emerald-400">{student.avgScore.toFixed(1)}/4</span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <span className="text-[9px] font-black uppercase text-red-400 tracking-widest block mb-2">Attention Spotlight</span>
+                                        {currentAtRiskStudents.length > 0 ? (
+                                            <div className="space-y-2">
+                                                {currentAtRiskStudents.slice(0, 3).map(student => (
+                                                    <div 
+                                                        key={student.id} 
+                                                        onClick={() => onNavigate('students', Number(student.id))}
+                                                        className="flex items-center justify-between p-2 rounded-xl bg-red-500/5 border border-red-500/10 hover:border-red-500/30 cursor-pointer transition-all hover:scale-[1.02]"
+                                                    >
+                                                        <div className="min-w-0 flex-1 pr-2">
+                                                            <p className="text-xs font-bold text-[var(--md-sys-color-on-surface)] truncate">{student.name}</p>
+                                                            <p className="text-[9px] text-[var(--md-sys-color-secondary)]">{student.subject} • Att: {student.attendance_pct}%</p>
+                                                        </div>
+                                                        <span className="text-xs font-black text-red-500">{student.avg_score.toFixed(1)}/4</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <div className="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/15 text-center text-xs text-emerald-600 dark:text-emerald-400 font-bold">
+                                                All students are currently on track!
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div className="pt-3 border-t border-white/5">
+                                        <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest block mb-1.5">Quick Navigation</span>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <button 
+                                                onClick={() => onNavigate('students')}
+                                                className="p-2.5 rounded-xl bg-white/5 border border-white/5 text-center text-[10px] font-bold hover:bg-indigo-650 hover:text-white transition-all active:scale-95 cursor-pointer text-[var(--md-sys-color-on-surface)]"
+                                            >
+                                                Student Directory
+                                            </button>
+                                            <button 
+                                                onClick={() => onNavigate('student-analytics')}
+                                                className="p-2.5 rounded-xl bg-white/5 border border-white/5 text-center text-[10px] font-bold hover:bg-indigo-650 hover:text-white transition-all active:scale-95 cursor-pointer text-[var(--md-sys-color-on-surface)]"
+                                            >
+                                                Student Insights
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </ChartCard>
+                        </div>
                     </motion.div>
                 )}
 

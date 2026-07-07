@@ -1051,59 +1051,82 @@ const AppContent: React.FC = () => {
     const slotToUpdate = data.schedule.find(s => s.id === slotId);
     if (!slotToUpdate) return;
 
-    const success = await updateScheduleSlot({ ...slotToUpdate, status });
+    const originalSchedule = [...data.schedule];
+    const optimisticData = {
+      ...data,
+      schedule: data.schedule.map(s => s.id === slotId ? { ...s, status } : s)
+    };
+    saveDataToState(optimisticData);
 
+    const success = await updateScheduleSlot({ ...slotToUpdate, status });
     if (success) {
-      const newData = {
-        ...data,
-        schedule: data.schedule.map(s => s.id === slotId ? { ...s, status } : s)
-      };
-      saveDataToState(newData);
+      const freshData = await fetchAppData();
+      saveDataToState(freshData);
       showToast(`Schedule updated`, 'success');
     } else {
+      saveDataToState({ ...data, schedule: originalSchedule });
       showToast('Failed to update schedule status', 'error');
     }
   };
 
   const handleAddScheduleSlot = async (slotData: Omit<ScheduleSlot, 'id'>) => {
     if (!data) return;
-    // We trigger a refetch or optimistically update. For now, we'll force a refetch since ID generation is server-side
+    const tempId = `temp-${Date.now()}`;
+    const tempSlot: ScheduleSlot = { ...slotData, id: tempId } as ScheduleSlot;
+    const originalSchedule = [...data.schedule];
+    
+    saveDataToState({
+      ...data,
+      schedule: [...data.schedule, tempSlot]
+    });
+
     const success = await addScheduleSlot({ ...slotData, id: '' } as ScheduleSlot);
     if (success) {
       const freshData = await fetchAppData();
       saveDataToState(freshData);
       showToast('New class added to schedule', 'success');
     } else {
+      saveDataToState({ ...data, schedule: originalSchedule });
       showToast('Failed to add schedule slot', 'error');
     }
   };
 
   const handleEditScheduleSlot = async (updatedSlot: ScheduleSlot) => {
     if (!data) return;
+    const originalSchedule = [...data.schedule];
+    
+    saveDataToState({
+      ...data,
+      schedule: data.schedule.map(s => s.id === updatedSlot.id ? updatedSlot : s)
+    });
+
     const success = await updateScheduleSlot(updatedSlot);
     if (success) {
-      const newData = {
-        ...data,
-        schedule: data.schedule.map(s => s.id === updatedSlot.id ? updatedSlot : s)
-      };
-      saveDataToState(newData);
+      const freshData = await fetchAppData();
+      saveDataToState(freshData);
       showToast('Class updated successfully', 'success');
     } else {
+      saveDataToState({ ...data, schedule: originalSchedule });
       showToast('Failed to update class slot', 'error');
     }
   };
 
   const handleDeleteScheduleSlot = async (slotId: string) => {
     if (!data) return;
+    const originalSchedule = [...data.schedule];
+    
+    saveDataToState({
+      ...data,
+      schedule: data.schedule.filter(s => s.id !== slotId)
+    });
+
     const success = await deleteScheduleSlot(slotId);
     if (success) {
-      const newData = {
-        ...data,
-        schedule: data.schedule.filter(s => s.id !== slotId)
-      };
-      saveDataToState(newData);
+      const freshData = await fetchAppData();
+      saveDataToState(freshData);
       showToast('Session removed', 'info');
     } else {
+      saveDataToState({ ...data, schedule: originalSchedule });
       showToast('Failed to remove session', 'error');
     }
   };

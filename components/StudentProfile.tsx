@@ -41,6 +41,13 @@ const StudentProfile: React.FC<StudentProfileProps> = ({ data, onUpdateStudent, 
       data.students.find(s => s.id === selectedStudentId),
       [data.students, selectedStudentId]);
 
+    React.useEffect(() => {
+       if (externalStudentId) {
+          setSelectedStudentId(externalStudentId);
+          setMobileShowDetail(true);
+       }
+    }, [externalStudentId]);
+
    React.useEffect(() => {
       const handleBackButton = (e: Event) => {
          if (showAddModal) {

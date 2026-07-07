@@ -217,7 +217,7 @@ const MobileNav: React.FC<MobileNavProps> = ({ currentView, onNavigate }) => {
             >
                 <div className="flex items-center justify-around px-2 py-2 bg-[var(--glass-bg)] backdrop-blur-md rounded-full shadow-xl shadow-indigo-500/10 border border-[var(--md-sys-color-outline-variant)]">
                     {visiblePrimary.map((item) => {
-                        const isActive = currentView === item.id;
+                        const isActive = currentView === item.id || (item.id === 'students-manage' && currentView === 'students');
                         return (
                             <motion.button
                                 whileTap={{ scale: 0.92 }}

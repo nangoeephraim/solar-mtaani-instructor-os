@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect } from 'react';
-import { LayoutDashboard, Calendar, Users, ClipboardCheck, Settings, BarChart3, UserCheck, LineChart, Box, MessageSquare, Wallet, UsersRound, BookOpen, Keyboard } from 'lucide-react';
+import { LayoutDashboard, Calendar, Users, ClipboardCheck, Settings, BarChart3, UserCheck, LineChart, Box, MessageSquare, Wallet, UsersRound, BookOpen, Keyboard, Grid } from 'lucide-react';
 import clsx from 'clsx';
 import { motion } from 'framer-motion';
 import { AppData, UserRole } from '../types';
@@ -29,6 +29,7 @@ const VIEW_PRELOAD_MAP: Record<string, () => Promise<any>> = {
   settings: () => import('./Settings'),
   instructors: () => import('./InstructorManagement'),
   curriculum: () => import('./Curriculum'),
+  'icon-gallery': () => import('./IconGallery'),
 };
 
 const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, data }) => {
@@ -57,7 +58,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, data }) => {
   }, []);
 
   const navItems: { id: string; label: string; icon: any; minRole: UserRole }[] = [
-    { id: 'dashboard', label: 'Command Center', icon: LayoutDashboard, minRole: 'viewer' },
+    { id: 'dashboard', label: 'Home & Dashboard', icon: LayoutDashboard, minRole: 'viewer' },
+    { id: 'icon-gallery', label: 'Command Center', icon: Grid, minRole: 'viewer' },
     { id: 'analytics', label: 'Overview Analytics', icon: BarChart3, minRole: 'admin' },
     { id: 'schedule', label: 'Timetable', icon: Calendar, minRole: 'viewer' },
     { id: 'students-manage', label: 'Students', icon: Users, minRole: 'viewer' },
@@ -114,7 +116,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, onNavigate, data }) => {
       {/* Navigation */}
       <nav className="flex-1 mt-2 px-3 space-y-1 overflow-y-auto custom-scrollbar">
         {visibleItems.map((item, index) => {
-          const isActive = currentView === item.id;
+          const isActive = currentView === item.id || (item.id === 'students-manage' && currentView === 'students');
           return (
             <motion.button
               key={item.id}
