@@ -22,7 +22,7 @@ export const BillingTab: React.FC<BillingTabProps> = ({ student }) => {
         try {
             // In a real app, you would call `supabase.functions.invoke('mpesa-stk-push', { body: { phone, amount } })`
             // For now, we simulate hitting the M-Pesa webhook successfully and updating the DB or just testing the connection.
-            const { data, error } = await supabase.functions.invoke('mpesa-webhook', {
+            const { data, error } = await supabase.functions.invoke('mpesa-callback', {
                 body: {
                     Body: {
                         stkCallback: {
@@ -162,7 +162,7 @@ export const BillingTab: React.FC<BillingTabProps> = ({ student }) => {
                     </div>
                     <p className="font-bold text-[var(--md-sys-color-on-surface)] mb-1">No payment history yet</p>
                     <p className="text-sm text-[var(--md-sys-color-secondary)] max-w-sm">
-                        When M-Pesa integration goes live, DARaja callbacks received by the <code>mpesa-webhook</code> edge function will appear here.
+                        When M-Pesa integration goes live, Daraja callbacks received by the <code>mpesa-callback</code> edge function will appear here.
                     </p>
                 </div>
             </div>
