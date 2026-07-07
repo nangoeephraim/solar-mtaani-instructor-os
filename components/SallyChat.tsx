@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
 import { useTheme } from '../contexts/ThemeContext';
 import { getAuthHeaders } from '../services/authHeaders';
+import { Sally3DBrain } from './Sally3DBrain';
 
 // ── Constants ────────────────────────────────────────────────────────
 interface Conversation {
@@ -730,7 +731,7 @@ export function SallyChat({ currentView }: { currentView?: string }) {
 
   // Auto-close floating panel when routing to views with integrated chat interfaces
   useEffect(() => {
-    if (currentView === 'icon-gallery' || currentView === 'communications') {
+    if (currentView === 'communications') {
       setIsOpen(false);
     }
   }, [currentView]);
@@ -1745,7 +1746,7 @@ export function SallyChat({ currentView }: { currentView?: string }) {
   return (
     <>
       {/* 1. Floating Action Orb Trigger Button */}
-      {!isOpen && currentView !== 'communications' && currentView !== 'icon-gallery' && (
+      {!isOpen && currentView !== 'communications' && (
         <div className="fixed bottom-24 right-6 md:bottom-6 z-40 group">
           <motion.div 
             whileHover={{ scale: 1.08 }}
@@ -1805,7 +1806,12 @@ export function SallyChat({ currentView }: { currentView?: string }) {
             />
 
             {/* Ambient 3D Helix Background Canvas */}
-            <Sally3DCanvas active={isLoading} />
+            <div className="absolute inset-0 w-full h-full pointer-events-none opacity-40 z-0">
+              <Sally3DBrain 
+                morphTarget={isLoading ? 'helix' : isSpeaking ? 'wave' : 'sphere'} 
+                active={isLoading || isSpeaking} 
+              />
+            </div>
 
             {/* Header Panel */}
             <div className="p-4 bg-slate-950/40 backdrop-blur-md flex items-center justify-between border-b border-white/5 flex-shrink-0 z-10">
